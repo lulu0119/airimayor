@@ -1,6 +1,8 @@
 // Docked right-side chat panel, RoadBuilder SidePanel recipe: same geometry,
-// panel chrome, header bar, input and button treatment. Sizes in rem, colors
-// from vanilla theme vars with opaque fallbacks.
+// panel chrome, header bar, input and button treatment. Sizes in rem.
+// Colors are literals, not var(): this Gameface build drops var() in mod
+// stylesheets (live DOM probe showed transparent computed values), so the
+// RoadBuilder-style var(--theme, fallback) recipe renders invisible here.
 
 .dock {
   position: absolute;
@@ -14,30 +16,31 @@
 }
 
 .iconToggle {
-  background-color: var(--accentColorNormal, #4a78c8);
+  // RoadBuilder parity: vanilla accent tones (probed live, #4bc3f1 family).
+  background-color: #4bc3f1;
   transition: background-color 0.15s;
 }
 
 .iconToggle:hover {
-  background-color: var(--accentColorNormal-hover, #5a88d8);
+  background-color: #63cdf3;
 }
 
 .iconToggle:active {
-  background-color: var(--accentColorDark-focused, #2e4f86);
+  background-color: #2f9fd0;
 }
 
 .iconSelected {
-  background-color: var(--menuText1Normal, #ffffff);
+  background-color: #ffffff;
 }
 
 .iconSelected .iconImage {
-  background-color: var(--accentColorNormal, #4a78c8);
+  background-color: #4bc3f1;
 }
 
 .iconImage {
   width: 100%;
   height: 100%;
-  background-color: var(--menuText1Normal, #ffffff);
+  background-color: #ffffff;
   mask-size: contain;
   mask-position: 50% 50%;
   mask-repeat: no-repeat;
@@ -48,8 +51,8 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background-color: var(--panelColorNormal, rgba(16, 20, 28, 0.94));
-  backdrop-filter: var(--panelBlur, blur(8px));
+  background-color: rgba(16, 20, 28, 0.94);
+  backdrop-filter: blur(8px);
   border-radius: 6rem;
   overflow: hidden;
   animation: panelEntry 0.2s;
@@ -61,6 +64,7 @@
     opacity: 0;
   }
   100% {
+    right: 10rem;
     opacity: 1;
   }
 }
@@ -71,11 +75,11 @@
   gap: 6rem;
   padding: 6rem 10rem;
   font-size: 12rem;
-  color: var(--menuText1Normal, #cfd6e4);
-  background-color: var(--panelColorDark, rgba(10, 13, 18, 0.94));
+  color: #cfd6e4;
+  background-color: rgba(10, 13, 18, 0.94);
   border-bottom-style: solid;
-  border-bottom-width: var(--stroke2, 1rem);
-  border-bottom-color: var(--accentColorDark, rgba(70, 120, 200, 0.5));
+  border-bottom-width: 1rem;
+  border-bottom-color: rgba(70, 120, 200, 0.5);
 }
 
 .statusDot {
@@ -89,7 +93,7 @@
 .statusText {
   text-transform: uppercase;
   font-size: 12rem;
-  color: var(--accentColorNormal, #7ea6e0);
+  color: #7ea6e0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -98,7 +102,7 @@
 .statusMeta {
   flex: 0 0 auto;
   margin-left: auto;
-  color: var(--menuText1Normal, #cfd6e4);
+  color: #cfd6e4;
   opacity: 0.7;
   font-size: 11rem;
   white-space: nowrap;
@@ -119,7 +123,7 @@
   padding: 24rem 16rem;
   text-align: center;
   font-size: 13rem;
-  color: var(--menuText1Normal, #cfd6e4);
+  color: #cfd6e4;
   opacity: 0.6;
 }
 
@@ -136,18 +140,18 @@
   font-size: 11rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--textColorDim, #9aa3b5);
+  color: #9aa3b5;
   margin-bottom: 2rem;
 }
 
 .messageText {
   white-space: pre-wrap;
   word-break: break-word;
-  color: var(--menuText1Normal, #eef2f9);
+  color: #eef2f9;
 }
 
 .userRow {
-  background-color: var(--accentColorDark, rgba(46, 79, 134, 0.85));
+  background-color: rgba(46, 79, 134, 0.85);
 }
 
 .assistantRow {
@@ -165,7 +169,7 @@
   margin: 4rem 10rem;
   padding: 6rem 8rem;
   font-size: 13rem;
-  color: var(--menuText1Normal, #cfd6e4);
+  color: #cfd6e4;
   opacity: 0.75;
 }
 
@@ -242,7 +246,7 @@
 
 .toolName {
   font-family: monospace;
-  color: var(--menuText1Normal, #eef2f9);
+  color: #eef2f9;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -251,14 +255,14 @@
 .toolState {
   margin-left: auto;
   flex: 0 0 auto;
-  color: var(--textColorDim, #9aa3b5);
+  color: #9aa3b5;
   text-transform: uppercase;
   font-size: 11rem;
 }
 
 .toolChevron {
   flex: 0 0 auto;
-  color: var(--textColorDim, #9aa3b5);
+  color: #9aa3b5;
 }
 
 .toolBody {
@@ -269,7 +273,7 @@
   font-size: 11rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--textColorDim, #9aa3b5);
+  color: #9aa3b5;
   margin: 4rem 0 2rem 0;
 }
 
@@ -284,7 +288,7 @@
   font-size: 11rem;
   background-color: rgba(0, 0, 0, 0.35);
   border-radius: 3rem;
-  color: var(--menuText1Normal, #dfe6f2);
+  color: #dfe6f2;
 }
 
 .composer {
@@ -292,10 +296,10 @@
   flex-direction: column;
   gap: 6rem;
   padding: 8rem 10rem 10rem 10rem;
-  background-color: var(--panelColorDark, rgba(10, 13, 18, 0.94));
+  background-color: rgba(10, 13, 18, 0.94);
   border-top-style: solid;
-  border-top-width: var(--stroke2, 1rem);
-  border-top-color: var(--accentColorDark, rgba(70, 120, 200, 0.5));
+  border-top-width: 1rem;
+  border-top-color: rgba(70, 120, 200, 0.5);
 }
 
 .composerInput {
@@ -320,10 +324,10 @@
 .composerInput:active,
 .composerInput:focus {
   background-color: rgba(255, 255, 255, 0.2);
-  border-top-color: var(--accentColorLight, #9dc0f0);
-  border-left-color: var(--accentColorLight, #9dc0f0);
-  border-bottom-color: var(--accentColorLight, #9dc0f0);
-  border-right-color: var(--accentColorLight, #9dc0f0);
+  border-top-color: #9dc0f0;
+  border-left-color: #9dc0f0;
+  border-bottom-color: #9dc0f0;
+  border-right-color: #9dc0f0;
   outline: none;
 }
 
@@ -343,7 +347,7 @@
 .composerHint {
   flex: 1 1 auto;
   font-size: 11rem;
-  color: var(--textColorDim, #9aa3b5);
+  color: #9aa3b5;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
