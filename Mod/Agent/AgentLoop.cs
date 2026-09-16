@@ -164,7 +164,7 @@ stable facts or timeline notes. Keep each list item short and concrete.";
             Instance = this;
             m_SessionId = Guid.NewGuid().ToString("N").Substring(0, 8);
             m_Observability = new AgentObservability(m_SessionId);
-            m_ClientFactory = new AgentClientFactory(m_Observability);
+            m_ClientFactory = new AgentClientFactory(m_Observability, m_SessionId);
             m_PromptAssembler = new AgentPromptAssembler(SystemPrompt, SummaryPrefix);
             m_ToolExecutor = new AgentToolExecutor(
                 m_ToolSurface,
