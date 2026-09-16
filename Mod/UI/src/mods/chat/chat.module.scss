@@ -12,10 +12,29 @@
   pointer-events: auto;
 }
 
-.openButtonWrap {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: auto;
+.iconToggle {
+  background-color: var(--accentColorNormal, #4a78c8);
+}
+
+.iconToggle:hover {
+  background-color: var(--accentColorNormal-hover, #5a88d8);
+}
+
+.iconSelected {
+  background-color: var(--menuText1Normal, #ffffff);
+}
+
+.iconSelected .iconImage {
+  background-color: var(--accentColorNormal, #4a78c8);
+}
+
+.iconImage {
+  width: 100%;
+  height: 100%;
+  background-color: var(--menuText1Normal, #ffffff);
+  mask-size: contain;
+  mask-position: 50% 50%;
+  mask-repeat: no-repeat;
 }
 
 .panelColumn {
