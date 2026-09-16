@@ -3,7 +3,7 @@
 // above is never yanked away.
 
 import { useEffect, useRef } from "react";
-import { ScrollController, Scrollable } from "cs2/ui";
+import { Scrollable } from "cs2/ui";
 import type { ChatLine } from "./chat-types";
 import { MessageRow } from "./message-row";
 import styles from "./chat.module.scss";
@@ -16,13 +16,12 @@ interface MessageListProps {
 }
 
 export const MessageList = ({ lines, busy }: MessageListProps) => {
-  const controllerRef = useRef<ScrollController | null>(null);
-  if (!controllerRef.current) {
-    controllerRef.current = new ScrollController();
-  }
+  // Scrollable forwards its ref to the scroll container; the game no longer
+  // exports a ScrollController class to reach it through.
+  const listRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const view = controllerRef.current?.container;
+    const view = listRef.current;
     if (!view) {
       return;
     }
@@ -40,7 +39,7 @@ export const MessageList = ({ lines, busy }: MessageListProps) => {
       (last.kind === "assistant" && !last.streaming && last.text.trim().length === 0));
 
   return (
-    <Scrollable vertical trackVisibility="scrollable" className={styles.messageList} controller={controllerRef.current}>
+    <Scrollable vertical trackVisibility="scrollable" className={styles.messageList} ref={listRef}>
       {lines.length === 0 && !busy ? (
         <div className={styles.emptyHint}>
           Ask the mayor to build, zone, or fix city services.

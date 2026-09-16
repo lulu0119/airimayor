@@ -575,32 +575,14 @@ declare module "cs2/ui" {
   	repeat: boolean;
   	minOverflow: number;
   }
-  export interface ScrollControllerCallback {
-  	container: null | HTMLDivElement;
-  	scrollTo(x: number, y: number): void;
-  	scrollBy(x: number, y: number): void;
-  	smoothScrollTo(x: number, y: number): void;
-  	scrollIntoView(element: Element): void;
-  }
-  export class ScrollController {
-  	private _callback;
-  	scrollTo(x: number, y: number): void;
-  	scrollBy(x: number, y: number): void;
-  	smoothScrollTo(x: number, y: number): void;
-  	scrollIntoView(element: Element): void;
-  	get container(): HTMLDivElement | null | undefined;
-  	_attachCallback(callback: ScrollControllerCallback): void;
-  	_detachCallback(callback: ScrollControllerCallback): void;
-  }
   export interface ScrollableProps {
-  	horizontal?: boolean;
-  	vertical?: boolean;
-  	trackVisibility?: "always" | "scrollable" | "reserve";
-  	overshootX?: number;
-  	overshootY?: number;
-  	smooth?: boolean;
-  	controller?: ScrollController;
-  	className?: string;
+	horizontal?: boolean;
+	vertical?: boolean;
+	trackVisibility?: "always" | "scrollable" | "reserve";
+	overshootX?: number;
+	overshootY?: number;
+	smooth?: boolean;
+	className?: string;
   	style?: CSSProperties;
   	onScroll?: () => void;
   	onOverflowX?: (overflow: boolean) => void;
