@@ -61,6 +61,15 @@ namespace CitiesSkylines2Agent.Agent
                 FunctionCount++;
                 m_Observability.Function(call.Name, argumentsJson, result.Text, result.Success, timer.ElapsedMilliseconds, 0,
                     result.Success ? null : result.Text);
+                // Completion pairs with the start event above by arrival order.
+                // Status carries only the outcome color for the tool row.
+                m_Emit(new AgentUiEvent
+                {
+                    Kind = "tool",
+                    Tool = call.Name ?? call.CallId,
+                    Text = TruncateToolText(result.Text),
+                    Status = result.Success ? AgentStatus.Idle : AgentStatus.Error,
+                });
                 m_AppendHistory(new ChatMessage(ChatRole.Tool,
                     new List<AIContent> { new FunctionResultContent(call.CallId, result.Text) }));
                 AppendToolImage(result.ImagePath);
@@ -70,6 +79,16 @@ namespace CitiesSkylines2Agent.Agent
         internal static string SerializeArguments(IDictionary<string, object> arguments)
         {
             return arguments == null || arguments.Count == 0 ? "{}" : JsonSerializer.Serialize(arguments);
+        }
+
+        private static string TruncateToolText(string text)
+        {
+            const int MaxToolTextLength = 800;
+            if (string.IsNullOrEmpty(text) || text.Length <= MaxToolTextLength)
+            {
+                return text ?? "";
+            }
+            return text.Substring(0, MaxToolTextLength) + "…";
         }
 
         private async Task<ToolInvocationResult> InvokeAsync(string name, string argumentsJson, CancellationToken cancellationToken)

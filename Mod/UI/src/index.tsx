@@ -1,5 +1,5 @@
 import { ModRegistrar } from "cs2/modding";
-import { ChatPanel } from "mods/chat-panel";
+import { ChatPanel } from "mods/chat/chat-panel";
 
 const register: ModRegistrar = (moduleRegistry) => {
   // In-city only. Portal escapes append-parent layout (never bare "Game").

@@ -1,0 +1,275 @@
+// Docked right-side chat panel. Sizes in rem (game convention), colors from
+// vanilla theme vars with opaque fallbacks so a missing var never blanks us.
+
+.dock {
+  position: absolute;
+  top: 70rem;
+  right: 12rem;
+  bottom: 120rem;
+  width: 344rem;
+  display: flex;
+  flex-direction: column;
+  pointer-events: auto;
+}
+
+.openButtonWrap {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: auto;
+}
+
+.panelColumn {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background-color: var(--panelColorNormal, rgba(16, 20, 28, 0.94));
+  border-radius: 6rem;
+}
+
+.statusBar {
+  display: flex;
+  align-items: center;
+  gap: 6rem;
+  padding: 6rem 10rem;
+  font-size: 12rem;
+  color: var(--menuText1Normal, #cfd6e4);
+  border-bottom: 1rem solid var(--stroke2, rgba(255, 255, 255, 0.12));
+}
+
+.statusDot {
+  flex: 0 0 auto;
+  width: 8rem;
+  height: 8rem;
+  border-radius: 50%;
+  background-color: #8a93a6;
+}
+
+.statusText {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.statusMeta {
+  flex: 0 0 auto;
+  margin-left: auto;
+  opacity: 0.7;
+  font-size: 11rem;
+  white-space: nowrap;
+}
+
+.statusMeta + .statusMeta {
+  margin-left: 0;
+}
+
+.messageList {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+.emptyHint {
+  padding: 24rem 16rem;
+  text-align: center;
+  font-size: 13rem;
+  color: var(--menuText1Normal, #cfd6e4);
+  opacity: 0.6;
+}
+
+.messageRow {
+  margin: 4rem 10rem;
+  padding: 6rem 8rem;
+  border-radius: 4rem;
+  font-size: 13rem;
+  line-height: 1.4;
+}
+
+.roleLabel {
+  display: block;
+  font-size: 11rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.6;
+  margin-bottom: 2rem;
+}
+
+.messageText {
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--menuText1Normal, #eef2f9);
+}
+
+.userRow {
+  background-color: var(--accentColorNormal, rgba(70, 120, 200, 0.25));
+}
+
+.assistantRow {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.errorRow {
+  background-color: rgba(200, 60, 60, 0.22);
+}
+
+.thinkingRow {
+  display: flex;
+  align-items: center;
+  gap: 4rem;
+  margin: 4rem 10rem;
+  padding: 6rem 8rem;
+  font-size: 13rem;
+  color: var(--menuText1Normal, #cfd6e4);
+  opacity: 0.75;
+}
+
+.thinkingDots span {
+  animation: thinkingBlink 1.2s infinite;
+}
+
+.thinkingDots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.thinkingDots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes thinkingBlink {
+  0%, 60%, 100% { opacity: 0.2; }
+  30% { opacity: 1; }
+}
+
+.toolRow {
+  margin: 4rem 10rem;
+  border: 1rem solid var(--stroke2, rgba(255, 255, 255, 0.12));
+  border-radius: 4rem;
+  background-color: rgba(255, 255, 255, 0.03);
+  font-size: 12rem;
+}
+
+.toolHeader {
+  display: flex;
+  align-items: center;
+  gap: 6rem;
+  padding: 5rem 8rem;
+  cursor: pointer;
+}
+
+.toolDot {
+  flex: 0 0 auto;
+  width: 8rem;
+  height: 8rem;
+  border-radius: 50%;
+}
+
+.dotRunning {
+  background-color: #e0a63c;
+  animation: toolPulse 1s infinite;
+}
+
+.dotThinking {
+  background-color: #e0a63c;
+}
+
+.dotDone {
+  background-color: #4caf6d;
+}
+
+.dotError {
+  background-color: #d65454;
+}
+
+.dotInterrupted {
+  background-color: #8a93a6;
+}
+
+@keyframes toolPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.toolName {
+  font-family: monospace;
+  color: var(--menuText1Normal, #eef2f9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toolState {
+  margin-left: auto;
+  flex: 0 0 auto;
+  opacity: 0.65;
+}
+
+.toolChevron {
+  flex: 0 0 auto;
+  opacity: 0.65;
+}
+
+.toolBody {
+  padding: 0 8rem 6rem 8rem;
+}
+
+.toolSectionLabel {
+  font-size: 11rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.55;
+  margin: 4rem 0 2rem 0;
+}
+
+.toolPre {
+  margin: 0;
+  padding: 4rem 6rem;
+  max-height: 120rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: monospace;
+  font-size: 11rem;
+  background-color: rgba(0, 0, 0, 0.35);
+  border-radius: 3rem;
+  color: var(--menuText1Normal, #dfe6f2);
+}
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 6rem;
+  padding: 8rem 10rem 10rem 10rem;
+  border-top: 1rem solid var(--stroke2, rgba(255, 255, 255, 0.12));
+}
+
+.composerInput {
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  padding: 6rem 8rem;
+  font-size: 14rem;
+  color: var(--menuText1Normal, #eef2f9);
+  background-color: rgba(0, 0, 0, 0.45);
+  border: 1rem solid var(--stroke2, rgba(255, 255, 255, 0.2));
+  border-radius: 4rem;
+}
+
+.composerInput:disabled {
+  opacity: 0.5;
+}
+
+.composerRow {
+  display: flex;
+  align-items: center;
+  gap: 8rem;
+}
+
+.composerHint {
+  flex: 1 1 auto;
+  font-size: 11rem;
+  opacity: 0.5;
+  color: var(--menuText1Normal, #cfd6e4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

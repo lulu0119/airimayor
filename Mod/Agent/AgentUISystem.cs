@@ -135,7 +135,7 @@ namespace CitiesSkylines2Agent.Agent
 
         private void OnAgentEvent(AgentUiEvent agentEvent)
         {
-            if (agentEvent == null || agentEvent.Kind == "tool")
+            if (agentEvent == null)
             {
                 return;
             }
