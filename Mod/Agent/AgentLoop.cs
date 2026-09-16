@@ -55,9 +55,11 @@ namespace CitiesSkylines2Agent.Agent
     /// <summary>
     /// In-process agent runtime: IChatClient + hand-rolled function-calling
     /// loop. One user message runs one turn; when Continuous is on, the loop
-    /// itself opens bounded autonomous follow-up turns (system reminders, not
-    /// fake user messages) until the model stops calling tools. Queued user
-    /// messages always wait for the turn boundary and preempt autonomy.
+    /// itself opens autonomous follow-up turns (system reminders, not fake
+    /// user messages) for as long as the model keeps calling tools. The
+    /// Continuous setting is the master switch; per-turn model requests are
+    /// still capped. Queued user messages always wait for the turn boundary
+    /// and preempt autonomy.
     /// </summary>
     public sealed class AgentLoop : IDisposable
     {
@@ -105,8 +107,7 @@ and stale notices. Do not keep stale relative-time phrases; convert them into
 stable facts or timeline notes. Keep each list item short and concrete.";
 
         private const string SummaryPrefix = "[context summary] ";
-        private const int MaxToolRoundsPerTurn = 10;
-        private const int MaxAutonomousTurns = 10;
+        private const int MaxToolRoundsPerTurn = 30;
 
         public static AgentLoop Instance { get; private set; }
 
@@ -155,7 +156,6 @@ stable facts or timeline notes. Keep each list item short and concrete.";
         private int m_TurnGenerationCount;
         private UsageDetails m_TurnUsage;
         private AgentUsageJson.Coverage m_TurnUsageCoverage;
-        private int m_AutonomousTurns;
         private bool m_TimeoutOccurred;
         private bool m_Disposed;
 
@@ -194,7 +194,6 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                 });
                 return;
             }
-            Interlocked.Exchange(ref m_AutonomousTurns, 0);
             m_Pending.Writer.TryWrite(new AgentInput { Text = text ?? "" });
             Emit(new AgentUiEvent { Kind = "user", Text = text ?? "" });
             EnsureLoop();
@@ -345,7 +344,6 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                 }
 
                 m_TurnCts = new CancellationTokenSource();
-                m_AutonomousTurns = 0;
                 AgentInput current = first;
                 while (!m_LoopCts.IsCancellationRequested &&
                     !m_TurnCts.IsCancellationRequested)
@@ -354,7 +352,6 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                     bool wantAuto = Setting.StaticContinuous &&
                         !m_TimeoutOccurred &&
                         hadTools &&
-                        m_AutonomousTurns < MaxAutonomousTurns &&
                         m_Pending.Reader.Count == 0 &&
                         !m_TurnCts.IsCancellationRequested &&
                         !m_LoopCts.IsCancellationRequested;
@@ -362,11 +359,8 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                     {
                         break;
                     }
-                    m_AutonomousTurns++;
                     current = null;
                 }
-                // New user intent restarts the autonomy budget.
-                m_AutonomousTurns = 0;
             }
         }
 
