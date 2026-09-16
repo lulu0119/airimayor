@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ChatLine, ToolRowState } from "./chat-types";
+import chevronDownIcon from "images/chevron-down.svg";
 import styles from "./chat.module.scss";
 
 const toolStateLabel: Record<ToolRowState, string> = {
@@ -55,7 +56,13 @@ const ToolRow = ({ line }: { line: Extract<ChatLine, { kind: "tool" }> }) => {
         <span className={`${styles.toolDot} ${toolDotClass(line.state)}`} />
         <span className={styles.toolName}>{line.name}</span>
         <span className={styles.toolState}>{toolStateLabel[line.state]}</span>
-        <span className={styles.toolChevron}>{expanded ? "▾" : "▸"}</span>
+        <span
+          className={styles.toolChevron}
+          style={{
+            maskImage: `url(${chevronDownIcon})`,
+            transform: expanded ? "none" : "rotate(-90deg)",
+          }}
+        />
       </div>
       {expanded ? (
         <div className={styles.toolBody}>

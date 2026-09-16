@@ -15,6 +15,69 @@
   pointer-events: auto;
 }
 
+// Invisible resize hit areas. No cursor declarations: the game does not
+// map custom cursor keywords to visible cursors, so they are dead weight.
+.resizeHandle {
+  position: absolute;
+  z-index: 20;
+}
+
+.edgeN {
+  top: 0;
+  right: 8rem;
+  left: 8rem;
+  height: 6rem;
+}
+
+.edgeS {
+  right: 8rem;
+  bottom: 0;
+  left: 8rem;
+  height: 6rem;
+}
+
+.edgeE {
+  top: 8rem;
+  right: 0;
+  bottom: 8rem;
+  width: 6rem;
+}
+
+.edgeW {
+  top: 8rem;
+  bottom: 8rem;
+  left: 0;
+  width: 6rem;
+}
+
+.edgeNE {
+  top: 0;
+  right: 0;
+  width: 14rem;
+  height: 14rem;
+}
+
+.edgeNW {
+  top: 0;
+  left: 0;
+  width: 14rem;
+  height: 14rem;
+}
+
+.edgeSE {
+  right: 0;
+  bottom: 0;
+  width: 14rem;
+  height: 14rem;
+}
+
+.edgeSW {
+  bottom: 0;
+  left: 0;
+  width: 14rem;
+  height: 14rem;
+}
+
 .iconToggle {
   // RoadBuilder parity: vanilla accent tones (probed live, #4bc3f1 family).
   background-color: #4bc3f1;
@@ -262,7 +325,13 @@
 
 .toolChevron {
   flex: 0 0 auto;
-  color: #9aa3b5;
+  width: 16rem;
+  height: 16rem;
+  background-color: #9aa3b5;
+  mask-size: contain;
+  mask-position: 50% 50%;
+  mask-repeat: no-repeat;
+  transition: transform 0.15s;
 }
 
 .toolBody {
@@ -292,9 +361,7 @@
 }
 
 .composer {
-  display: flex;
-  flex-direction: column;
-  gap: 6rem;
+  position: relative;
   padding: 8rem 10rem 10rem 10rem;
   background-color: rgba(10, 13, 18, 0.94);
   border-top-style: solid;
@@ -306,8 +373,8 @@
   width: 100%;
   box-sizing: border-box;
   resize: none;
-  padding: 0.25em 0.5em;
-  line-height: 1.15em;
+  padding: 10rem 12rem 58rem 12rem;
+  line-height: 1.3em;
   font-size: 14rem;
   color: #eee;
   background-color: rgba(0, 0, 0, 0.15);
@@ -338,17 +405,61 @@
   color: rgba(128, 128, 128, 0.5);
 }
 
-.composerRow {
+.composerActions {
+  position: absolute;
+  right: 18rem;
+  bottom: 18rem;
   display: flex;
-  align-items: center;
-  gap: 8rem;
 }
 
-.composerHint {
-  flex: 1 1 auto;
-  font-size: 11rem;
-  color: #9aa3b5;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+// RoadBuilder baseButton recipe: 4rem rect, 8rem padding, 24rem glyph.
+// Plain buttons, not vanilla Button: full control, no theme specificity
+// fights (Gameface drops var(), so all colors are literals).
+.actionButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5rem;
+  border: none;
+  border-radius: 4rem;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.sendButton {
+  background-color: #4bc3f1;
+}
+
+.sendButton:hover {
+  background-color: #63cdf3;
+}
+
+.sendButton:active {
+  background-color: #2f9fd0;
+}
+
+.sendButton:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.stopButton {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.stopButton:hover {
+  background-color: rgba(255, 255, 255, 0.35);
+}
+
+.stopButton:active {
+  background-color: #2e4f86;
+}
+
+.actionIcon {
+  width: 24rem;
+  height: 24rem;
+  background-color: #ffffff;
+  mask-size: contain;
+  mask-position: 50% 50%;
+  mask-repeat: no-repeat;
 }

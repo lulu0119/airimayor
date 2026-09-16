@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { KeyboardEvent } from "react";
-import { Button } from "cs2/ui";
+import sendIcon from "images/send.svg";
+import stopIcon from "images/stop.svg";
 import styles from "./chat.module.scss";
 
 interface ComposerProps {
@@ -33,7 +34,7 @@ export const Composer = ({ sessionReady, busy, onSend, onInterrupt }: ComposerPr
     <div className={styles.composer}>
       <textarea
         className={styles.composerInput}
-        rows={2}
+        rows={3}
         value={draft}
         disabled={!sessionReady}
         placeholder={
@@ -42,19 +43,36 @@ export const Composer = ({ sessionReady, busy, onSend, onInterrupt }: ComposerPr
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={onKeyDown}
       />
-      <div className={styles.composerRow}>
-        <span className={styles.composerHint}>Enter to send, Shift+Enter for a new line</span>
+      <div className={styles.composerActions}>
         {busy ? (
-          <Button variant="default" onSelect={onInterrupt}>
-            Stop
-          </Button>
-        ) : (
-          <Button
-            variant="primary"
-            onSelect={submit}
+          <button
+            type="button"
+            title="Stop"
+            aria-label="Stop"
+            className={`${styles.actionButton} ${styles.stopButton}`}
+            onClick={onInterrupt}
           >
-            Send
-          </Button>
+            <img
+              className={styles.actionIcon}
+              style={{ maskImage: `url(${stopIcon})` }}
+              alt=""
+            />
+          </button>
+        ) : (
+          <button
+            type="button"
+            title="Send"
+            aria-label="Send"
+            className={`${styles.actionButton} ${styles.sendButton}`}
+            onClick={submit}
+            disabled={!sessionReady || draft.trim().length === 0}
+          >
+            <img
+              className={styles.actionIcon}
+              style={{ maskImage: `url(${sendIcon})` }}
+              alt=""
+            />
+          </button>
         )}
       </div>
     </div>

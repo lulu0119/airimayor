@@ -10,3 +10,7 @@ CreateDefinitions.cs contains portions derived from game code:
 Copyright (c) Colossal Order and Paradox Interactive.
 Not for reuse or distribution except in accordance with the Paradox Interactive
 End User License Agreement.
+
+UI icons under Mod/UI/src/images/ are from MingCute Icon
+(https://github.com/Richard9394/MingCute), Copyright MingCute Design,
+licensed under the Apache License, Version 2.0.
