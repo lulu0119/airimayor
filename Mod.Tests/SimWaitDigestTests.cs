@@ -1,10 +1,10 @@
 using System.Text.Json;
-using CitiesSkylines2Agent.Agent;
+using CS2MCP;
 using Xunit;
 
-namespace CitiesSkylines2Agent.Agent.Tests
+namespace CS2MCP
 {
-    public sealed class WaitSimulationDigestTests
+    public sealed class SimWaitDigestTests
     {
         private const string WaitJson =
             "{\"running\":true,\"hours\":4,\"speed\":8,\"restoreSpeed\":0,\"startFrame\":10,\"targetFrame\":100," +
@@ -120,7 +120,7 @@ namespace CitiesSkylines2Agent.Agent.Tests
         [Fact]
         public void Missing_or_invalid_json_yields_empty_overview_and_problems()
         {
-            string json = WaitSimulationDigest.Build("{", "not-json", null, "", "[]", true);
+            string json = SimWaitDigest.Build("{", "not-json", null, "", "[]", true);
             using (JsonDocument document = JsonDocument.Parse(json))
             {
                 JsonElement root = document.RootElement;
@@ -148,7 +148,7 @@ namespace CitiesSkylines2Agent.Agent.Tests
         private static JsonDocument Parse(bool completed, string stateJson)
         {
             return JsonDocument.Parse(
-                WaitSimulationDigest.Build(
+                SimWaitDigest.Build(
                     WaitJson,
                     OverviewJson,
                     NotificationsJson,

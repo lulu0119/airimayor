@@ -57,7 +57,7 @@ namespace CitiesSkylines2Agent.Agent
                     if (Setting.StaticApiKind == ApiKind.Responses)
                     {
 #pragma warning disable OPENAI001
-                        m_Client = openAiClient.GetResponsesClient(Setting.StaticModel).AsIChatClient();
+                        m_Client = openAiClient.GetResponsesClient().AsIChatClient(Setting.StaticModel);
 #pragma warning restore OPENAI001
                     }
                     else
