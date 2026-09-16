@@ -1,12 +1,13 @@
-// Docked right-side chat panel. Sizes in rem (game convention), colors from
-// vanilla theme vars with opaque fallbacks so a missing var never blanks us.
+// Docked right-side chat panel, RoadBuilder SidePanel recipe: same geometry,
+// panel chrome, header bar, input and button treatment. Sizes in rem, colors
+// from vanilla theme vars with opaque fallbacks.
 
 .dock {
   position: absolute;
-  top: 70rem;
-  right: 12rem;
-  bottom: 120rem;
-  width: 344rem;
+  width: 330rem;
+  top: 60rem;
+  right: 10rem;
+  bottom: 179rem;
   display: flex;
   flex-direction: column;
   pointer-events: auto;
@@ -14,10 +15,15 @@
 
 .iconToggle {
   background-color: var(--accentColorNormal, #4a78c8);
+  transition: background-color 0.15s;
 }
 
 .iconToggle:hover {
   background-color: var(--accentColorNormal-hover, #5a88d8);
+}
+
+.iconToggle:active {
+  background-color: var(--accentColorDark-focused, #2e4f86);
 }
 
 .iconSelected {
@@ -37,13 +43,26 @@
   mask-repeat: no-repeat;
 }
 
-.panelColumn {
+.dock .panelColumn {
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
   background-color: var(--panelColorNormal, rgba(16, 20, 28, 0.94));
+  backdrop-filter: var(--panelBlur, blur(8px));
   border-radius: 6rem;
+  overflow: hidden;
+  animation: panelEntry 0.2s;
+}
+
+@keyframes panelEntry {
+  0% {
+    right: -10rem;
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 .statusBar {
@@ -53,7 +72,10 @@
   padding: 6rem 10rem;
   font-size: 12rem;
   color: var(--menuText1Normal, #cfd6e4);
-  border-bottom: 1rem solid var(--stroke2, rgba(255, 255, 255, 0.12));
+  background-color: var(--panelColorDark, rgba(10, 13, 18, 0.94));
+  border-bottom-style: solid;
+  border-bottom-width: var(--stroke2, 1rem);
+  border-bottom-color: var(--accentColorDark, rgba(70, 120, 200, 0.5));
 }
 
 .statusDot {
@@ -65,6 +87,9 @@
 }
 
 .statusText {
+  text-transform: uppercase;
+  font-size: 12rem;
+  color: var(--accentColorNormal, #7ea6e0);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -73,6 +98,7 @@
 .statusMeta {
   flex: 0 0 auto;
   margin-left: auto;
+  color: var(--menuText1Normal, #cfd6e4);
   opacity: 0.7;
   font-size: 11rem;
   white-space: nowrap;
@@ -86,6 +112,7 @@
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
+  margin: 6rem 0;
 }
 
 .emptyHint {
@@ -109,7 +136,7 @@
   font-size: 11rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  opacity: 0.6;
+  color: var(--textColorDim, #9aa3b5);
   margin-bottom: 2rem;
 }
 
@@ -120,15 +147,15 @@
 }
 
 .userRow {
-  background-color: var(--accentColorNormal, rgba(70, 120, 200, 0.25));
+  background-color: var(--accentColorDark, rgba(46, 79, 134, 0.85));
 }
 
 .assistantRow {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: rgba(255, 255, 255, 0.07);
 }
 
 .errorRow {
-  background-color: rgba(200, 60, 60, 0.22);
+  background-color: rgba(200, 60, 60, 0.25);
 }
 
 .thinkingRow {
@@ -161,9 +188,8 @@
 
 .toolRow {
   margin: 4rem 10rem;
-  border: 1rem solid var(--stroke2, rgba(255, 255, 255, 0.12));
   border-radius: 4rem;
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: rgba(255, 255, 255, 0.07);
   font-size: 12rem;
 }
 
@@ -171,8 +197,14 @@
   display: flex;
   align-items: center;
   gap: 6rem;
-  padding: 5rem 8rem;
+  padding: 6rem 8rem;
+  border-radius: 4rem;
   cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.toolHeader:hover {
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
 .toolDot {
@@ -219,12 +251,14 @@
 .toolState {
   margin-left: auto;
   flex: 0 0 auto;
-  opacity: 0.65;
+  color: var(--textColorDim, #9aa3b5);
+  text-transform: uppercase;
+  font-size: 11rem;
 }
 
 .toolChevron {
   flex: 0 0 auto;
-  opacity: 0.65;
+  color: var(--textColorDim, #9aa3b5);
 }
 
 .toolBody {
@@ -235,7 +269,7 @@
   font-size: 11rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  opacity: 0.55;
+  color: var(--textColorDim, #9aa3b5);
   margin: 4rem 0 2rem 0;
 }
 
@@ -258,23 +292,46 @@
   flex-direction: column;
   gap: 6rem;
   padding: 8rem 10rem 10rem 10rem;
-  border-top: 1rem solid var(--stroke2, rgba(255, 255, 255, 0.12));
+  background-color: var(--panelColorDark, rgba(10, 13, 18, 0.94));
+  border-top-style: solid;
+  border-top-width: var(--stroke2, 1rem);
+  border-top-color: var(--accentColorDark, rgba(70, 120, 200, 0.5));
 }
 
 .composerInput {
   width: 100%;
   box-sizing: border-box;
   resize: none;
-  padding: 6rem 8rem;
+  padding: 0.25em 0.5em;
+  line-height: 1.15em;
   font-size: 14rem;
-  color: var(--menuText1Normal, #eef2f9);
-  background-color: rgba(0, 0, 0, 0.45);
-  border: 1rem solid var(--stroke2, rgba(255, 255, 255, 0.2));
-  border-radius: 4rem;
+  color: #eee;
+  background-color: rgba(0, 0, 0, 0.15);
+  border-width: 2.5rem;
+  border-radius: 5rem;
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
-.composerInput:disabled {
-  opacity: 0.5;
+.composerInput:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.composerInput:active,
+.composerInput:focus {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-top-color: var(--accentColorLight, #9dc0f0);
+  border-left-color: var(--accentColorLight, #9dc0f0);
+  border-bottom-color: var(--accentColorLight, #9dc0f0);
+  border-right-color: var(--accentColorLight, #9dc0f0);
+  outline: none;
+}
+
+.composerInput:disabled,
+.composerInput:disabled:hover {
+  background-color: rgba(0, 0, 0, 0);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: rgba(128, 128, 128, 0.5);
 }
 
 .composerRow {
@@ -286,8 +343,7 @@
 .composerHint {
   flex: 1 1 auto;
   font-size: 11rem;
-  opacity: 0.5;
-  color: var(--menuText1Normal, #cfd6e4);
+  color: var(--textColorDim, #9aa3b5);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
