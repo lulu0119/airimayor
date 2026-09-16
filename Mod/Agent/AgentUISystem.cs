@@ -67,7 +67,6 @@ namespace CitiesSkylines2Agent.Agent
             }
 
             Unsubscribe();
-            ContextBlockStore.Clear();
             Subscribe(AgentLoop.StartCitySession());
             while (m_Events.TryDequeue(out _)) { }
             m_DeferredEvent = null;
@@ -80,7 +79,6 @@ namespace CitiesSkylines2Agent.Agent
         {
             Unsubscribe();
             AgentLoop.LeaveCitySession();
-            ContextBlockStore.Clear();
             while (m_Events.TryDequeue(out _)) { }
             m_DeferredEvent = null;
             m_AutoStartSent = false;

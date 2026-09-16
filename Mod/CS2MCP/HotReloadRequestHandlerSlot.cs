@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Reflection;
+using CitiesSkylines2Agent;
 using CitiesSkylines2Agent.Agent;
 
 namespace CS2MCP
@@ -19,6 +20,8 @@ namespace CS2MCP
         private readonly IRequestHandlerAdapter m_Builtin;
         private IRequestHandlerAdapter m_Current;
         private DateTime m_LastWriteUtc;
+        private DateTime m_LastCheckUtc;
+        private static readonly TimeSpan ReloadCheckInterval = TimeSpan.FromSeconds(2);
         private long m_LastLength = -1;
         private bool m_OverrideActive;
         private int m_ReloadCount;
@@ -41,6 +44,27 @@ namespace CS2MCP
 
         private void TryReload()
         {
+            // Hot-reload is a development path; players never pay the disk
+            // check. The check itself is throttled to turn boundaries in
+            // practice (one tool round issues at most one check per 2s).
+            if (!Setting.StaticEnableDevelopmentTools)
+            {
+                if (m_OverrideActive)
+                {
+                    m_Current = m_Builtin;
+                    m_OverrideActive = false;
+                    m_LastWriteUtc = default;
+                    m_LastLength = -1;
+                    Mod.Log.Info("development tools off; restored built-in handlers");
+                }
+                return;
+            }
+            DateTime now = DateTime.UtcNow;
+            if (now - m_LastCheckUtc < ReloadCheckInterval)
+            {
+                return;
+            }
+            m_LastCheckUtc = now;
             string path = ModPaths.HotReloadHandlersFile;
             if (!File.Exists(path))
             {

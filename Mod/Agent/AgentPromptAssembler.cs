@@ -7,9 +7,6 @@ namespace CitiesSkylines2Agent.Agent
 {
     internal sealed class AgentPromptAssembler
     {
-        private const string SkillIndexPrefix = "Available skills (call agent_read_skill to load full instructions):";
-        private const string ContextBlockPrefix = "Player context blocks:\n";
-
         public AgentPromptAssembler(string systemPrompt, string summaryPrefix)
         {
             SystemPrompt = systemPrompt;
@@ -23,18 +20,6 @@ namespace CitiesSkylines2Agent.Agent
         {
             if (history == null) return;
             EnsureSystemPrompt(history);
-            RemoveDynamicMessages(history);
-            int insertAt = LeadingSystemMessageCount(history);
-            string skillIndex = SkillStore.RenderIndex();
-            if (!string.IsNullOrWhiteSpace(skillIndex))
-            {
-                history.Insert(insertAt++, new ChatMessage(ChatRole.System, skillIndex));
-            }
-            string contextBlocks = ContextBlockStore.RenderAll();
-            if (!string.IsNullOrWhiteSpace(contextBlocks))
-            {
-                history.Insert(insertAt, new ChatMessage(ChatRole.System, ContextBlockPrefix + contextBlocks));
-            }
         }
 
         public void Rebuild(
@@ -69,28 +54,6 @@ namespace CitiesSkylines2Agent.Agent
                 history.RemoveAt(promptIndex);
                 history.Insert(0, prompt);
             }
-        }
-
-        private static void RemoveDynamicMessages(List<ChatMessage> history)
-        {
-            for (int index = history.Count - 1; index >= 0; index--)
-            {
-                ChatMessage message = history[index];
-                if (message.Role != ChatRole.System) continue;
-                string text = message.Text ?? "";
-                if (text.StartsWith(SkillIndexPrefix, StringComparison.Ordinal)
-                    || text.StartsWith(ContextBlockPrefix, StringComparison.Ordinal))
-                {
-                    history.RemoveAt(index);
-                }
-            }
-        }
-
-        private static int LeadingSystemMessageCount(List<ChatMessage> history)
-        {
-            int count = 0;
-            while (count < history.Count && history[count].Role == ChatRole.System) count++;
-            return count;
         }
     }
 }

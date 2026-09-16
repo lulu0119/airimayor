@@ -54,8 +54,10 @@ namespace CitiesSkylines2Agent.Agent
 
     /// <summary>
     /// In-process agent runtime: IChatClient + hand-rolled function-calling
-    /// loop. Apeira-style interleaving: user messages queued during a turn are
-    /// drained after the current model+tool round and continue the same turn.
+    /// loop. One user message runs one turn; when Continuous is on, the loop
+    /// itself opens bounded autonomous follow-up turns (system reminders, not
+    /// fake user messages) until the model stops calling tools. Queued user
+    /// messages always wait for the turn boundary and preempt autonomy.
     /// </summary>
     public sealed class AgentLoop : IDisposable
     {
@@ -64,18 +66,19 @@ namespace CitiesSkylines2Agent.Agent
 Working style:
 1. Observe briefly first via demand. The first city snapshot comes from wait_simulation (nested overview and problems). Call notifications only for raw icon locations. Then act. Do not repeat the same read tool more than twice without a write.
 2. Fix problems that block city growth FIRST: sewage, water, electricity, garbage, road access. Do not zone or expand while a red problem is unresolved.
-3. For infrastructure or service buildings without a player-selected prefab, use list_prefabs with a typed role, choose one unlocked standalone prefab, then call place_building once. For every site you choose yourself, include a reasonable radius and omit rotation so placement can resolve clearance, frontage and orientation. Omit radius or set rotation only when the player or a context block explicitly requires that exact pose. If exact placement fails, retry with a larger radius and no rotation.
+3. For infrastructure or service buildings without a player-selected prefab, use list_prefabs with a typed role, choose one unlocked standalone prefab, then call place_building once. For every site you choose yourself, include a reasonable radius and omit rotation so placement can resolve clearance, frontage and orientation. Omit radius or set rotation only when the player explicitly requires that exact pose. If exact placement fails, retry with a larger radius and no rotation.
 4. Use zone_area for regular residential / commercial / industrial / office growth. Use place_building only for standalone buildings (service buildings, unique/landmark/signature buildings, special production or extraction facilities).
-5. place_building owns nearby search and native validation in one call. Placement follows prefab data: only RequireRoad buildings need road frontage, shoreline buildings snap to the wet/dry boundary, and off-road water/sewage/low-voltage nodes receive a matching pipe or cable. High-voltage plants are not auto-wired; read utility-networks.
+5. place_building owns nearby search and native validation in one call. Placement follows prefab data: only RequireRoad buildings need road frontage, shoreline buildings snap to the wet/dry boundary, and off-road water/sewage/low-voltage nodes receive a matching pipe or cable. High-voltage plants are not auto-wired; read the utility-networks section of the playbook below.
 6. build_road: use short segments (50-250m) on owned tiles near existing nodes. For roads, omit mode and e1/e2 for the default ground mode; it samples the route at roughly 4m or finer intervals for water and local grade, rejecting detected water crossings or grades above 10% (or a stricter prefab limit). Use mode=grade-separated only for an intentional bridge/elevated/tunnel segment; provide both e1/e2 with at least one nonzero. Never pass mode for pipes, cables or other utility networks; their normal burial behavior is separate. If a call fails, change the route instead of repeating the same call.
 7. The simulation clock belongs to the player. Use wait_simulation to advance in-game time: one call advances exactly 1 in-game hour by default (high speed, roughly 20-30 real seconds), then restores the previous speed/pause state. Buildings take game hours to construct, level up and attract residents, so after zoning/placing call wait_simulation once or twice. Never poll; use wait_simulation.
 8. Before demolition, identify the exact target with list_buildings or list_networks. If the demolition tool is available, the player has already granted permission; do not ask for a modal confirmation.
 9. Ask for a player decision only when the desired outcome itself is ambiguous, not for permissions already represented by the available tool surface.
-10. End every turn with a concise summary (what was done, results, next steps).
+10. End every turn with a concise summary (what was done, results, next steps)."
++ MayorPlaybook.Text;
 
-Skills: call agent_read_skill(""city-building"") for the full playbook. Traffic Bottleneck Notification or congestion uses that skill's traffic-governance loop.
-
-Context blocks (map pins / selected networks) arrive as system messages and are the player's precise positions or targets; prefer them over guessing.";
+        private const string AutonomousContinuePrompt =
+            "Autonomous continuation: keep building the city, grow population and solve problems. " +
+            "If there is nothing useful left to do, answer with a brief summary and call no tools.";
 
         private const string CompactionTaskPrompt = @"COMPACTION TASK:
 Ignore the normal assistant response format for this response.
@@ -92,7 +95,6 @@ Return strict JSON with:
   ""recent_timeline"": string[],
   ""forgettable_noise"": string[],
   ""current_plan"": string,
-  ""context_blocks"": string[],
   ""paused_state"": string,
   ""last_world_snapshot"": string
 }
@@ -103,7 +105,8 @@ and stale notices. Do not keep stale relative-time phrases; convert them into
 stable facts or timeline notes. Keep each list item short and concrete.";
 
         private const string SummaryPrefix = "[context summary] ";
-        private const int MaxToolRoundsPerTurn = 30;
+        private const int MaxToolRoundsPerTurn = 10;
+        private const int MaxAutonomousTurns = 10;
 
         public static AgentLoop Instance { get; private set; }
 
@@ -152,7 +155,7 @@ stable facts or timeline notes. Keep each list item short and concrete.";
         private int m_TurnGenerationCount;
         private UsageDetails m_TurnUsage;
         private AgentUsageJson.Coverage m_TurnUsageCoverage;
-        private int m_SuppressAutoContinue;
+        private int m_AutonomousTurns;
         private bool m_TimeoutOccurred;
         private bool m_Disposed;
 
@@ -179,7 +182,7 @@ stable facts or timeline notes. Keep each list item short and concrete.";
 
         public bool IsBusy => Status == AgentStatus.Thinking || Status == AgentStatus.Working;
 
-        /// <summary>Queue a user message; injected after the current tool round.</summary>
+        /// <summary>Queue a user message for the next turn boundary.</summary>
         public void Send(string text)
         {
             if (!IsInLoadedCity())
@@ -191,9 +194,8 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                 });
                 return;
             }
-            Interlocked.Exchange(ref m_SuppressAutoContinue, 0);
+            Interlocked.Exchange(ref m_AutonomousTurns, 0);
             m_Pending.Writer.TryWrite(new AgentInput { Text = text ?? "" });
-            m_Observability.InterleavedQueued(text ?? "");
             Emit(new AgentUiEvent { Kind = "user", Text = text ?? "" });
             EnsureLoop();
         }
@@ -204,7 +206,6 @@ stable facts or timeline notes. Keep each list item short and concrete.";
             {
                 return;
             }
-            Interlocked.Exchange(ref m_SuppressAutoContinue, 1);
             m_TurnCts?.Cancel();
             Status = AgentStatus.Interrupted;
             Emit(new AgentUiEvent { Kind = "status", Status = AgentStatus.Interrupted, Text = "已中断当前回合" });
@@ -235,8 +236,8 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                 var messages = new JsonArray();
                 foreach (ChatMessage message in m_History)
                 {
-                    // System prompt / compaction / context blocks stay in the
-                    // model history only — do not dump them into the chat UI.
+                    // System prompt / compaction stay in the model history
+                    // only — do not dump them into the chat UI.
                     if (message.Role == ChatRole.System)
                     {
                         continue;
@@ -311,7 +312,6 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                         ["source"] = profile.Source,
                         ["vision"] = profile.VisionAvailable,
                     },
-                    ["contextBlocks"] = JsonNode.Parse(ContextBlockStore.ToJsonString()),
                     ["messages"] = messages,
                 }.ToJsonString();
             }
@@ -344,134 +344,133 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                     break;
                 }
 
-                var inputs = new List<AgentInput> { first };
-                while (m_Pending.Reader.TryRead(out AgentInput extra))
-                {
-                    inputs.Add(extra);
-                }
-
-                m_TurnId = Guid.NewGuid().ToString("N").Substring(0, 8);
                 m_TurnCts = new CancellationTokenSource();
-                m_TurnGenerationCount = 0;
-                m_TurnUsage = new UsageDetails();
-                m_TurnUsageCoverage = new AgentUsageJson.Coverage();
-                m_TimeoutOccurred = false;
-                m_ToolExecutor.Reset();
-                Stopwatch turnTimer = Stopwatch.StartNew();
-
-                try
+                m_AutonomousTurns = 0;
+                AgentInput current = first;
+                while (!m_LoopCts.IsCancellationRequested &&
+                    !m_TurnCts.IsCancellationRequested)
                 {
-                    bool busy = true;
-                    while (busy && !m_TurnCts.IsCancellationRequested)
+                    bool hadTools = await RunTurnAsync(current);
+                    bool wantAuto = Setting.StaticContinuous &&
+                        !m_TimeoutOccurred &&
+                        hadTools &&
+                        m_AutonomousTurns < MaxAutonomousTurns &&
+                        m_Pending.Reader.Count == 0 &&
+                        !m_TurnCts.IsCancellationRequested &&
+                        !m_LoopCts.IsCancellationRequested;
+                    if (!wantAuto)
                     {
-                        while (inputs.Count > 0)
-                        {
-                            AgentInput input = inputs[0];
-                            inputs.RemoveAt(0);
-                            if (!string.IsNullOrWhiteSpace(input.Text))
-                            {
-                                lock (m_Lock)
-                                {
-                                    m_History.Add(new ChatMessage(
-                                        ChatRole.User,
-                                        input.Text));
-                                }
-                            }
-                        }
-
-                        if (m_TurnGenerationCount == 0)
-                        {
-                            m_Observability.TurnStart(m_TurnId, first.Text);
-                        }
-
-                        InjectContextBlocks();
-                        var round = await RunModelRoundAsync(m_TurnCts.Token);
-                        if (round.IsError)
-                        {
-                            break;
-                        }
-
-                        if (round.ToolCalls.Count > 0)
-                        {
-                            await m_ToolExecutor.ExecuteAsync(round.ToolCalls, m_TurnCts.Token);
-                            await MaybeCompactAsync(m_TurnCts.Token);
-                            DrainPending(inputs);
-                            if (inputs.Count > 0)
-                            {
-                                m_Observability.InterleavedDrained(inputs.Count);
-                                Emit(new AgentUiEvent
-                                {
-                                    Kind = "status",
-                                    Status = AgentStatus.Working,
-                                    Text = "已插入新消息，继续工作",
-                                });
-                                continue;
-                            }
-                            if (m_TurnGenerationCount >= MaxToolRoundsPerTurn)
-                            {
-                                Emit(new AgentUiEvent
-                                {
-                                    Kind = "status",
-                                    Status = AgentStatus.Idle,
-                                    Text = "达到最大工具轮次，本回合结束",
-                                });
-                                break;
-                            }
-                        }
-                        else
-                        {
-                            DrainPending(inputs);
-                            busy = inputs.Count > 0;
-                        }
+                        break;
                     }
+                    m_AutonomousTurns++;
+                    current = null;
                 }
-                catch (OperationCanceledException)
-                {
-                    // interrupted
-                }
-                catch (Exception e)
-                {
-                    m_Observability.Error("loop", e.ToString());
-                    Emit(new AgentUiEvent
-                    {
-                        Kind = "error",
-                        Text = "循环错误：" + AgentObservability.RedactSecrets(e.Message),
-                    });
-                }
-
-                turnTimer.Stop();
-                m_Observability.TurnFinish(
-                    m_TurnGenerationCount,
-                    m_ToolExecutor.FunctionCount,
-                    turnTimer.ElapsedMilliseconds,
-                    AgentUsageJson.Serialize(m_TurnUsage),
-                    AgentUsageJson.SerializeCoverage(m_TurnUsageCoverage));
-                Status = AgentStatus.Idle;
-                Emit(new AgentUiEvent { Kind = "status", Status = AgentStatus.Idle });
-                Emit(new AgentUiEvent { Kind = "turn", Text = m_TurnId });
-
-                // Auto-continue: queue the continuation message so the loop picks it
-                // up without user input. The simulation clock stays with the player.
-                bool suppressAutoContinue = Interlocked.Exchange(ref m_SuppressAutoContinue, 0) != 0;
-                if (!suppressAutoContinue && Setting.StaticContinuous && !m_TimeoutOccurred &&
-                    m_Pending.Reader.Count == 0 &&
-                    !m_LoopCts.IsCancellationRequested)
-                {
-                    m_Pending.Writer.TryWrite(new AgentInput
-                    {
-                        Text = "Build the city, grow population, solve problems. Keep working until the city thrives.",
-                    });
-                }
-                m_TimeoutOccurred = false;
+                // New user intent restarts the autonomy budget.
+                m_AutonomousTurns = 0;
             }
         }
 
-        private void InjectContextBlocks()
+        /// <summary>
+        /// Runs one turn for a user input, or an autonomous follow-up turn
+        /// driven by a system reminder when input is null. Returns whether any
+        /// tool ran, which decides autonomous continuation.
+        /// </summary>
+        private async Task<bool> RunTurnAsync(AgentInput input)
         {
-            lock (m_Lock)
+            bool autonomous = input == null;
+            m_TurnId = Guid.NewGuid().ToString("N").Substring(0, 8);
+            m_TurnGenerationCount = 0;
+            m_TurnUsage = new UsageDetails();
+            m_TurnUsageCoverage = new AgentUsageJson.Coverage();
+            m_TimeoutOccurred = false;
+            m_ToolExecutor.Reset();
+            Stopwatch turnTimer = Stopwatch.StartNew();
+
+            try
             {
-                m_PromptAssembler.Apply(m_History);
+                if (autonomous)
+                {
+                    lock (m_Lock)
+                    {
+                        m_History.Add(new ChatMessage(
+                            ChatRole.System,
+                            AutonomousContinuePrompt));
+                    }
+                    m_Observability.TurnStart(m_TurnId, "(autonomous continuation)");
+                }
+                else if (!string.IsNullOrWhiteSpace(input.Text))
+                {
+                    lock (m_Lock)
+                    {
+                        m_History.Add(new ChatMessage(
+                            ChatRole.User,
+                            input.Text));
+                    }
+                    m_Observability.TurnStart(m_TurnId, input.Text);
+                }
+                else
+                {
+                    m_Observability.TurnStart(m_TurnId, "");
+                }
+
+                while (!m_TurnCts.IsCancellationRequested)
+                {
+                    lock (m_Lock)
+                    {
+                        m_PromptAssembler.Apply(m_History);
+                    }
+                    var round = await RunModelRoundAsync(m_TurnCts.Token);
+                    if (round.IsError)
+                    {
+                        break;
+                    }
+
+                    if (round.ToolCalls.Count > 0)
+                    {
+                        await m_ToolExecutor.ExecuteAsync(round.ToolCalls, m_TurnCts.Token);
+                        await MaybeCompactAsync(m_TurnCts.Token);
+                        if (m_TurnGenerationCount >= MaxToolRoundsPerTurn)
+                        {
+                            Emit(new AgentUiEvent
+                            {
+                                Kind = "status",
+                                Status = AgentStatus.Idle,
+                                Text = "达到最大工具轮次，本回合结束",
+                            });
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
             }
+            catch (OperationCanceledException)
+            {
+                // interrupted
+            }
+            catch (Exception e)
+            {
+                m_Observability.Error("loop", e.ToString());
+                Emit(new AgentUiEvent
+                {
+                    Kind = "error",
+                    Text = "循环错误：" + AgentObservability.RedactSecrets(e.Message),
+                });
+            }
+
+            turnTimer.Stop();
+            m_Observability.TurnFinish(
+                m_TurnGenerationCount,
+                m_ToolExecutor.FunctionCount,
+                turnTimer.ElapsedMilliseconds,
+                AgentUsageJson.Serialize(m_TurnUsage),
+                AgentUsageJson.SerializeCoverage(m_TurnUsageCoverage));
+            Status = AgentStatus.Idle;
+            Emit(new AgentUiEvent { Kind = "status", Status = AgentStatus.Idle });
+            Emit(new AgentUiEvent { Kind = "turn", Text = m_TurnId });
+            return m_ToolExecutor.FunctionCount > 0;
         }
 
         private void AppendHistoryMessage(ChatMessage message)
@@ -479,15 +478,6 @@ stable facts or timeline notes. Keep each list item short and concrete.";
             lock (m_Lock)
             {
                 m_History.Add(message);
-            }
-        }
-
-        private void DrainPending(List<AgentInput> inputs)
-        {
-            while (m_Pending.Reader.TryRead(out AgentInput extra))
-            {
-                inputs.Add(extra);
-                m_Observability.InterleavedQueued(extra.Text ?? "");
             }
         }
 
@@ -748,10 +738,6 @@ stable facts or timeline notes. Keep each list item short and concrete.";
             }
         }
 
-        /// <summary>
-        /// Chooses a keep-tail start index that does not split an assistant
-        /// tool_calls message from its following tool results.
-        /// </summary>
         private static string TruncateForLog(string text, int maxChars)
         {
             if (string.IsNullOrEmpty(text) || text.Length <= maxChars)

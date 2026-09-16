@@ -70,6 +70,20 @@ namespace CitiesSkylines2Agent.Agent
 
         private static void RefreshOverride()
         {
+            // Hot-reload is a development path: without the dev gate the
+            // embedded catalog is authoritative and no disk check runs.
+            if (!Setting.StaticEnableDevelopmentTools)
+            {
+                if (s_UsingOverride)
+                {
+                    s_Tools = LoadEmbedded();
+                    s_UsingOverride = false;
+                    s_OverrideWriteUtc = default;
+                    s_OverrideLength = -1;
+                    CS2MCP.Mod.Log.Info("development tools off; restored embedded catalog");
+                }
+                return;
+            }
             string path = ModPaths.HotReloadToolCatalogFile;
             if (!File.Exists(path))
             {

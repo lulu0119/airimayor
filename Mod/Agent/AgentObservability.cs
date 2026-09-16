@@ -10,9 +10,10 @@ using System.Text.RegularExpressions;
 namespace CitiesSkylines2Agent.Agent
 {
     /// <summary>
-    /// JSONL agent timeline: task/turn/generation/function/plan/compact/
-    /// interleaved_input/error events for improving tools, prompts and skills.
-    /// One event per line, append-only, size-rotated. API keys never appear.
+    /// JSONL agent timeline: task/turn/generation/function/compact/error
+    /// events for improving tools and prompts. Usage stays on turn.finish
+    /// and generation events. One event per line, append-only,
+    /// size-rotated. API keys never appear.
     /// </summary>
     public sealed class AgentObservability : IDisposable
     {
@@ -127,8 +128,8 @@ namespace CitiesSkylines2Agent.Agent
             Record("generation", new JsonObject
             {
                 ["model"] = model,
-                ["input"] = Truncate(messageSummary, 65536),
-                ["reasoning"] = Truncate(reasoning, 65536),
+                ["input"] = Truncate(messageSummary, 2048),
+                ["reasoning"] = Truncate(reasoning, 2048),
                 ["toolCalls"] = toolCalls ?? new JsonArray(),
                 ["usage"] = usage ?? new JsonObject(),
                 ["elapsedMs"] = elapsedMs,
@@ -154,16 +155,6 @@ namespace CitiesSkylines2Agent.Agent
                 ["queuedMs"] = queuedMs,
                 ["error"] = error,
             });
-        }
-
-        public void InterleavedQueued(string text)
-        {
-            Record("interleaved_input", new JsonObject { ["state"] = "queued", ["text"] = text });
-        }
-
-        public void InterleavedDrained(int count)
-        {
-            Record("interleaved_input", new JsonObject { ["state"] = "drained", ["count"] = count });
         }
 
         public void Compact(double threshold, int removedMessages, int keptMessages, string summary, long newEstimate)

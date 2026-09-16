@@ -1,21 +1,20 @@
+using System;
+
 namespace CitiesSkylines2Agent.Agent
 {
     /// <summary>
-    /// Resolved model capabilities after applying explicit player overrides.
+    /// Resolved model capabilities from the player settings only. The loop
+    /// never parses the model name: the request shape comes from ApiKind and
+    /// the token window comes from WindowTokens.
     /// </summary>
     internal sealed class AgentModelProfile
     {
         private readonly ModelCapabilities m_Caps;
 
-        private AgentModelProfile(ModelCapabilities caps, VisionToolMode visionMode)
+        private AgentModelProfile(ModelCapabilities caps, bool visionAvailable)
         {
             m_Caps = caps;
-            VisionAvailable = visionMode switch
-            {
-                VisionToolMode.On => true,
-                VisionToolMode.Off => false,
-                _ => caps.SupportsVision,
-            };
+            VisionAvailable = visionAvailable;
         }
 
         public long ContextWindowTokens => m_Caps.ContextWindowTokens;
@@ -26,30 +25,19 @@ namespace CitiesSkylines2Agent.Agent
         public string Source => m_Caps.Source;
 
         public static AgentModelProfile Resolve(
-            string model,
-            long fallbackWindowTokens,
-            VisionToolMode visionMode,
-            ContextBudgetMode contextBudgetMode)
+            long windowTokens,
+            bool visionOn,
+            string apiKindName)
         {
-            ModelCapabilities caps = ModelProfileRegistry.Resolve(model, fallbackWindowTokens);
-            caps.ContextWindowTokens = ResolveWindowTokens(
-                caps.ContextWindowTokens,
-                fallbackWindowTokens,
-                contextBudgetMode);
-            return new AgentModelProfile(caps, visionMode);
-        }
-
-        private static long ResolveWindowTokens(
-            long profileWindowTokens,
-            long customWindowTokens,
-            ContextBudgetMode mode)
-        {
-            if (mode == ContextBudgetMode.Custom)
+            long context = Math.Max(16_000, windowTokens > 0 ? windowTokens : 200_000);
+            var caps = new ModelCapabilities
             {
-                return customWindowTokens > 0 ? customWindowTokens : 200_000;
-            }
-
-            return profileWindowTokens;
+                ContextWindowTokens = context,
+                MaxOutputTokens = Math.Min(16_384, Math.Max(4_096, context / 10)),
+                SupportsVision = visionOn,
+                Source = string.IsNullOrEmpty(apiKindName) ? "player" : apiKindName,
+            };
+            return new AgentModelProfile(caps, visionOn);
         }
     }
 }

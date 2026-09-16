@@ -20,12 +20,12 @@ namespace CitiesSkylines2Agent.Agent
     /// <summary>
     /// Translates model tool calls into CS2MCP bridge requests and builds
     /// catalog query strings. Writes are not gated on pause. wait_simulation
-    /// blocks the agent thread until the timed run finishes, then replaces the
-    /// HTTP wait payload with a nested overview/problems digest.
+    /// blocks the agent thread until the timed run finishes; the city-side
+    /// follow-up (snapshot digest) lives in CS2MCP.SimWaitService so city
+    /// knowledge stays out of the generic loop.
     /// </summary>
     public static class AgentToolBridge
     {
-        private const int SimWaitPollMs = 250;
         private const int BridgeTimeoutMs = 90_000;
 
         public static async Task<ToolInvocationResult> InvokeAsync(
@@ -77,9 +77,10 @@ namespace CitiesSkylines2Agent.Agent
             }
 
             string text = Encoding.UTF8.GetString(response.Body ?? Array.Empty<byte>());
-            if (string.Equals(tool.Route, "/sim/wait", StringComparison.Ordinal))
+            if (string.Equals(tool.Name, "wait_simulation", StringComparison.Ordinal))
             {
-                text = await WaitForWaitAsync(bridge, text, query, cancellationToken);
+                text = await CS2MCP.SimWaitService.WaitAndDigestAsync(
+                    bridge, text, RequestedHours(query), cancellationToken);
             }
             return new ToolInvocationResult
             {
@@ -88,18 +89,8 @@ namespace CitiesSkylines2Agent.Agent
             };
         }
 
-        /// <summary>
-        /// Waits on the agent thread until BridgeSystem clears
-        /// AutoPauseTargetFrame (bounded generously by the requested in-game
-        /// hours), then fetches snapshot JSON for the model-facing digest.
-        /// </summary>
-        private static async Task<string> WaitForWaitAsync(
-            CS2MCP.BridgeSystem bridge,
-            string startJson,
-            Dictionary<string, string> query,
-            CancellationToken cancellationToken)
+        private static int RequestedHours(Dictionary<string, string> query)
         {
-            int requestedHours = 1;
             if (query.TryGetValue("hours", out string rawHours) &&
                 int.TryParse(
                     rawHours,
@@ -108,50 +99,9 @@ namespace CitiesSkylines2Agent.Agent
                     out int parsedHours) &&
                 parsedHours > 0)
             {
-                requestedHours = parsedHours;
+                return parsedHours;
             }
-            // At the game's high speed 8x, one game hour takes roughly
-            // 20-30 real seconds. Allow up to 5 minutes per game hour so slow
-            // hardware never makes the agent think a wait is stuck.
-            int maxWaitMs = requestedHours * 300_000 + SimWaitPollMs * 4;
-            int waited = 0;
-            while (bridge.AutoPauseTargetFrame != 0 && waited < maxWaitMs)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                await Task.Delay(SimWaitPollMs, cancellationToken);
-                waited += SimWaitPollMs;
-            }
-
-            Task<string> overview = TryGetJsonAsync(bridge, "/city/overview");
-            Task<string> state = TryGetJsonAsync(bridge, "/state");
-            Task<string> notifications = TryGetJsonAsync(bridge, "/city/notifications");
-            Task<string> services = TryGetJsonAsync(bridge, "/city/services");
-            await Task.WhenAll(overview, state, notifications, services);
-            return WaitSimulationDigest.Build(
-                startJson,
-                await overview,
-                await notifications,
-                await services,
-                await state,
-                bridge.AutoPauseTargetFrame == 0);
-        }
-
-        private static async Task<string> TryGetJsonAsync(CS2MCP.BridgeSystem bridge, string route)
-        {
-            try
-            {
-                CS2MCP.BridgeResponse response = await bridge.InvokeAsync(route);
-                if (response != null && response.Success)
-                {
-                    return Encoding.UTF8.GetString(response.Body ?? Array.Empty<byte>());
-                }
-            }
-            catch (Exception e)
-            {
-                CS2MCP.Mod.Log.Warn(
-                    $"post-wait {route} failed: {AgentObservability.RedactSecrets(e.Message)}");
-            }
-            return null;
+            return 1;
         }
 
         private static ToolInvocationResult Error(string message)

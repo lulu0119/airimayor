@@ -3,13 +3,14 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace CitiesSkylines2Agent.Agent
+namespace CS2MCP
 {
     /// <summary>
     /// Builds the model-facing wait_simulation result from fetched JSON.
-    /// Callers do I/O; this module does not talk to the bridge.
+    /// City knowledge (which overview fields and problem shapes the model
+    /// sees) lives here in the city module, not in the generic agent loop.
     /// </summary>
-    internal static class WaitSimulationDigest
+    internal static class SimWaitDigest
     {
         private const string NoteTimeout =
             "wait did not finish in time; retry wait_simulation once";

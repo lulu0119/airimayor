@@ -56,9 +56,6 @@ namespace CitiesSkylines2Agent.Agent
         public static string HotReloadToolCatalogFile =>
             Path.Combine(HotReloadDirectory, "ToolCatalog.json");
 
-        public static string HotReloadSkillsDirectory =>
-            Path.Combine(HotReloadDirectory, "Skills");
-
         public static void EnsureDirectories()
         {
             Directory.CreateDirectory(ModDataDirectory);

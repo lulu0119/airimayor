@@ -8,6 +8,8 @@ namespace CitiesSkylines2Agent.Agent
 {
     /// <summary>
     /// Owns the OpenAI-compatible client cache and the resolved model profile.
+    /// The request shape follows Setting.ApiKind; the token window follows
+    /// Setting.WindowTokens. Model names are never parsed.
     /// </summary>
     internal sealed class AgentClientFactory : IDisposable
     {
@@ -52,8 +54,17 @@ namespace CitiesSkylines2Agent.Agent
                     var openAiClient = new OpenAIClient(
                         new ApiKeyCredential(Setting.StaticApiKey),
                         options);
-                    ChatClient chatClient = openAiClient.GetChatClient(Setting.StaticModel);
-                    m_Client = chatClient.AsIChatClient();
+                    if (Setting.StaticApiKind == ApiKind.Responses)
+                    {
+#pragma warning disable OPENAI001
+                        m_Client = openAiClient.GetResponsesClient(Setting.StaticModel).AsIChatClient();
+#pragma warning restore OPENAI001
+                    }
+                    else
+                    {
+                        ChatClient chatClient = openAiClient.GetChatClient(Setting.StaticModel);
+                        m_Client = chatClient.AsIChatClient();
+                    }
                     return m_Client;
                 }
                 catch (Exception e)
@@ -89,7 +100,7 @@ namespace CitiesSkylines2Agent.Agent
             string signature = Setting.StaticEndpoint + "|" +
                 Setting.StaticApiKey + "|" + Setting.StaticModel + "|" +
                 Setting.StaticWindowTokens + "|" + Setting.StaticVisionToolMode + "|" +
-                Setting.StaticContextBudgetMode;
+                Setting.StaticApiKind;
             if (string.Equals(m_ConfigSignature, signature, StringComparison.Ordinal))
             {
                 return;
@@ -99,10 +110,9 @@ namespace CitiesSkylines2Agent.Agent
             m_Client = null;
             m_ConfigSignature = signature;
             m_Profile = AgentModelProfile.Resolve(
-                Setting.StaticModel,
                 Setting.StaticWindowTokens,
-                Setting.StaticVisionToolMode,
-                Setting.StaticContextBudgetMode);
+                Setting.StaticVisionToolMode == VisionToolMode.On,
+                Setting.StaticApiKind.ToString());
         }
 
         public void Dispose()

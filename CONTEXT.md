@@ -15,8 +15,8 @@ The tools and text the model is allowed to call or see.
 _Avoid_: HTTP route, backend handler, catalog row (those may exist without being model-facing)
 
 **Mayor skill**:
-A playbook the mayor model loads with `agent_read_skill`.
-_Avoid_: engineering skills under `.agents/` or `~/.agents/`
+The playbook baked into the system prompt (city building, utility networks, transit lines).
+_Avoid_: a lazy skill tool, engineering skills under `.agents/` or `~/.agents/`
 
 **Traffic governance**:
 The mayor's congestion loop over existing tools: wait digest plus topology QA, `list_networks` ranked by congestion or traffic volume, existing road writes, then `wait_simulation` and re-measure.
@@ -27,8 +27,8 @@ The tool that advances in-game time, then restores the previous speed and pause.
 _Avoid_: forced pause as the product runtime, polling wait results incorrectly, flattened overview, waitedMs, SimWait internals
 
 **Context budget**:
-How many tokens the loop treats as the window. Auto uses the named-model profile; Custom replaces that window with the player setting for every model name.
-_Avoid_: Endpoint or provider as the source of the window; Custom as a change to the server model limit
+How many tokens the loop treats as the window. Always the player-set WindowTokens; the loop never parses the model name. The request shape follows the player-set API kind (Chat Completions or Responses).
+_Avoid_: Endpoint, provider, or model name as the source of the window
 
 **Compaction**:
 Summarizing older turns when estimated tokens reach the compact threshold.

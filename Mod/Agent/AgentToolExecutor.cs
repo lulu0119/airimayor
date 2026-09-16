@@ -12,14 +12,11 @@ namespace CitiesSkylines2Agent.Agent
 {
     internal sealed class AgentToolExecutor
     {
-        private const int MaxIdenticalToolRepeats = 3;
         private readonly AgentToolSurface m_ToolSurface;
         private readonly AgentClientFactory m_ClientFactory;
         private readonly AgentObservability m_Observability;
         private readonly Action<AgentUiEvent> m_Emit;
         private readonly Action<ChatMessage> m_AppendHistory;
-        private string m_LastSignature = "";
-        private int m_IdenticalCount;
 
         public AgentToolExecutor(AgentToolSurface toolSurface, AgentClientFactory clientFactory,
             AgentObservability observability, Action<AgentUiEvent> emit, Action<ChatMessage> appendHistory)
@@ -36,8 +33,6 @@ namespace CitiesSkylines2Agent.Agent
         public void Reset()
         {
             FunctionCount = 0;
-            m_LastSignature = "";
-            m_IdenticalCount = 0;
         }
 
         public async Task ExecuteAsync(IReadOnlyList<FunctionCallContent> toolCalls, CancellationToken cancellationToken)
@@ -46,17 +41,12 @@ namespace CitiesSkylines2Agent.Agent
             foreach (FunctionCallContent call in toolCalls)
             {
                 string argumentsJson = SerializeArguments(call.Arguments);
-                string signature = (call.Name ?? "") + "|" + argumentsJson;
-                if (string.Equals(signature, m_LastSignature, StringComparison.Ordinal)) m_IdenticalCount++;
-                else { m_LastSignature = signature; m_IdenticalCount = 1; }
                 Stopwatch timer = Stopwatch.StartNew();
                 m_Emit(new AgentUiEvent { Kind = "tool", Tool = call.Name ?? call.CallId, Text = argumentsJson });
                 ToolInvocationResult result;
                 try
                 {
-                    result = m_IdenticalCount > MaxIdenticalToolRepeats
-                        ? Error("refused repeated identical tool call (" + (call.Name ?? "") + "); change arguments or take a write action instead of polling")
-                        : await InvokeAsync(call.Name, argumentsJson, cancellationToken);
+                    result = await InvokeAsync(call.Name, argumentsJson, cancellationToken);
                 }
                 catch (OperationCanceledException)
                 {
@@ -86,7 +76,6 @@ namespace CitiesSkylines2Agent.Agent
         {
             try
             {
-                if (m_ToolSurface.IsMetaTool(name)) return await InvokeMetaToolAsync(name, argumentsJson, cancellationToken);
                 if (!m_ToolSurface.IsAvailable(name, m_ClientFactory.GetProfile()))
                 {
                     return Error("tool is not available for this model or current settings");
@@ -104,70 +93,6 @@ namespace CitiesSkylines2Agent.Agent
             {
                 m_Observability.Error("tool", e.ToString());
                 return Error(AgentObservability.RedactSecrets(e.Message));
-            }
-        }
-
-        private async Task<ToolInvocationResult> InvokeMetaToolAsync(string name, string argumentsJson, CancellationToken cancellationToken)
-        {
-            try
-            {
-                switch (name)
-                {
-                    case "agent_list_context_blocks": return Ok(ContextBlockStore.ToJsonString());
-                    case "agent_add_context_block": return AddContextBlock(argumentsJson);
-                    case "agent_remove_context_block": return RemoveContextBlock(argumentsJson);
-                    case "agent_read_skill": return ReadSkill(argumentsJson);
-                    default: return Error("unknown meta tool " + name);
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception e)
-            {
-                m_Observability.Error("meta-tool", e.ToString());
-                return Error(AgentObservability.RedactSecrets(e.Message));
-            }
-        }
-
-        private ToolInvocationResult AddContextBlock(string argumentsJson)
-        {
-            using (JsonDocument document = JsonDocument.Parse(argumentsJson))
-            {
-                JsonElement root = document.RootElement;
-                string data = root.TryGetProperty("data", out JsonElement dataElement)
-                    ? dataElement.GetRawText()
-                    : "{}";
-                if (data.Length > ContextBlockStore.MaxDataCharacters)
-                {
-                    return Error(
-                        $"context block data exceeds {ContextBlockStore.MaxDataCharacters} characters");
-                }
-                ContextBlock block = ContextBlockStore.Add(
-                    GetString(root, "name", ""),
-                    GetString(root, "kind", "note"),
-                    data);
-                m_Emit(new AgentUiEvent { Kind = "status", Text = "Added context block: " + block.Name });
-                return Ok(JsonSerializer.Serialize(new { id = block.Id, name = block.Name }));
-            }
-        }
-
-        private static ToolInvocationResult RemoveContextBlock(string argumentsJson)
-        {
-            using (JsonDocument document = JsonDocument.Parse(argumentsJson))
-            {
-                bool removed = ContextBlockStore.Remove(GetString(document.RootElement, "id", ""));
-                return Ok(JsonSerializer.Serialize(new { removed }));
-            }
-        }
-
-        private static ToolInvocationResult ReadSkill(string argumentsJson)
-        {
-            using (JsonDocument document = JsonDocument.Parse(argumentsJson))
-            {
-                if (!SkillStore.TryRead(GetString(document.RootElement, "name", ""), out AgentSkill skill)) return Error("Unknown skill");
-                return new ToolInvocationResult { Success = true, Text = skill.Content };
             }
         }
 
@@ -195,20 +120,9 @@ namespace CitiesSkylines2Agent.Agent
             }
         }
 
-        private static ToolInvocationResult Ok(string text)
-        {
-            return new ToolInvocationResult { Success = true, Text = text };
-        }
-
         private static ToolInvocationResult Error(string message)
         {
             return new ToolInvocationResult { Success = false, Text = JsonSerializer.Serialize(new { error = message }) };
-        }
-
-        private static string GetString(JsonElement element, string name, string fallback)
-        {
-            return element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
-                ? value.GetString() : fallback;
         }
     }
 }
