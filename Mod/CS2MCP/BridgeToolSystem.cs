@@ -1388,6 +1388,7 @@ namespace CS2MCP
                     Snap.None,
                     AgeMask.Mature,
                     false,
+                    default(PlacementOverrides),
                     default(JobHandle));
                 handle.Complete();
             }
