@@ -554,7 +554,7 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                     }
                 }
 
-                UpdateTokenEstimate(response);
+                UpdateTokenEstimate();
                 EmitGeneration(response, toolCalls, CollectReasoning(updates), timer.ElapsedMilliseconds);
                 return new ModelRound
                 {
@@ -615,17 +615,15 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                 normalized.Contains("input is too long");
         }
 
-        private void UpdateTokenEstimate(ChatResponse response)
+        private void UpdateTokenEstimate()
         {
-            long historyEstimate = new AgentContextBudget(m_ClientFactory.GetProfile()).Estimate(m_History);
-            if (response.Usage != null && response.Usage.InputTokenCount > 0)
-            {
-                m_EstimatedTokens = Math.Max(historyEstimate, response.Usage.InputTokenCount ?? 0);
-            }
-            else
-            {
-                m_EstimatedTokens = historyEstimate;
-            }
+            // Provider usage is telemetry only, never the compaction authority:
+            // opencode Go reports a caching-inclusive count (~1M cachedInput on a
+            // 15K-token request), so folding it in via Math.Max pinned the
+            // estimate at 900K+ and forced compaction every round. The local
+            // history estimate is the compaction authority.
+            m_EstimatedTokens = new AgentContextBudget(
+                m_ClientFactory.GetProfile()).Estimate(m_History);
         }
 
         private async Task MaybeCompactAsync(
