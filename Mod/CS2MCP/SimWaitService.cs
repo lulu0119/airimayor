@@ -1,5 +1,7 @@
 using System;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -18,13 +20,16 @@ namespace CS2MCP
         public static async Task<string> WaitAsync(
             BridgeSystem bridge,
             string startJson,
-            int requestedHours,
             CancellationToken cancellationToken)
         {
+            // The timed run was already started city-side from these same
+            // hours, so derive the wall-clock budget from the echoed JSON:
+            // one parse for both sides, no second reading of the query.
+            double requestedHours = RequestedHours(startJson);
             // At the game's high speed 8x, one game hour takes roughly
             // 20-30 real seconds. Allow up to 5 minutes per game hour so slow
             // hardware never makes the agent think a wait is stuck.
-            int maxWaitMs = requestedHours * 300_000 + SimWaitPollMs * 4;
+            int maxWaitMs = (int)(Math.Ceiling(requestedHours) * 300_000) + SimWaitPollMs * 4;
             int waited = 0;
             while (bridge.AutoPauseTargetFrame != 0 && waited < maxWaitMs)
             {
@@ -38,6 +43,28 @@ namespace CS2MCP
                 startJson,
                 state,
                 bridge.AutoPauseTargetFrame == 0);
+        }
+
+        private static double RequestedHours(string startJson)
+        {
+            if (string.IsNullOrWhiteSpace(startJson))
+            {
+                return 1;
+            }
+            try
+            {
+                JsonObject root = JsonNode.Parse(startJson) as JsonObject;
+                if (root?["hours"] is JsonValue hours &&
+                    hours.TryGetValue<double>(out double parsed) &&
+                    parsed > 0)
+                {
+                    return parsed;
+                }
+            }
+            catch (JsonException)
+            {
+            }
+            return 1;
         }
 
         private static async Task<string> TryGetJsonAsync(BridgeSystem bridge, string route)

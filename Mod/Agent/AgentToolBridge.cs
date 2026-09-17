@@ -80,28 +80,13 @@ namespace CitiesSkylines2Agent.Agent
             if (string.Equals(tool.Name, "wait_simulation", StringComparison.Ordinal))
             {
                 text = await CS2MCP.SimWaitService.WaitAsync(
-                    bridge, text, RequestedHours(query), cancellationToken);
+                    bridge, text, cancellationToken);
             }
             return new ToolInvocationResult
             {
                 Success = true,
                 Text = text,
             };
-        }
-
-        private static int RequestedHours(Dictionary<string, string> query)
-        {
-            if (query.TryGetValue("hours", out string rawHours) &&
-                int.TryParse(
-                    rawHours,
-                    NumberStyles.Integer,
-                    CultureInfo.InvariantCulture,
-                    out int parsedHours) &&
-                parsedHours > 0)
-            {
-                return parsedHours;
-            }
-            return 1;
         }
 
         private static ToolInvocationResult Error(string message)
