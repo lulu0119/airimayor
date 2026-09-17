@@ -73,19 +73,14 @@ namespace CitiesSkylines2Agent
         [SettingsUISlider(min = 16_000, max = 2_000_000, step = 1_000)]
         public int WindowTokens { get; set; } = 200_000;
 
-        // ---- Hidden --------------------------------------
-
-        public string StartupPrompt { get; set; } = "";
-
         // ---- Static facade ---------------------------------
 
         public static string StaticEndpoint => Instance?.Endpoint ?? "https://api.openai.com/v1";
         public static string StaticModel => Instance?.Model ?? "";
 
-        private const string DefaultStartupPrompt = "Run the city continuously: fix growth-blocking problems first, then expand with demand; act, don't just report.";
+        private const string StartupPrompt = "Run the city continuously: fix growth-blocking problems first, then expand with demand; act, don't just report.";
 
-        public static string StaticStartupPrompt => string.IsNullOrWhiteSpace(Instance?.StartupPrompt)
-            ? DefaultStartupPrompt : Instance.StartupPrompt;
+        public static string StaticStartupPrompt => StartupPrompt;
 
         public static bool StaticAutoStart => Instance?.AutoStart ?? true;
         public static bool StaticContinuous => Instance?.Continuous ?? true;
@@ -113,7 +108,6 @@ namespace CitiesSkylines2Agent
             EnableDevelopmentTools = false;
             VisionTools = VisionToolMode.Off;
             Api = ApiKind.ChatCompletions;
-            StartupPrompt = "";
             WindowTokens = 200_000;
         }
     }
