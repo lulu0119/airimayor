@@ -24,6 +24,7 @@ namespace CitiesSkylines2Agent
             m_Setting = new Setting(this);
             m_Setting.RegisterInOptionsUI();
             GameManager.instance.localizationManager.AddSource("en-US", new LocaleEN(m_Setting));
+            GameManager.instance.localizationManager.AddSource("zh-HANS", new LocaleZhHans(m_Setting));
             AssetDatabase.global.LoadSettings(nameof(CitiesSkylines2Agent), m_Setting, new Setting(this));
             Setting.Instance = m_Setting;
 

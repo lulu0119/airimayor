@@ -112,6 +112,11 @@ namespace CitiesSkylines2Agent
         }
     }
 
+    public static class ChatLocale
+    {
+        public static string Id(string name) => $"CitiesSkylines2Agent.Chat.{name}";
+    }
+
     public class LocaleEN : IDictionarySource
     {
         private readonly Setting m_Setting;
@@ -155,6 +160,32 @@ namespace CitiesSkylines2Agent
                 { m_Setting.GetEnumValueLocaleID(VisionToolMode.On), "On" },
                 { m_Setting.GetEnumValueLocaleID(ApiKind.ChatCompletions), "Chat Completions" },
                 { m_Setting.GetEnumValueLocaleID(ApiKind.Responses), "Responses" },
+
+                { ChatLocale.Id("Title"), "City Agent" },
+                { ChatLocale.Id("Composer.Loading"), "Loading city…" },
+                { ChatLocale.Id("Composer.Ready"), "Message the mayor…" },
+                { ChatLocale.Id("Composer.Queued"), "Type to queue…" },
+                { ChatLocale.Id("Composer.Send"), "Send" },
+                { ChatLocale.Id("Composer.Stop"), "Stop" },
+                { ChatLocale.Id("Empty"), "Ask the mayor to build, zone, or fix city services." },
+                { ChatLocale.Id("Thinking"), "Thinking" },
+                { ChatLocale.Id("Role.You"), "You" },
+                { ChatLocale.Id("Role.Mayor"), "Mayor" },
+                { ChatLocale.Id("Role.Error"), "Error" },
+                { ChatLocale.Id("Tool.Running"), "Running" },
+                { ChatLocale.Id("Tool.Done"), "Done" },
+                { ChatLocale.Id("Tool.Error"), "Error" },
+                { ChatLocale.Id("Tool.Interrupted"), "Interrupted" },
+                { ChatLocale.Id("Tool.Arguments"), "Arguments" },
+                { ChatLocale.Id("Tool.Result"), "Result" },
+                { ChatLocale.Id("Tool.NoResult"), "No result yet." },
+                { ChatLocale.Id("Status.Idle"), "Idle" },
+                { ChatLocale.Id("Status.Thinking"), "Thinking" },
+                { ChatLocale.Id("Status.Working"), "Working" },
+                { ChatLocale.Id("Status.Interrupted"), "Interrupted" },
+                { ChatLocale.Id("Status.Error"), "Error" },
+                { ChatLocale.Id("Status.Queued"), "queued" },
+                { ChatLocale.Id("Status.Vision"), "vision" },
             };
         }
 

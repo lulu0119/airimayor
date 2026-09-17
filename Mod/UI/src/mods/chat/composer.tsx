@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { KeyboardEvent } from "react";
 import sendIcon from "images/send.svg";
 import stopIcon from "images/stop.svg";
+import { useChatText } from "./locale";
 import styles from "./chat.module.scss";
 
 interface ComposerProps {
@@ -13,13 +14,14 @@ interface ComposerProps {
 
 export const Composer = ({ sessionReady, busy, onSend, onInterrupt }: ComposerProps) => {
   const [draft, setDraft] = useState("");
+  const text = useChatText();
 
   const submit = () => {
-    const text = draft.trim();
-    if (text.length === 0 || !sessionReady) {
+    const trimmed = draft.trim();
+    if (trimmed.length === 0 || !sessionReady) {
       return;
     }
-    onSend(text);
+    onSend(trimmed);
     setDraft("");
   };
 
@@ -30,6 +32,14 @@ export const Composer = ({ sessionReady, busy, onSend, onInterrupt }: ComposerPr
     }
   };
 
+  const placeholder = !sessionReady
+    ? text("Composer.Loading", "Loading city…")
+    : busy
+      ? text("Composer.Queued", "Type to queue…")
+      : text("Composer.Ready", "Message the mayor…");
+  const sendLabel = text("Composer.Send", "Send");
+  const stopLabel = text("Composer.Stop", "Stop");
+
   return (
     <div className={styles.composer}>
       <textarea
@@ -37,9 +47,7 @@ export const Composer = ({ sessionReady, busy, onSend, onInterrupt }: ComposerPr
         rows={3}
         value={draft}
         disabled={!sessionReady}
-        placeholder={
-          !sessionReady ? "Loading city…" : busy ? "Type to queue…" : "Message the mayor…"
-        }
+        placeholder={placeholder}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={onKeyDown}
       />
@@ -47,8 +55,8 @@ export const Composer = ({ sessionReady, busy, onSend, onInterrupt }: ComposerPr
         {busy ? (
           <button
             type="button"
-            title="Stop"
-            aria-label="Stop"
+            title={stopLabel}
+            aria-label={stopLabel}
             className={`${styles.actionButton} ${styles.stopButton}`}
             onClick={onInterrupt}
           >
@@ -61,8 +69,8 @@ export const Composer = ({ sessionReady, busy, onSend, onInterrupt }: ComposerPr
         ) : (
           <button
             type="button"
-            title="Send"
-            aria-label="Send"
+            title={sendLabel}
+            aria-label={sendLabel}
             className={`${styles.actionButton} ${styles.sendButton}`}
             onClick={submit}
             disabled={!sessionReady || draft.trim().length === 0}

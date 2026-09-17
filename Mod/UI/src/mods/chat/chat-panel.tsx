@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import { FOCUS_AUTO, Panel, Portal } from "cs2/ui";
 import { useChat } from "./use-chat";
+import { useChatText } from "./locale";
 import { MessageList } from "./message-list";
 import { StatusBar } from "./status-bar";
 import { Composer } from "./composer";
@@ -91,6 +92,7 @@ const measureFrame = (node: HTMLElement): PanelFrame => {
 
 export const ChatPanel = ({ children }: { children?: ReactNode }) => {
   const chat = useChat();
+  const text = useChatText();
   const open = usePanelOpen();
   const [frame, setFrame] = useState<PanelFrame | null>(loadFrame);
   const dockRef = useRef<HTMLDivElement>(null);
@@ -195,7 +197,7 @@ export const ChatPanel = ({ children }: { children?: ReactNode }) => {
           onMouseDown={onDockMouseDown}
         >
           <Panel
-            header="City Agent"
+            header={text("Title", "City Agent")}
             focusKey={FOCUS_AUTO}
             className={styles.panelColumn}
             onClose={() => setPanelOpen(false)}

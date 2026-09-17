@@ -5,6 +5,7 @@
 import { useEffect, useRef } from "react";
 import { Scrollable } from "cs2/ui";
 import type { ChatLine } from "./chat-types";
+import { useChatText } from "./locale";
 import { MessageRow } from "./message-row";
 import styles from "./chat.module.scss";
 
@@ -16,6 +17,7 @@ interface MessageListProps {
 }
 
 export const MessageList = ({ lines, busy }: MessageListProps) => {
+  const text = useChatText();
   // Scrollable forwards its ref to the scroll container; the game no longer
   // exports a ScrollController class to reach it through.
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -42,7 +44,7 @@ export const MessageList = ({ lines, busy }: MessageListProps) => {
     <Scrollable vertical trackVisibility="scrollable" className={styles.messageList} ref={listRef}>
       {lines.length === 0 && !busy ? (
         <div className={styles.emptyHint}>
-          Ask the mayor to build, zone, or fix city services.
+          {text("Empty", "Ask the mayor to build, zone, or fix city services.")}
         </div>
       ) : null}
       {lines.map((line) => (
@@ -50,7 +52,7 @@ export const MessageList = ({ lines, busy }: MessageListProps) => {
       ))}
       {showThinking ? (
         <div className={styles.thinkingRow} role="status">
-          <span>Thinking</span>
+          <span>{text("Thinking", "Thinking")}</span>
           <span className={styles.thinkingDots}>
             <span>.</span>
             <span>.</span>

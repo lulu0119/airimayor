@@ -1,14 +1,8 @@
 import { useState } from "react";
 import type { ChatLine, ToolRowState } from "./chat-types";
 import chevronDownIcon from "images/chevron-down.svg";
+import { useChatText } from "./locale";
 import styles from "./chat.module.scss";
-
-const toolStateLabel: Record<ToolRowState, string> = {
-  running: "Running",
-  done: "Done",
-  error: "Error",
-  interrupted: "Interrupted",
-};
 
 const toolDotClass = (state: ToolRowState): string => {
   switch (state) {
@@ -34,19 +28,15 @@ const roleClass = (kind: ChatLine["kind"]): string => {
   }
 };
 
-const roleLabel = (kind: ChatLine["kind"]): string => {
-  switch (kind) {
-    case "user":
-      return "You";
-    case "error":
-      return "Error";
-    default:
-      return "Mayor";
-  }
-};
-
 const ToolRow = ({ line }: { line: Extract<ChatLine, { kind: "tool" }> }) => {
   const [expanded, setExpanded] = useState(false);
+  const text = useChatText();
+  const stateLabel: Record<ToolRowState, string> = {
+    running: text("Tool.Running", "Running"),
+    done: text("Tool.Done", "Done"),
+    error: text("Tool.Error", "Error"),
+    interrupted: text("Tool.Interrupted", "Interrupted"),
+  };
   return (
     <div className={styles.toolRow}>
       <div
@@ -55,7 +45,7 @@ const ToolRow = ({ line }: { line: Extract<ChatLine, { kind: "tool" }> }) => {
       >
         <span className={`${styles.toolDot} ${toolDotClass(line.state)}`} />
         <span className={styles.toolName}>{line.name}</span>
-        <span className={styles.toolState}>{toolStateLabel[line.state]}</span>
+        <span className={styles.toolState}>{stateLabel[line.state]}</span>
         <span
           className={styles.toolChevron}
           style={{
@@ -68,12 +58,12 @@ const ToolRow = ({ line }: { line: Extract<ChatLine, { kind: "tool" }> }) => {
         <div className={styles.toolBody}>
           {line.args ? (
             <>
-              <div className={styles.toolSectionLabel}>Arguments</div>
+              <div className={styles.toolSectionLabel}>{text("Tool.Arguments", "Arguments")}</div>
               <pre className={styles.toolPre}>{line.args}</pre>
             </>
           ) : null}
-          <div className={styles.toolSectionLabel}>Result</div>
-          <pre className={styles.toolPre}>{line.result ?? "No result yet."}</pre>
+          <div className={styles.toolSectionLabel}>{text("Tool.Result", "Result")}</div>
+          <pre className={styles.toolPre}>{line.result ?? text("Tool.NoResult", "No result yet.")}</pre>
         </div>
       ) : null}
     </div>
@@ -81,12 +71,19 @@ const ToolRow = ({ line }: { line: Extract<ChatLine, { kind: "tool" }> }) => {
 };
 
 export const MessageRow = ({ line }: { line: ChatLine }) => {
+  const text = useChatText();
   if (line.kind === "tool") {
     return <ToolRow line={line} />;
   }
+  const roleName =
+    line.kind === "user"
+      ? text("Role.You", "You")
+      : line.kind === "error"
+        ? text("Role.Error", "Error")
+        : text("Role.Mayor", "Mayor");
   return (
     <div className={`${styles.messageRow} ${roleClass(line.kind)}`}>
-      <span className={styles.roleLabel}>{roleLabel(line.kind)}</span>
+      <span className={styles.roleLabel}>{roleName}</span>
       <span className={styles.messageText}>
         {line.text}
         {line.kind === "assistant" && line.streaming ? "…" : ""}
