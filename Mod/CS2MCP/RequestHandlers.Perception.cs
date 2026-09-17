@@ -15,7 +15,7 @@ using UnityEngine;
 namespace CS2MCP
 {
     /// <summary>
-    /// Perception endpoints: camera, local_map, probe_cell_layer, zoning
+    /// Perception endpoints: camera, map_text, probe_cell_layer, zoning
     /// readback, notifications, and entity inspection.
     /// </summary>
     public sealed partial class RequestHandlers
@@ -137,7 +137,7 @@ namespace CS2MCP
                 && string.Equals(format, "samples", StringComparison.OrdinalIgnoreCase))
             {
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments,
-                    "format=samples is not supported; omit format for the compact local_map response");
+                    "format=samples is not supported; omit format for the compact map_text response");
             }
             return GetCompactTerrain(request, xMin, zMin, xMax, zMax);
         }
@@ -188,7 +188,7 @@ namespace CS2MCP
             waterDeps.Complete();
 
             int count = columns * rows;
-            var snapshot = new LocalMapSnapshot
+            var snapshot = new MapTextSnapshot
             {
                 Revision = World.GetOrCreateSystemManaged<SimulationSystem>().frameIndex.ToString(),
                 MinX = representedMinX,
@@ -224,7 +224,7 @@ namespace CS2MCP
                 representedMinX + representedWidth, representedMinZ + representedDepth);
             try
             {
-                return BridgeResponse.Text(CompactLocalMap.Serialize(snapshot, defaultCharacterBudget));
+                return BridgeResponse.Text(CompactMapText.Serialize(snapshot, defaultCharacterBudget));
             }
             catch (Exception e)
             {
@@ -282,7 +282,7 @@ namespace CS2MCP
         }
 
         private void ReadLocalRoads(
-            LocalMapSnapshot snapshot,
+            MapTextSnapshot snapshot,
             float xMin,
             float zMin,
             float xMax,
@@ -310,7 +310,7 @@ namespace CS2MCP
 
                     Game.Net.Edge edge = EntityManager.GetComponentData<Game.Net.Edge>(entity);
                     PrefabBase prefab = prefabSystem.GetPrefab<PrefabBase>(prefabRef.m_Prefab);
-                    var road = new LocalMapRoad
+                    var road = new MapTextRoad
                     {
                         EntityIndex = entity.Index,
                         EntityVersion = entity.Version,
@@ -326,7 +326,7 @@ namespace CS2MCP
                     for (int i = 0; i <= samples; i++)
                     {
                         float3 point = BezierPoint(curve.m_Bezier, i / (float)samples);
-                        road.Points.Add(new LocalMapPoint(point.x, point.z));
+                        road.Points.Add(new MapTextPoint(point.x, point.z));
                     }
                     snapshot.Roads.Add(road);
                 }

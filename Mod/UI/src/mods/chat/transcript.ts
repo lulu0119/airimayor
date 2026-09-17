@@ -47,6 +47,7 @@ export function hydrateTranscript(messages: StateMessage[]): Transcript {
         name: message.tool ?? "tool",
         args: "",
         result: text.length > 0 ? text : null,
+        image: null,
         state: "done",
       });
       return;
@@ -102,6 +103,7 @@ export function applyWireEvent(
         lines[lines.length - 1] = {
           ...last,
           result: text.length > 0 ? truncate(text) : null,
+          image: event.image ? event.image : null,
           state: event.status === "Error" ? "error" : "done",
         };
         return { ...transcript, lines };
@@ -112,6 +114,7 @@ export function applyWireEvent(
         name: event.tool ?? "tool",
         args: truncate(text),
         result: null,
+        image: null,
         state: "running",
       }));
     }

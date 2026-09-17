@@ -18,6 +18,11 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0010-native-transit-lines.md](./adr/0010-native-transit-lines.md) | Transit lines via Route Tool apply; stops are not `place_building` |
 | [0011-specialized-industry-hub-identity.md](./adr/0011-specialized-industry-hub-identity.md) | Specialized-industry role follows declared extractor Operational areas |
 | [0012-docked-chat-transcript.md](./adr/0012-docked-chat-transcript.md) | Docked chat panel; bindings catalog; event-sourced transcript |
+| [0013-carto-map-export.md](./adr/0013-carto-map-export.md) | `map_image` via Carto reflection; shares the vision switch |
+| [0014-tool-image-preview.md](./adr/0014-tool-image-preview.md) | Tool image previews are thumbnails over the event channel |
+| [0015-map-style-and-extent.md](./adr/0015-map-style-and-extent.md) | Light map style; bounded extents verified against game meters |
+| [0016-map-layering-port.md](./adr/0016-map-layering-port.md) | Port road layering; defer zoning fills and labels |
+| [0017-map-text-map-image-split.md](./adr/0017-map-text-map-image-split.md) | map_text and map_image stay separate tools |
 
 ## Guide
 

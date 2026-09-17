@@ -31,6 +31,9 @@ namespace CitiesSkylines2Agent.Agent
         public string Tool;
         public AgentStatus Status;
 
+        /// <summary>UI-only image preview (data URI) for image tool results.</summary>
+        public string Image;
+
         public string ToJsonString()
         {
             var obj = new JsonObject
@@ -42,6 +45,10 @@ namespace CitiesSkylines2Agent.Agent
             if (Tool != null)
             {
                 obj["tool"] = Tool;
+            }
+            if (Image != null)
+            {
+                obj["image"] = Image;
             }
             return obj.ToJsonString();
         }

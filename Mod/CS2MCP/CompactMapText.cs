@@ -10,7 +10,7 @@ namespace CS2MCP
     /// handler owns snapshot collection; this module owns all derived spatial
     /// semantics and the model-facing text budget.
     /// </summary>
-    internal sealed class LocalMapSnapshot
+    internal sealed class MapTextSnapshot
     {
         public string Revision;
         public float MinX;
@@ -25,10 +25,10 @@ namespace CS2MCP
         public float[] Heights;
         public bool[] Water;
         public bool[] Owned;
-        public readonly List<LocalMapRoad> Roads = new List<LocalMapRoad>();
+        public readonly List<MapTextRoad> Roads = new List<MapTextRoad>();
     }
 
-    internal sealed class LocalMapRoad
+    internal sealed class MapTextRoad
     {
         public int EntityIndex;
         public int EntityVersion;
@@ -39,15 +39,15 @@ namespace CS2MCP
         public int StartDegree;
         public int EndDegree;
         public string Prefab;
-        public readonly List<LocalMapPoint> Points = new List<LocalMapPoint>();
+        public readonly List<MapTextPoint> Points = new List<MapTextPoint>();
     }
 
-    internal struct LocalMapPoint
+    internal struct MapTextPoint
     {
         public float X;
         public float Z;
 
-        public LocalMapPoint(float x, float z)
+        public MapTextPoint(float x, float z)
         {
             X = x;
             Z = z;
@@ -59,7 +59,7 @@ namespace CS2MCP
     /// semantic-vector text. Callers do not need to know connected-component,
     /// polygonization, quantization, topology, or output-loading policy.
     /// </summary>
-    internal static class CompactLocalMap
+    internal static class CompactMapText
     {
         private const float kGentleSlopePercent = 5f;
         private const float kSteepSlopePercent = 12f;
@@ -114,7 +114,7 @@ namespace CS2MCP
             public int Buildable;
         }
 
-        public static string Serialize(LocalMapSnapshot snapshot, int characterBudget)
+        public static string Serialize(MapTextSnapshot snapshot, int characterBudget)
         {
             Validate(snapshot);
             characterBudget = Math.Max(characterBudget, kMinimumBudgetCharacters);
@@ -170,7 +170,7 @@ namespace CS2MCP
 
             Dictionary<string, SectorStats> sectors = CalculateSectors(snapshot, buildable);
             var output = new StringBuilder(Math.Min(characterBudget, 16384));
-            output.Append("LOCAL_MAP v1 revision=").Append(SafeToken(snapshot.Revision)).Append('\n');
+            output.Append("MAP_TEXT v1 revision=").Append(SafeToken(snapshot.Revision)).Append('\n');
             output.Append("frame origin_world=(").Append(F(snapshot.OriginX, "0.0"))
                 .Append(',').Append(F(snapshot.OriginZ, "0.0"))
                 .Append(") axes=(+x,+z) unit=m quantum_m=").Append(F(snapshot.Quantum, "0.0"))
@@ -213,14 +213,14 @@ namespace CS2MCP
             }
 
             output.Append("networks\n");
-            List<LocalMapRoad> roads = new List<LocalMapRoad>(snapshot.Roads);
+            List<MapTextRoad> roads = new List<MapTextRoad>(snapshot.Roads);
             roads.Sort((left, right) => CompareRoads(left, right, snapshot));
             var selectedRoadLines = new List<string>();
             var selectedNodeLines = new Dictionary<string, string>(StringComparer.Ordinal);
             int selectedNetworkCharacters = 0;
             int omittedRoads = 0;
             int omittedRoadVertices = 0;
-            foreach (LocalMapRoad road in roads)
+            foreach (MapTextRoad road in roads)
             {
                 List<GridPoint> points = QuantizeRoad(road, snapshot);
                 if (points.Count < 2)
@@ -277,7 +277,7 @@ namespace CS2MCP
             return output.ToString();
         }
 
-        private static void Validate(LocalMapSnapshot snapshot)
+        private static void Validate(MapTextSnapshot snapshot)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             if (snapshot.Columns <= 0 || snapshot.Rows <= 0 || snapshot.Quantum <= 0f)
@@ -293,7 +293,7 @@ namespace CS2MCP
             }
         }
 
-        private static float[] CalculateSlopes(LocalMapSnapshot snapshot)
+        private static float[] CalculateSlopes(MapTextSnapshot snapshot)
         {
             var result = new float[snapshot.Heights.Length];
             for (int row = 0; row < snapshot.Rows; row++)
@@ -318,7 +318,7 @@ namespace CS2MCP
             string kind,
             char prefix,
             bool[] mask,
-            LocalMapSnapshot snapshot,
+            MapTextSnapshot snapshot,
             int focusIndex)
         {
             int count = snapshot.Columns * snapshot.Rows;
@@ -371,7 +371,7 @@ namespace CS2MCP
             int label,
             bool[] mask,
             int[] labels,
-            LocalMapSnapshot snapshot,
+            MapTextSnapshot snapshot,
             Queue<int> queue)
         {
             if (col < 0 || row < 0 || col >= snapshot.Columns || row >= snapshot.Rows) return;
@@ -381,7 +381,7 @@ namespace CS2MCP
             queue.Enqueue(index);
         }
 
-        private static void TraceRings(Region region, int[] labels, LocalMapSnapshot snapshot)
+        private static void TraceRings(Region region, int[] labels, MapTextSnapshot snapshot)
         {
             var edges = new List<BoundaryEdge>();
             var outgoing = new Dictionary<GridPoint, List<BoundaryEdge>>();
@@ -441,7 +441,7 @@ namespace CS2MCP
             int row,
             int label,
             int[] labels,
-            LocalMapSnapshot snapshot)
+            MapTextSnapshot snapshot)
         {
             return col >= 0 && row >= 0 && col < snapshot.Columns && row < snapshot.Rows
                 && labels[row * snapshot.Columns + col] == label;
@@ -528,7 +528,7 @@ namespace CS2MCP
             return area;
         }
 
-        private static Dictionary<string, SectorStats> CalculateSectors(LocalMapSnapshot snapshot, bool[] buildable)
+        private static Dictionary<string, SectorStats> CalculateSectors(MapTextSnapshot snapshot, bool[] buildable)
         {
             var result = new Dictionary<string, SectorStats>(StringComparer.Ordinal)
             {
@@ -587,7 +587,7 @@ namespace CS2MCP
             }
         }
 
-        private static string FormatRegion(Region region, LocalMapSnapshot snapshot)
+        private static string FormatRegion(Region region, MapTextSnapshot snapshot)
         {
             string id = region.Prefix.ToString() + region.Sequence.ToString(CultureInfo.InvariantCulture);
             string touches = FormatTouches(region, snapshot);
@@ -615,7 +615,7 @@ namespace CS2MCP
             return line.ToString();
         }
 
-        private static string FormatRings(List<List<GridPoint>> rings, LocalMapSnapshot snapshot)
+        private static string FormatRings(List<List<GridPoint>> rings, MapTextSnapshot snapshot)
         {
             var result = new StringBuilder();
             result.Append('[');
@@ -636,7 +636,7 @@ namespace CS2MCP
             return result.ToString();
         }
 
-        private static string FormatCellRows(Region region, LocalMapSnapshot snapshot)
+        private static string FormatCellRows(Region region, MapTextSnapshot snapshot)
         {
             var cells = new List<int>(region.Cells);
             cells.Sort();
@@ -667,7 +667,7 @@ namespace CS2MCP
             return result.ToString();
         }
 
-        private static string FormatTouches(Region region, LocalMapSnapshot snapshot)
+        private static string FormatTouches(Region region, MapTextSnapshot snapshot)
         {
             var values = new List<string>();
             if (region.MinX == 0) values.Add("-x");
@@ -677,7 +677,7 @@ namespace CS2MCP
             return values.Count == 0 ? "[]" : "[" + string.Join(",", values) + "]";
         }
 
-        private static int CompareRoads(LocalMapRoad left, LocalMapRoad right, LocalMapSnapshot snapshot)
+        private static int CompareRoads(MapTextRoad left, MapTextRoad right, MapTextSnapshot snapshot)
         {
             float leftDistance = RoadDistanceSquared(left, snapshot.FocusX, snapshot.FocusZ);
             float rightDistance = RoadDistanceSquared(right, snapshot.FocusX, snapshot.FocusZ);
@@ -687,10 +687,10 @@ namespace CS2MCP
             return compare != 0 ? compare : left.EntityVersion.CompareTo(right.EntityVersion);
         }
 
-        private static float RoadDistanceSquared(LocalMapRoad road, float x, float z)
+        private static float RoadDistanceSquared(MapTextRoad road, float x, float z)
         {
             float best = float.PositiveInfinity;
-            foreach (LocalMapPoint point in road.Points)
+            foreach (MapTextPoint point in road.Points)
             {
                 float dx = point.X - x;
                 float dz = point.Z - z;
@@ -699,10 +699,10 @@ namespace CS2MCP
             return best;
         }
 
-        private static List<GridPoint> QuantizeRoad(LocalMapRoad road, LocalMapSnapshot snapshot)
+        private static List<GridPoint> QuantizeRoad(MapTextRoad road, MapTextSnapshot snapshot)
         {
             var result = new List<GridPoint>();
-            foreach (LocalMapPoint point in road.Points)
+            foreach (MapTextPoint point in road.Points)
             {
                 var quantized = new GridPoint(
                     (int)Math.Round((point.X - snapshot.OriginX) / snapshot.Quantum),
@@ -729,7 +729,7 @@ namespace CS2MCP
         }
 
         private static string FormatRoad(
-            LocalMapRoad road,
+            MapTextRoad road,
             string startId,
             string endId,
             List<GridPoint> points)
@@ -817,22 +817,22 @@ namespace CS2MCP
             return Math.Max(minimum, Math.Min(maximum, value));
         }
 
-        private static int GridX(LocalMapSnapshot snapshot, int column)
+        private static int GridX(MapTextSnapshot snapshot, int column)
         {
             return LocalX(snapshot, snapshot.MinX) + column;
         }
 
-        private static int GridZ(LocalMapSnapshot snapshot, int row)
+        private static int GridZ(MapTextSnapshot snapshot, int row)
         {
             return LocalZ(snapshot, snapshot.MinZ) + row;
         }
 
-        private static int LocalX(LocalMapSnapshot snapshot, float worldX)
+        private static int LocalX(MapTextSnapshot snapshot, float worldX)
         {
             return (int)Math.Round((worldX - snapshot.OriginX) / snapshot.Quantum);
         }
 
-        private static int LocalZ(LocalMapSnapshot snapshot, float worldZ)
+        private static int LocalZ(MapTextSnapshot snapshot, float worldZ)
         {
             return (int)Math.Round((worldZ - snapshot.OriginZ) / snapshot.Quantum);
         }

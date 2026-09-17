@@ -94,9 +94,13 @@ _Avoid_: Gameface `transportLines$` as the write path; a vehicle or production t
 
 ### Perception and authority
 
-**LOCAL_MAP**:
-Budgeted semantic-vector text from `local_map`. Spatial evidence, not construction approval.
+**MAP_TEXT**:
+Budgeted semantic-vector text from `map_text`. Spatial evidence, not construction approval.
 _Avoid_: heightmap, 8×8 samples as the Agent interface
+
+**Map image**:
+Undistorted PNG overview from `map_image`: citywide by default, zoomed extent with x+z+radius or xMin/zMin/xMax/zMax bounds. Light style, no labels. Appears only when the player enabled visual tools.
+_Avoid_: model-parsed GeoJSON, treating the map as construction approval
 
 **Player permission**:
 A durable setting that shows or hides a write tool (demolition, spending Development Points, visual tools).

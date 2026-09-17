@@ -38,8 +38,14 @@ namespace CitiesSkylines2Agent.Agent
         public async Task ExecuteAsync(IReadOnlyList<FunctionCallContent> toolCalls, CancellationToken cancellationToken)
         {
             m_Emit(new AgentUiEvent { Kind = "status", Status = AgentStatus.Working });
-            foreach (FunctionCallContent call in toolCalls)
+            // Image previews ride after every tool result of this generation:
+            // interleaving them between tool messages breaks the Chat
+            // Completions pairing (assistant tool_calls must be followed by
+            // consecutive tool results).
+            var pendingImages = new List<KeyValuePair<string, string>>();
+            for (int index = 0; index < toolCalls.Count; index++)
             {
+                FunctionCallContent call = toolCalls[index];
                 string argumentsJson = SerializeArguments(call.Arguments);
                 Stopwatch timer = Stopwatch.StartNew();
                 m_Emit(new AgentUiEvent { Kind = "tool", Tool = call.Name ?? call.CallId, Text = argumentsJson });
@@ -55,6 +61,19 @@ namespace CitiesSkylines2Agent.Agent
                     m_Observability.Function(call.Name, argumentsJson, "tool call interrupted", false, timer.ElapsedMilliseconds, 0, "interrupted");
                     m_AppendHistory(new ChatMessage(ChatRole.Tool,
                         new List<AIContent> { new FunctionResultContent(call.CallId, "tool call interrupted") }));
+                    // Poison guard: every remaining call in this batch must
+                    // still get a result, or the orphaned tool_calls break
+                    // Chat Completions pairing for the rest of the session.
+                    // No UI events for them (their start rows never emitted).
+                    for (int rest = index + 1; rest < toolCalls.Count; rest++)
+                    {
+                        FunctionCallContent skipped = toolCalls[rest];
+                        FunctionCount++;
+                        m_Observability.Function(skipped.Name, SerializeArguments(skipped.Arguments),
+                            "tool call interrupted", false, 0, 0, "interrupted");
+                        m_AppendHistory(new ChatMessage(ChatRole.Tool,
+                            new List<AIContent> { new FunctionResultContent(skipped.CallId, "tool call interrupted") }));
+                    }
                     throw;
                 }
                 timer.Stop();
@@ -69,10 +88,18 @@ namespace CitiesSkylines2Agent.Agent
                     Tool = call.Name ?? call.CallId,
                     Text = TruncateToolText(result.Text),
                     Status = result.Success ? AgentStatus.Idle : AgentStatus.Error,
+                    Image = ToPreviewDataUri(result.PreviewBytes),
                 });
                 m_AppendHistory(new ChatMessage(ChatRole.Tool,
                     new List<AIContent> { new FunctionResultContent(call.CallId, result.Text) }));
-                AppendToolImage(result.ImagePath);
+                if (!string.IsNullOrWhiteSpace(result.ImagePath))
+                {
+                    pendingImages.Add(new KeyValuePair<string, string>(call.Name, result.ImagePath));
+                }
+            }
+            foreach (KeyValuePair<string, string> pending in pendingImages)
+            {
+                AppendToolImage(pending.Key, pending.Value);
             }
         }
 
@@ -89,6 +116,21 @@ namespace CitiesSkylines2Agent.Agent
                 return text ?? "";
             }
             return text.Substring(0, MaxToolTextLength) + "…";
+        }
+
+        /// <summary>
+        /// UI-only preview carrier. Base64 over the event binding is pure .NET
+        /// (safe on the agent thread); the thumbnail itself was rendered on the
+        /// main thread at capture time. Oversized payloads stay text-only.
+        /// </summary>
+        private static string ToPreviewDataUri(byte[] preview)
+        {
+            const int MaxPreviewBytes = 256 * 1024;
+            if (preview == null || preview.Length == 0 || preview.Length > MaxPreviewBytes)
+            {
+                return null;
+            }
+            return "data:image/jpeg;base64," + Convert.ToBase64String(preview);
         }
 
         private async Task<ToolInvocationResult> InvokeAsync(string name, string argumentsJson, CancellationToken cancellationToken)
@@ -115,7 +157,7 @@ namespace CitiesSkylines2Agent.Agent
             }
         }
 
-        private void AppendToolImage(string imagePath)
+        private void AppendToolImage(string toolName, string imagePath)
         {
             if (string.IsNullOrWhiteSpace(imagePath) || !m_ClientFactory.GetProfile().VisionAvailable ||
                 !File.Exists(imagePath)) return;
@@ -127,9 +169,12 @@ namespace CitiesSkylines2Agent.Agent
                     m_Observability.Error("vision-attach", "screenshot exceeds image attachment limit");
                     return;
                 }
+                string caption = string.Equals(toolName, "map_image", StringComparison.Ordinal)
+                    ? "Map overview returned by the map_image tool."
+                    : "Screenshot returned by the screenshot tool.";
                 m_AppendHistory(new ChatMessage(ChatRole.User, new List<AIContent>
                 {
-                    new TextContent("Screenshot returned by the screenshot tool."),
+                    new TextContent(caption),
                     new DataContent(new ReadOnlyMemory<byte>(image), "image/png"),
                 }));
             }

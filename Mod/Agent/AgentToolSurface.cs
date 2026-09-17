@@ -16,6 +16,12 @@ namespace CitiesSkylines2Agent.Agent
                 "replace_road_type", "debug_zone_blocks", "save_game",
             };
 
+        private static readonly HashSet<string> s_VisionTools =
+            new HashSet<string>(StringComparer.Ordinal)
+            {
+                "screenshot", "get_camera", "set_camera", "map_image",
+            };
+
         public bool IsAvailable(string name, AgentModelProfile profile)
         {
             return IsAllowed(name, profile != null && profile.VisionAvailable);
@@ -42,8 +48,7 @@ namespace CitiesSkylines2Agent.Agent
 
         private static bool IsAllowed(string name, bool visionAvailable)
         {
-            if (!visionAvailable &&
-                (name == "screenshot" || name == "get_camera" || name == "set_camera"))
+            if (!visionAvailable && s_VisionTools.Contains(name))
             {
                 return false;
             }

@@ -63,6 +63,9 @@ const ToolRow = ({ line }: { line: Extract<ChatLine, { kind: "tool" }> }) => {
             </>
           ) : null}
           <div className={styles.toolSectionLabel}>{text("Tool.Result", "Result")}</div>
+          {line.image ? (
+            <img className={styles.toolImage} src={line.image} alt={line.name} />
+          ) : null}
           <pre className={styles.toolPre}>{line.result ?? text("Tool.NoResult", "No result yet.")}</pre>
         </div>
       ) : null}

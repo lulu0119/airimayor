@@ -64,6 +64,13 @@ namespace CS2MCP
         public BridgeErrorKind? ErrorKind;
         public byte[] Body = Array.Empty<byte>();
 
+        /// <summary>
+        /// Optional UI-only thumbnail (JPEG) for image tools. Never reaches
+        /// the model; the chat window renders it as the tool result preview.
+        /// Best-effort: producers leave it null rather than failing the tool.
+        /// </summary>
+        public byte[] Preview;
+
         private static readonly JsonSerializerSettings s_JsonSettings = new JsonSerializerSettings
         {
             Formatting = Formatting.None,
@@ -98,9 +105,9 @@ namespace CS2MCP
             };
         }
 
-        public static BridgeResponse Png(byte[] png)
+        public static BridgeResponse Png(byte[] png, byte[] preview = null)
         {
-            return new BridgeResponse { Body = png };
+            return new BridgeResponse { Body = png, Preview = preview };
         }
 
         private static string ErrorKindName(BridgeErrorKind kind)

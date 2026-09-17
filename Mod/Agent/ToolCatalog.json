@@ -154,6 +154,86 @@
       "response": "png"
     },
     {
+      "name": "map_image",
+      "description": "Undistorted top-down PNG city map via the Carto mod (requires Carto installed). Omit bounds for a citywide planning overview (road layout, expansion direction, district structure); pass x+z+radius or xMin/zMin/xMax/zMax for a zoomed extent (troubleshooting a site). Light cartographic style, no labels. Returns the image directly.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number",
+            "description": "Center X (with z+radius)"
+          },
+          "z": {
+            "type": "number",
+            "description": "Center Z (with x+radius)"
+          },
+          "radius": {
+            "type": "number",
+            "minimum": 8,
+            "maximum": 14336,
+            "description": "Half-size of square range in meters (with x+z)"
+          },
+          "xMin": {
+            "type": "number",
+            "minimum": -7168,
+            "maximum": 7168,
+            "description": "Bounds min X (with zMin+xMax+zMax)"
+          },
+          "zMin": {
+            "type": "number",
+            "minimum": -7168,
+            "maximum": 7168,
+            "description": "Bounds min Z"
+          },
+          "xMax": {
+            "type": "number",
+            "minimum": -7168,
+            "maximum": 7168,
+            "description": "Bounds max X"
+          },
+          "zMax": {
+            "type": "number",
+            "minimum": -7168,
+            "maximum": 7168,
+            "description": "Bounds max Z"
+          }
+        },
+        "required": []
+      },
+      "route": "/city/map",
+      "query": [
+        {
+          "key": "x",
+          "arg": "x"
+        },
+        {
+          "key": "z",
+          "arg": "z"
+        },
+        {
+          "key": "radius",
+          "arg": "radius"
+        },
+        {
+          "key": "xMin",
+          "arg": "xMin"
+        },
+        {
+          "key": "zMin",
+          "arg": "zMin"
+        },
+        {
+          "key": "xMax",
+          "arg": "xMax"
+        },
+        {
+          "key": "zMax",
+          "arg": "zMax"
+        }
+      ],
+      "response": "png"
+    },
+    {
       "name": "budget",
       "description": "Detailed city budget: total income/expenses, balance, and a per-source breakdown (residential/commercial/industrial/office taxes, service fees, subsidies, service upkeep, loan interest, electricity/water import-export, map tile upkeep). Values are monthly rates; expenses are positive costs.",
       "parameters": {
@@ -1547,8 +1627,8 @@
       "response": "json"
     },
     {
-      "name": "local_map",
-      "description": "Budgeted semantic-vector LOCAL_MAP v1 for a map range. Returns a local coordinate frame, elevation/slope/water/owned/buildable summaries, connected regions, road nodes/edges, directional sectors, and omitted metadata. Use before choosing an expansion direction or placing shoreline/terrain-sensitive infrastructure. Coordinates in region and network geometry are quantized units relative to frame.origin_world; multiply by quantum_m to recover meter offsets. Spatial evidence, not native construction validation. Requires x+z+radius or xMin+zMin+xMax+zMax bounds.",
+      "name": "map_text",
+      "description": "Budgeted semantic-vector MAP_TEXT v1 for a map range. Returns a local coordinate frame, elevation/slope/water/owned/buildable summaries, connected regions, road nodes/edges, directional sectors, and omitted metadata. Use before choosing an expansion direction or placing shoreline/terrain-sensitive infrastructure. Coordinates in region and network geometry are quantized units relative to frame.origin_world; multiply by quantum_m to recover meter offsets. Spatial evidence, not native construction validation. Requires x+z+radius or xMin+zMin+xMax+zMax bounds.",
       "parameters": {
         "type": "object",
         "properties": {

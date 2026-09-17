@@ -15,6 +15,7 @@ namespace CitiesSkylines2Agent.Agent
         public bool Success;
         public string Text;       // JSON or deterministic plain-text tool result
         public string ImagePath;  // screenshot path when the tool returned PNG
+        public byte[] PreviewBytes; // UI-only JPEG thumbnail for the chat window
     }
 
     /// <summary>
@@ -67,11 +68,12 @@ namespace CitiesSkylines2Agent.Agent
             }
             if (string.Equals(tool.Response, "png", StringComparison.Ordinal))
             {
-                string path = SaveScreenshot(response.Body);
+                string path = SaveImage(tool.Name, response.Body);
                 return new ToolInvocationResult
                 {
                     Success = true,
                     ImagePath = path,
+                    PreviewBytes = response.Preview,
                     Text = "{\"saved\":\"" + JsonEncodedText.Encode(path).ToString() + "\"}",
                 };
             }
@@ -123,12 +125,13 @@ namespace CitiesSkylines2Agent.Agent
             return Error(string.IsNullOrWhiteSpace(body) ? "bridge request failed" : body);
         }
 
-        private static string SaveScreenshot(byte[] png)
+        private static string SaveImage(string toolName, byte[] png)
         {
             ModPaths.EnsureDirectories();
+            string prefix = string.Equals(toolName, "map_image", StringComparison.Ordinal) ? "map-" : "shot-";
             string path = Path.Combine(
                 ModPaths.ScreenshotsDirectory,
-                "shot-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture) + ".png");
+                prefix + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture) + ".png");
             File.WriteAllBytes(path, png);
             return path;
         }
