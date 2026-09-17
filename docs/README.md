@@ -43,6 +43,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [2026-08-13-compact-local-map-and-route-anchoring.md](./research/2026-08-13-compact-local-map-and-route-anchoring.md) | `LOCAL_MAP` design; auto route anchoring out of scope ([0004](./adr/0004-linear-networks.md), [0006](./adr/0006-budgeted-local-map.md)) |
 | [2026-08-14-cs2-multi-instance.md](./research/2026-08-14-cs2-multi-instance.md) | Two CS2 processes on one Windows PC (not supported) |
 | [2026-08-15-ui-gameface-host.md](./research/2026-08-15-ui-gameface-host.md) | Chat UI is Gameface-hosted; the web is not a host |
+| [2026-09-17-agent-game-observation.md](./research/2026-09-17-agent-game-observation.md) | 2026 survey: game-agent observation (structured vs pixels vs hybrid) |
 
 ## Ops
 
