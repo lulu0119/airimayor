@@ -1,51 +1,49 @@
-# Research: how other in-game agents observe game worlds (2026 survey)
+# Research: inference-time game agents on structured APIs (2026 survey)
 
-Primary-source survey on **agent observation of game worlds**: structured state vs pixels vs hybrid spatial abstractions, plus 2026 results on long-horizon and efficiency limits. Focus: what to steal for the CS2 mayor's observation stack (wait digest, cluster reads, LOCAL_MAP, screenshots). **[M]** = measured in the cited source; **[O]** = author interpretation.
+Scope, corrected 2026-09-17: only **inference-time harnesses driving games through structured APIs** — our route (in-process loop, tool calls, no training, no pixels-first). Training-model work (SIMA 1/2 training, grounding-model pretraining, Minecraft RL) is deliberately excluded; Vision stays only as a cautionary bound. **[M]** = measured in the cited source; **[O]** = author interpretation.
 
-## 1. Structured state still wins for sim/strategy
+## 1. Closest systems: construction/management sims over APIs
 
-- **Voyager + Mineflayer (Minecraft).** The model gets compact named state (`Biome, Time, Nearby blocks, Nearby entities nearest→farthest, Health/20, Hunger/20, xyz, Equipment, Inventory dict`) plus last error/chat, never raw pixels or voxels. [M] 63 unique items/160 iters (3.3× baselines), tech-tree up to 15.3× faster.
-- **Orak (12 real games over MCP, Jun 2025).** Uniform loop `get-state → reflection/planning → step` with abstracted actions. [M] Reflection+planning beats zero-shot on sim/strategy; models <8B score ~0 on Pokémon/Minecraft/Stardew/StarCraft/Slay-the-Spire. 11,990 DeepSeek-R1 expert trajectories released.
-- Reading for us: text-state + skill abstraction beats raw inputs on exactly our genre; keep full dumps out of the context, send name-lists + counts + deltas.
+- **FLE — Factorio Learning Environment (Mar 2025, NeurIPS 2025 poster).** The nearest neighbor to our mayor: a construction/management sim driven through a high-level Python API + persistent REPL namespace (the agent's program *is* its cumulative knowledge) + a Python object model of entities with complete positional and relationship data. Now ships **MCP support** and a GraphQL schema. [M] Frontier models show short-horizon skill but fail spatial reasoning, error correction, and building on prior work; lab-play caps at electronic-circuit manufacturing.
+- **Prime Agent (Aug 2026).** Open-source long-horizon harness evaluated on FLE, among others. [M] On Factorio: iterative refinement yields continuous technology progression, dedicated subagents enable parallelized work. Mechanism, not model: persistent kernels, recursive sessions, prompts/memories/skills/subagent specs kept as typed versioned state, full trajectory capture. Thesis: a fixed model plus information management plus test-time compute reaches strategies the bare model cannot.
+- **Claude Plays Pokémon (Anthropic Twitch, Feb 2025–).** Screenshot + controller actions + a **scratchpad memory file the model edits itself** + save states; loop is capture → send → think → act → repeat. Community reimplementations add exactly our missing half: ROM memory reads (structured state), a tool registry, and a `summary_generator` for context summarization. The official run's lesson is about memory architecture, not vision.
+- Reading for us: all three converge on the same shape — small fixed tool/API surface, model-editable persistent notes, summarization as a first-class component, refinement loops over programs/plans rather than single-shot calls.
 
-Sources: [Voyager](https://arxiv.org/abs/2305.16291) · [action template](https://github.com/MineDojo/Voyager/blob/main/voyager/prompts/action_template.txt) · [Orak](https://arxiv.org/html/2506.03610) · [Orak repo](https://github.com/krafton-ai/Orak)
+Sources: [FLE paper](https://arxiv.org/abs/2503.09617) · [FLE repo (MCP, agents)](https://github.com/JackHopkins/factorio-learning-environment) · [Prime Agent](https://arxiv.org/pdf/2608.23552v1) · [clawdplayspokemon](https://github.com/jnaranja/clawdplayspokemon) · [starter + memory_reader](https://github.com/davidhershey/ClaudePlaysPokemonStarter)
 
-## 2. Pixel agents, and where they break in 2026
+## 2. Structured state beats raw input on our genre (benchmarks)
 
-- **SIMA 1 → SIMA 2 (DeepMind, paper Dec 2025, update Aug 2026).** Pixels-only + language → keyboard/mouse, no APIs. SIMA 2 is a Gemini Flash-Lite VLA: vision+language+action in one token stream, with reasoning, dialogue, and a Gemini task-setter/reward self-improvement loop. [M] ~65% vs ~86% human; +10pp over SIMA 1 on held-out games. Admitted limits [M]: short memory (narrow context kept for latency), weak long-horizon verification, imprecise clicks.
-- **OSWorld 2.0 (Jun 2026).** 108 long-horizon workflows (~1.6 human-hours, ~318 tool calls each). [M] Best (Claude Opus 4.8, max thinking) only 20.6% complete. Failure modes that mirror our traffic/utility loops: agents lose track of constraints, miss information arriving mid-task, guess instead of asking, skip verification, and collapse on hidden state they must recover.
-- **OSWorld-Human (MLSys 2026).** Efficiency lens on the same benchmark. [M] Best agents take 2.7–4.3× more steps than necessary; planning/reflection calls dominate latency; p50 is 10–15k uncached prompt tokens per step. Prescribed fixes: action grouping, efficient rollback, history compression.
-- **Agent S2 (2025).** Compositional split: planner + dedicated grounder (UI-TARS class), screenshots only. SOTA on OSWorld/WindowsAgentArena at the time. Lesson: never ask the reasoning model for raw coordinates; ground with a specialist.
-- Reading for us: pixels generalize but are short-horizon, imprecise, and token-hungry. Our vision tools stay off by default for the right reasons; screenshots are layout sanity checks, not the decision substrate.
+- **Orak (12 real games over MCP, Jun 2025).** Uniform `get-state → reflection/planning → step`. [M] Reflection+planning beats zero-shot on sim/strategy; <8B models score ~0 on the complex half. 11,990 DeepSeek-R1 expert trajectories released.
+- **StarDojo (Stardew Valley, Jul 2025).** Closest genre analog that ships both: screenshot + textual state, with text-only agents on a local 7×7 tile grid. [M] Best 12.7%; errors 42% visual / 21% multimodal-reason / 21% long-plan. Ablate text-only vs +map vs +screenshot before claiming any observation change helps.
+- Reading for us: keep full dumps out of context; name-lists + counts + deltas carry the decisions.
 
-Sources: [SIMA 2 paper](https://arxiv.org/abs/2512.04797) · [DeepMind Aug 2026 update](https://deepmind.google/blog/from-atari-to-eve-online-building-on-15-years-of-ai-research-in-games) · [OSWorld 2.0](https://arxiv.org/abs/2606.29537) · [OSWorld-Human](https://arxiv.org/abs/2506.16042) · [Agent S2](https://arxiv.org/html/2504.00906v1)
+Sources: [Orak](https://arxiv.org/html/2506.03610) · [StarDojo](https://arxiv.org/abs/2507.07445)
 
-## 3. The one direct mayor datapoint: Cradle plays Cities: Skylines
+## 3. Pixels: the cautionary bound (kept short on purpose)
 
-- **Cradle / GCC (BAAI, ICML'25).** GPT-4o + 6 modules; input is a video clip of the last action, output is key/mouse code; pauses pausable games while the LLM thinks. On Cities: Skylines [M]: roads closed-loop 4/5, power 5/5, zones ≥90% 4/5, **water 1/5**, population 450±224 (850±142 with ≤3 human fixes). Modal failure: unconnected water pipes — precise grounding + topology reasoning.
-- Reading for us [O]: vision-only can zone and power a 1k city but fails exactly where our typed-network machinery lives (pipes/roads isolation, auto-connect). This is the strongest external evidence for API state on networks + LOCAL_MAP for layout, and for keeping screenshots as backup rather than primary.
+- **SIMA 2 (DeepMind, paper Dec 2025, update Aug 2026).** Pixels→keys/mouse VLA at ~65% vs 86% human, with admitted short memory, weak long-horizon verification, imprecise clicks.
+- **Cradle on Cities: Skylines (ICML'25) — the direct mayor datapoint.** [M] Roads 4/5, power 5/5, zones ≥90% 4/5, **water 1/5**; modal failure is unconnected pipes — topology invisible in screenshots. External evidence for API state on networks + screenshots as layout backup only.
+- **OSWorld 2.0 (Jun 2026).** [M] Best 20.6% on 108 long-horizon workflows; agents lose constraints, miss mid-task arrivals, skip verification, collapse on hidden state — the same failure list as our traffic/utility loops.
+- **OSWorld-Human (MLSys 2026).** [M] Best agents take 2.7–4.3× necessary steps; 10–15k uncached prompt tokens per step; fixes are action grouping, rollback, history compression.
 
-Sources: [Cradle paper §4.2](https://arxiv.org/abs/2403.03186) · [Cradle repo](https://github.com/BAAI-Agents/Cradle)
+Sources: [SIMA 2](https://arxiv.org/abs/2512.04797) · [Cradle §4.2](https://arxiv.org/abs/2403.03186) · [OSWorld 2.0](https://arxiv.org/abs/2606.29537) · [OSWorld-Human](https://arxiv.org/abs/2506.16042)
 
-## 4. Hybrid spatial abstractions (cheapest bridge)
+## 4. Harness engineering (2026): the loop-complexity doctrine
 
-- **Set-of-Mark (2023, still the trick).** Overlay segmentation masks + numeric labels so the model says "12" instead of coordinates. [M] GPT-4V RefCOCOg 25.7%→86.4%. Bottleneck is mask quality, not the model.
-- **ScreenSeekeR lesson.** Planner proposes regions → crop → ground: +29pp on 4K grounding with no retraining. [O] Same shape fits the city: pick a district from cheap stats, then high-res/annotated crop only there — never a full 4K panorama.
-- **StarDojo (Stardew Valley, Jul 2025).** Closest genre analog (production + living + time/weather/energy). Ships screenshot + textual state together; text-only agents get a local 7×7 tile grid. [M] Best model 12.7%; error split 42% visual / 21% multimodal-reason / 21% long-plan. Ablation-ready triple observation is the pattern to copy.
-- **LMGame-Bench (ICLR 2026).** Modular harness with perception/memory/reasoning toggled independently to isolate which capability fails. Worth copying as an eval shape before we claim any observation change helps.
-- Reading for us: our LOCAL_MAP ([0006](../adr/0006-budgeted-local-map.md)) is already this philosophy (budgeted semantic vectors, not raw grid). Next cheapest step is SoM-style annotation on crops, not a grounder model.
+- **Agent = Model + Harness** ([Osmani, Apr 2026](https://addyosmani.com/blog/agent-harness-engineering/), after Anthropic's long-running-apps writeup). Leverage sits on the right-hand side: same model, different harness, Top-30→Top-5 swings on Terminal Bench.
+- **Ratchet.** Every line in AGENTS.md traces to a specific past failure; add constraints only on failure, remove when the model outgrows them. (Our playbook lines already work this way; keep the discipline when adding more.)
+- **Work backwards from behaviour.** Each harness component must name the behaviour it delivers or come out. (Answers "is the loop too complex": compaction, digest, autonomy each carry one — overflow, staleness, idle hands.)
+- **Context-rot trio.** Compaction + tool-call offloading (big results to files, head/tail in context) + progressive disclosure (skills reveal tools when needed). Plus: full context resets with a structured handoff when compaction alone stops working.
+- **Hooks: success silent, failures verbose.** Typecheck-gating in code agents is our native-validation-gating: the game validates, the loop only hears about rejection. Already our shape — don't duplicate it in prompts.
+- **Ten focused tools beat fifty overlapping ones.** Every tool description is stamped into every request. (Quantify our definition tax before merging reads.)
 
-Sources: [SoM](https://arxiv.org/abs/2310.11441) · [ScreenSeekeR](https://arxiv.org/abs/2504.07981) · [StarDojo](https://arxiv.org/abs/2507.07445) · [LMGame-Bench](https://proceedings.iclr.cc/paper_files/paper/2026/hash/83a4ea71b13bc86308a2bd0b5e07fb61-Abstract-Conference.html)
+## 5. Spatial upgrades, cheapest first (unchanged)
 
-## 5. Freshness and cost: observe on boundaries, not ticks
-
-- **Pausable sim is a gift.** Cradle pauses real-time games for the LLM; StarDojo exposes pause + parallel headless instances. Our clock already belongs to the player and wait restores speed/pause — observing on decision boundaries (after wait) instead of every tick is the same idea, keep it.
-- **Stale-read rule is load-bearing.** Playbook: a read right after a budget slider still shows old output; wait an hour. No surveyed system solves this except by waiting or versioning reads — supports keeping the wait digest as the freshness authority rather than a standalone snapshot tool.
-- **History compression.** OSWorld-Human's fix list (action grouping, rollback, history compression) matches our compaction + MaxRounds shape; keep hot-window verbatim, archive the rest.
+Region-pick from cheap stats → annotated crop with numeric labels (Set-of-Mark: GPT-4V RefCOCOg 25.7%→86.4%, [paper](https://arxiv.org/abs/2310.11441)) → dedicated grounder only if clicks stay imprecise. Never a full-res panorama every turn. Our LOCAL_MAP ([0006](../adr/0006-budgeted-local-map.md)) is already this philosophy.
 
 ## Takeaways for the open observation design
 
-1. Direction B (cluster reads, e.g. economy) + untouched wait digest is consistent with the survey: structured diffs by question, one freshness authority, no pixel dependency.
-2. If a `wait(include=[…])` piggyback is ever added, gate it on timeline evidence that "wait then read-X" dominates — Orak's ablation habit, not intuition.
-3. Spatial upgrades, cheapest first: region-pick from stats → annotated crop (SoM numbers) → dedicated grounder only if clicks stay imprecise. Full-res screenshots every turn is what SIMA 2 and OSWorld-Human both warn against.
-4. Eval shape before claims: toggle perception/memory/reasoning like LMGame-Bench; ablate text-only vs +map vs +screenshot like StarDojo.
+1. Direction B (cluster reads, e.g. economy) + untouched wait digest matches every on-route system: structured diffs by question, one freshness authority.
+2. Steal from FLE/Prime: model-visible persistent notes are cheap; refinement-over-plan beats single-shot; type and version whatever the loop carries.
+3. Steal from harness doctrine: measure the tool-definition tax first; every new prompt line needs a failure behind it; hooks over nagging.
+4. Eval before claims: StarDojo-style ablations (text / +map / +screenshot) and LMGame-Bench-style toggles ([ICLR'26](https://proceedings.iclr.cc/paper_files/paper/2026/hash/83a4ea71b13bc86308a2bd0b5e07fb61-Abstract-Conference.html)).
