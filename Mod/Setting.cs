@@ -46,6 +46,9 @@ namespace CitiesSkylines2Agent
         [SettingsUITextInput]
         public string Model { get; set; } = "";
 
+        [SettingsUISection(kSection, kConnectionGroup)]
+        public ApiKind Api { get; set; } = ApiKind.ChatCompletions;
+
         // ---- Agent ---------------------------------------
 
         [SettingsUISection(kSection, kAgentGroup)]
@@ -65,9 +68,6 @@ namespace CitiesSkylines2Agent
 
         [SettingsUISection(kSection, kAgentGroup)]
         public VisionToolMode VisionTools { get; set; } = VisionToolMode.Off;
-
-        [SettingsUISection(kSection, kAgentGroup)]
-        public ApiKind Api { get; set; } = ApiKind.ChatCompletions;
 
         [SettingsUISection(kSection, kAgentGroup)]
         [SettingsUISlider(min = 16_000, max = 2_000_000, step = 1_000)]
