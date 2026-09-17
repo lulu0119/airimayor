@@ -66,13 +66,13 @@ namespace CitiesSkylines2Agent.Agent
         private const string SystemPrompt = @"You are the in-game AI mayor for Cities: Skylines 2.
 
 Working style:
-1. Observe briefly first via demand. The first city snapshot comes from wait_simulation (nested overview and problems). Call notifications only for raw icon locations. Then act. Do not repeat the same read tool more than twice without a write.
+1. Observe briefly first via wait_simulation and demand. The first city snapshot comes from wait_simulation (nested overview and problems); demand explains what to grow next. Call notifications only for raw icon locations. Then act. Do not repeat the same read tool more than twice without a write.
 2. Fix problems that block city growth FIRST: sewage, water, electricity, garbage, road access. Do not zone or expand while a red problem is unresolved.
 3. For infrastructure or service buildings without a player-selected prefab, use list_prefabs with a typed role, choose one unlocked standalone prefab, then call place_building once. For every site you choose yourself, include a reasonable radius and omit rotation so placement can resolve clearance, frontage and orientation. Omit radius or set rotation only when the player explicitly requires that exact pose. If exact placement fails, retry with a larger radius and no rotation.
-4. Use zone_area for regular residential / commercial / industrial / office growth. Use place_building only for standalone buildings (service buildings, unique/landmark/signature buildings, special production or extraction facilities).
+4. Use zone_rectangle for straight road frontage and zone_area for small irregular patches for regular residential / commercial / industrial / office growth. Use place_building only for standalone buildings (service buildings, unique/landmark/signature buildings, special production or extraction facilities).
 5. place_building owns nearby search and native validation in one call. Placement follows prefab data: only RequireRoad buildings need road frontage, shoreline buildings snap to the wet/dry boundary, and off-road water/sewage/low-voltage nodes receive a matching pipe or cable. High-voltage plants are not auto-wired; read the utility-networks section of the playbook below.
 6. build_road: use short segments (50-250m) on owned tiles near existing nodes. For roads, omit mode and e1/e2 for the default ground mode; it samples the route at roughly 4m or finer intervals for water and local grade, rejecting detected water crossings or grades above 10% (or a stricter prefab limit). Use mode=grade-separated only for an intentional bridge/elevated/tunnel segment; provide both e1/e2 with at least one nonzero. Never pass mode for pipes, cables or other utility networks; their normal burial behavior is separate. If a call fails, change the route instead of repeating the same call.
-7. The simulation clock belongs to the player. Use wait_simulation to advance in-game time: one call advances exactly 1 in-game hour by default (high speed, roughly 20-30 real seconds), then restores the previous speed/pause state. Buildings take game hours to construct, level up and attract residents, so after zoning/placing call wait_simulation once or twice. Never poll; use wait_simulation.
+7. The simulation clock belongs to the player. Use wait_simulation to advance in-game time (hours=1-24, default 1; high speed, roughly 20-30 real seconds per hour), then restores the previous speed/pause state. Buildings take game hours to construct, level up and attract residents, so size the wait per the playbook: 1-2 hours to verify a repair, about 4 hours after a normal growth batch, 8-12 hours when healthy with a positive budget and ample utility headroom. Never poll; use wait_simulation.
 8. Before demolition, identify the exact target with list_buildings or list_networks. If the demolition tool is available, the player has already granted permission; do not ask for a modal confirmation.
 9. Ask for a player decision only when the desired outcome itself is ambiguous, not for permissions already represented by the available tool surface.
 10. End every turn with a concise summary (what was done, results, next steps)."
@@ -190,7 +190,7 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                 Emit(new AgentUiEvent
                 {
                     Kind = "error",
-                    Text = "仅在已加载的城市中可用，无法发送。",
+                    Text = "Available only in a loaded city; message not sent.",
                 });
                 return;
             }
@@ -207,7 +207,7 @@ stable facts or timeline notes. Keep each list item short and concrete.";
             }
             m_TurnCts?.Cancel();
             Status = AgentStatus.Interrupted;
-            Emit(new AgentUiEvent { Kind = "status", Status = AgentStatus.Interrupted, Text = "已中断当前回合" });
+            Emit(new AgentUiEvent { Kind = "status", Status = AgentStatus.Interrupted, Text = "Current turn interrupted" });
         }
 
         public void RefreshConfig()
@@ -429,7 +429,7 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                             {
                                 Kind = "status",
                                 Status = AgentStatus.Idle,
-                                Text = "达到最大工具轮次，本回合结束",
+                                Text = "Max tool rounds reached; ending this turn",
                             });
                             break;
                         }
@@ -450,7 +450,7 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                 Emit(new AgentUiEvent
                 {
                     Kind = "error",
-                    Text = "循环错误：" + AgentObservability.RedactSecrets(e.Message),
+                    Text = "Loop error: " + AgentObservability.RedactSecrets(e.Message),
                 });
             }
 
@@ -487,7 +487,7 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                 Emit(new AgentUiEvent
                 {
                     Kind = "error",
-                    Text = "模型未配置：请在 Mod 设置中填写 Endpoint / API Key / Model。",
+                    Text = "Model not configured: set Endpoint / API Key / Model in the mod settings.",
                 });
                 return ModelRound.Error("no client");
             }
@@ -575,8 +575,8 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                     Emit(new AgentUiEvent
                     {
                         Kind = "error",
-                        Text = "模型响应超时（" + AgentClientFactory.ModelRequestTimeoutSeconds +
-                            " 秒），本回合已停止，不会自动续跑。请重试。",
+                        Text = "Model response timed out (" + AgentClientFactory.ModelRequestTimeoutSeconds +
+                            "s); this turn stopped with no autonomous continuation. Please retry.",
                     });
                     return ModelRound.Error("model response timeout");
                 }
@@ -598,7 +598,7 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                 }
                 m_Observability.Error("generation", e.ToString());
                 string safeMessage = AgentObservability.RedactSecrets(e.Message);
-                Emit(new AgentUiEvent { Kind = "error", Text = "模型调用失败：" + safeMessage });
+                Emit(new AgentUiEvent { Kind = "error", Text = "Model call failed: " + safeMessage });
                 return ModelRound.Error(safeMessage);
             }
         }
@@ -683,7 +683,7 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                     Emit(new AgentUiEvent
                     {
                         Kind = "error",
-                        Text = "压缩摘要无效（含工具标记或为空），已跳过本次压缩",
+                        Text = "Compaction summary rejected (tool markup or empty); skipping this compaction",
                     });
                     return;
                 }
@@ -712,7 +712,7 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                 Emit(new AgentUiEvent
                 {
                     Kind = "compact",
-                    Text = "上下文已压缩（移除了 " + oldMessages.Count + " 条旧消息）",
+                    Text = "Context compacted (removed " + oldMessages.Count + " old messages)",
                 });
             }
             catch (OperationCanceledException)
@@ -725,7 +725,7 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                 Emit(new AgentUiEvent
                 {
                     Kind = "error",
-                    Text = "压缩失败：" + AgentObservability.RedactSecrets(e.Message),
+                    Text = "Compaction failed: " + AgentObservability.RedactSecrets(e.Message),
                 });
             }
         }
@@ -787,7 +787,7 @@ stable facts or timeline notes. Keep each list item short and concrete.";
             int count = Math.Max(0, messages.Count - 6);
             if (count > 0)
             {
-                builder.Append("[省略前 ").Append(count).Append(" 条] ");
+                builder.Append("[omitted first ").Append(count).Append("] ");
             }
             for (int i = Math.Max(0, messages.Count - 6); i < messages.Count; i++)
             {

@@ -82,7 +82,7 @@ namespace CitiesSkylines2Agent
         public static string StaticEndpoint => Instance?.Endpoint ?? "https://api.openai.com/v1";
         public static string StaticModel => Instance?.Model ?? "";
 
-        private const string DefaultStartupPrompt = "持续经营城市：先解决当前限制发展的问题，再按需求扩张；不要只报告，要行动。";
+        private const string DefaultStartupPrompt = "Run the city continuously: fix growth-blocking problems first, then expand with demand; act, don't just report.";
 
         public static string StaticStartupPrompt => string.IsNullOrWhiteSpace(Instance?.StartupPrompt)
             ? DefaultStartupPrompt : Instance.StartupPrompt;
