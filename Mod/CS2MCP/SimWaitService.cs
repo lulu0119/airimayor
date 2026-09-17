@@ -7,15 +7,15 @@ namespace CS2MCP
 {
     /// <summary>
     /// City-side follow-up for a timed simulation wait: blocks the agent
-    /// thread until the run finishes, then returns the city snapshot digest
-    /// as the wait tool result. The generic agent loop never sees which
-    /// snapshot routes or fields make up that digest.
+    /// thread until the run finishes, then returns wait mechanics only
+    /// (hours/completed/targetReached/note). No city snapshot is attached;
+    /// the model reads overview and problems through the read tools.
     /// </summary>
     internal static class SimWaitService
     {
         private const int SimWaitPollMs = 250;
 
-        public static async Task<string> WaitAndDigestAsync(
+        public static async Task<string> WaitAsync(
             BridgeSystem bridge,
             string startJson,
             int requestedHours,
@@ -33,17 +33,10 @@ namespace CS2MCP
                 waited += SimWaitPollMs;
             }
 
-            Task<string> overview = TryGetJsonAsync(bridge, "/city/overview");
-            Task<string> state = TryGetJsonAsync(bridge, "/state");
-            Task<string> notifications = TryGetJsonAsync(bridge, "/city/notifications");
-            Task<string> services = TryGetJsonAsync(bridge, "/city/services");
-            await Task.WhenAll(overview, state, notifications, services);
-            return SimWaitDigest.Build(
+            string state = await TryGetJsonAsync(bridge, "/state");
+            return SimWaitResult.Build(
                 startJson,
-                await overview,
-                await notifications,
-                await services,
-                await state,
+                state,
                 bridge.AutoPauseTargetFrame == 0);
         }
 

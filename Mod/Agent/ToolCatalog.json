@@ -62,7 +62,7 @@
     },
     {
       "name": "wait_simulation",
-      "description": "Run the simulation forward by in-game time: default 1 in-game hour (about 20-30 real seconds at the engine 8x speed cap). Resumes if paused, then restores the previous speed/pause state. On success the result nests hours/completed/targetReached/note, overview (cityName, population, populationWithMoveIn, averageHappiness, averageHealth, money, xp, gameYear, gameDateTime, simulationPaused, simulationSpeed), and problems (notificationCounts from citywide countsByType, serviceGaps from city_services.problems[] id/severity/message). Call after zoning or placing buildings so construction and growth can happen; then re-check demand if needed. First turn can wait for the first snapshot. Never poll.",
+      "description": "Run the simulation forward by in-game time: default 1 in-game hour (about 20-30 real seconds at the engine 8x speed cap). Resumes if paused, then restores the previous speed/pause state. Returns hours/completed/targetReached/note. Read the snapshot yourself after waiting: demand for what to grow, notifications for citywide warning counts, city_services for electricity/water/sewage/garbage, budget for money. Call after zoning or placing buildings so construction and growth can happen; then re-read. First turn can wait before the first reads. Never poll.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1990,7 +1990,7 @@
     },
     {
       "name": "buy_tiles",
-      "description": "Purchase one unowned map tile so you can build/zone on it. Give ?index=<entity index> from list_tiles (or ?gridX=&gridZ= grid coordinates). The game validates permits and funds, charges the tile price and unlocks it. Buy tiles ADJACENT to your current city before expanding roads.",
+      "description": "Purchase one unowned map tile so you can build/zone on it. Give the tile entity index from list_tiles, or gridX plus gridZ coordinates (at least one of the two is required). The game validates permits and funds, charges the tile price and unlocks it. Buy tiles ADJACENT to your current city before expanding roads.",
       "parameters": {
         "type": "object",
         "properties": {

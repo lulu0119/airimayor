@@ -21,8 +21,8 @@ namespace CitiesSkylines2Agent.Agent
     /// Translates model tool calls into CS2MCP bridge requests and builds
     /// catalog query strings. Writes are not gated on pause. wait_simulation
     /// blocks the agent thread until the timed run finishes; the city-side
-    /// follow-up (snapshot digest) lives in CS2MCP.SimWaitService so city
-    /// knowledge stays out of the generic loop.
+    /// follow-up (wait mechanics only, no snapshot) lives in
+    /// CS2MCP.SimWaitService so the loop stays free of city knowledge.
     /// </summary>
     public static class AgentToolBridge
     {
@@ -79,7 +79,7 @@ namespace CitiesSkylines2Agent.Agent
             string text = Encoding.UTF8.GetString(response.Body ?? Array.Empty<byte>());
             if (string.Equals(tool.Name, "wait_simulation", StringComparison.Ordinal))
             {
-                text = await CS2MCP.SimWaitService.WaitAndDigestAsync(
+                text = await CS2MCP.SimWaitService.WaitAsync(
                     bridge, text, RequestedHours(query), cancellationToken);
             }
             return new ToolInvocationResult

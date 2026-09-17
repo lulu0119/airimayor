@@ -12,7 +12,7 @@ None.
 
 Code exists; a previous save is not the final gate. Close the game before DLL redeploy. Mac cannot `dotnet build` without `CSII_TOOLPATH`; Windows compile is a gate before live acceptance.
 
-- `wait_simulation` nested overview/problems digest; ledger injection gone; KV overall/median ≥ 90%.
+- `wait_simulation` returns hours/completed/targetReached only, no overview/problems digest; the model self-pulls state via `list_notifications`, `city_services`, `local_map` etc. Needs a long-save live run proving it still observes and acts.
 - Auto-connect: road-carried water/sewage/LV attach as short perpendicular on matched lane; utilities work (Windows in-game).
 - Specialized-industry loop from hub through extractor area to vehicles and production — not yet proven in a live city.
 - Traffic governance as a product loop. The accepted-run intervention persisted, but traffic notifications stayed at 2 and the same-road congestion/volume aggregates worsened after one simulated hour.
