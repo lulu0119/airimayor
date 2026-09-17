@@ -208,6 +208,7 @@ namespace CS2MCP
                     type = TypedNetworkMath.TopologyClassName(issue.Class),
                     edges = TopologyEdgeRefs(snapshot, issue.EdgeA, issue.EdgeB),
                     nodes = TopologyNodeRefs(issue.NodeA, issue.NodeB),
+                    at = FindingAnchor(snapshot, issue.EdgeA),
                     componentSize = issue.ComponentSize > 0 ? (int?)issue.ComponentSize : null,
                     distanceM = (float)Math.Round(issue.DistanceM, 1),
                 });
@@ -230,14 +231,15 @@ namespace CS2MCP
                         entity = new { index = edge.EntityIndex, version = edge.EntityVersion },
                         node = fact.Node,
                         degree = fact.Degree,
+                        at = FindingAnchor(snapshot, fact.Edge),
                     });
                 }
                 deadEnds = listed;
             }
 
             string note = filter == TypedNetworkKinds.Road
-                ? "degree-1 dead ends are facts, not automatic errors; near-miss, unnoded crossing, too-close junctions and isolated roads are the QA classes"
-                : "utility QA reports isolated components that do not share a node with any road edge";
+                ? "each finding carries at{x,z}, the repair site: isolated_road means a road group touches nothing else, join it to the main network with build_road; degree-1 dead ends are facts, not automatic errors"
+                : "each finding carries at{x,z}, the repair site: isolated components do not share a node with any road edge";
             return BridgeResponse.Json(new
             {
                 kind = TypedNetworkMath.PrimaryKindName(filter),
@@ -501,6 +503,23 @@ namespace CS2MCP
         {
             return EntityManager.Exists(node)
                 && EntityManager.HasComponent<Game.Objects.OutsideConnection>(node);
+        }
+
+        private static object FindingAnchor(
+            IReadOnlyList<TypedNetworkEdge> snapshot,
+            int index)
+        {
+            if (index < 0 || index >= snapshot.Count)
+            {
+                return null;
+            }
+            float3[] points = snapshot[index].Points;
+            if (points == null || points.Length == 0)
+            {
+                return null;
+            }
+            float3 mid = points[points.Length / 2];
+            return new { x = (float)Math.Round(mid.x, 1), z = (float)Math.Round(mid.z, 1) };
         }
 
         private static object[] TopologyEdgeRefs(

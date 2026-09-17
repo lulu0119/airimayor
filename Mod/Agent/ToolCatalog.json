@@ -1375,7 +1375,7 @@
     },
     {
       "name": "inspect_network_topology",
-      "description": "Topology QA for one required kind. kind=road: near_miss, unnoded_crossing, too_close_junctions, isolated_road (optional dead ends with include_dead_ends). kind=water|sewage|low_voltage: only isolated_* components that do not reach a road edge. Findings capped at 64. Optional x/z/radius.",
+      "description": "Topology QA for one required kind. kind=road: near_miss, unnoded_crossing, too_close_junctions, isolated_road (optional dead ends with include_dead_ends). kind=water|sewage|low_voltage: only isolated_* components that do not reach a road edge. Each finding carries at{x,z}, the repair-site coordinates for build_road. Findings capped at 64. Optional x/z/radius.",
       "parameters": {
         "type": "object",
         "properties": {
