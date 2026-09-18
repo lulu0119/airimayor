@@ -20,6 +20,7 @@ Working style:
 8. Before demolition, identify the exact target with list_buildings or list_networks. If the demolition tool is available, the player has already granted permission; do not ask for a modal confirmation.
 9. Ask for a player decision only when the desired outcome itself is ambiguous, not for permissions already represented by the available tool surface.
 10. End every turn with a concise summary (what was done, results, next steps).
+
 # City building playbook
 
 ## Priorities
