@@ -14,15 +14,16 @@ using UnityEngine;
 namespace CS2MCP
 {
     /// <summary>
-    /// Undistorted city map rasterized from the Carto mod's own export.
-    /// Step 1 is rasterization only: no native overlay. The interface takes
-    /// an optional map range (same convention as map_text); the
-    /// implementation owns explicit Carto options (a default Options exports
-    /// nothing), deterministic file names, a light cartographic style, and
-    /// in-process rasterization of the returned files to PNG. Citywide
-    /// renders whatever projection the player configured. Bounded requests
-    /// force the Game CRS so the requested game range clips directly with
-    /// no projection math.
+    /// Undistorted city map rasterized from native ECS geometry, with the
+    /// Carto mod's own export as fallback. The interface takes an optional
+    /// map range (same convention as map_text); the implementation collects
+    /// road, rail, building, and transit geometry in game meters, then draws
+    /// a light cartographic style in-process to PNG. The fallback owns
+    /// explicit Carto options (a default Options exports nothing) and
+    /// deterministic file names. Citywide fallback renders whatever
+    /// projection the player configured. Bounded fallback requests force the
+    /// Game CRS so the requested game range clips directly with no
+    /// projection math.
     /// Read-only: runs on the simulation thread like other perception tools.
     /// Shares the vision switch with screenshot (gated in AgentToolSurface).
     /// Option shapes below are grounded in Carto's IO/Options.cs,
@@ -38,14 +39,6 @@ namespace CS2MCP
 
         private BridgeResponse MapImage(BridgeRequest request)
         {
-            // TEMPORARY incident gate: the Carto export behind this path
-            // freezes the game (under diagnosis). Text map_text is unaffected.
-            // Remove when the hang is fixed.
-            if (!CitiesSkylines2Agent.Setting.StaticEnableDevelopmentTools)
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Unavailable,
-                    "map image is temporarily disabled during diagnosis; use map_text");
-            }
             DebugPhase("handler-enter");
             if (!TryGetCity(out _, out BridgeResponse cityError))
             {
@@ -66,64 +59,42 @@ namespace CS2MCP
                 return boundsError;
             }
 
-            List<string> exported;
-            var exportTimer = Stopwatch.StartNew();
-            DebugPhase("export-invoke-enter");
-            BridgeResponse exportError = InvokeCartoExport(out exported, hasBounds);
-            DebugPhase("export-invoke-returned");
-            exportTimer.Stop();
-            Mod.Log.Info($"[DEBUG-mapex1] export finished in {exportTimer.ElapsedMilliseconds}ms");
-            if (exportError != null)
-            {
-                return exportError;
-            }
-
-            var files = new List<string>();
-            foreach (string path in exported)
-            {
-                // Carto names vector output *.json (GeoJSON); accept *.geojson too.
-                if (!string.IsNullOrWhiteSpace(path)
-                    && path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-                {
-                    files.Add(path);
-                }
-            }
-            if (files.Count == 0)
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Internal,
-                    "Carto export wrote no GeoJSON files; enable vector layers in Carto settings and retry");
-            }
-
             var strokes = new List<MapStroke>();
             var fills = new List<MapPolygon>();
-            var parseTimer = Stopwatch.StartNew();
-            foreach (string file in files)
+            var collectTimer = Stopwatch.StartNew();
+            bool useNative = TryCollectNativeMapGeometry(
+                    new[] { MapSourceKind.Network, MapSourceKind.Building, MapSourceKind.Route },
+                    hasBounds ? xMin : (float?)null,
+                    hasBounds ? zMin : (float?)null,
+                    hasBounds ? xMax : (float?)null,
+                    hasBounds ? zMax : (float?)null,
+                    strokes, fills, out _)
+                && (strokes.Count > 0 || fills.Count > 0);
+            string source = "native";
+            if (!useNative)
             {
-                MapLayerKind? layer = ClassifyExportFile(file);
-                if (layer == null)
+                // Carto fallback behind the TEMPORARY incident gate: its export
+                // freezes the game (under diagnosis). The native path above is
+                // unaffected. Remove when the hang is fixed.
+                if (!CitiesSkylines2Agent.Setting.StaticEnableDevelopmentTools)
                 {
-                    continue;
+                    return BridgeResponse.Error(BridgeErrorKind.Unavailable,
+                        "map image is temporarily disabled during diagnosis; use map_text");
                 }
-                try
+                strokes.Clear();
+                fills.Clear();
+                BridgeResponse cartoError = TryCollectCartoMapGeometry(hasBounds, strokes, fills);
+                if (cartoError != null)
                 {
-                    ParseVectorFile(file, layer.Value, strokes, fills);
+                    return cartoError;
                 }
-                catch (Exception e)
-                {
-                    return BridgeResponse.Error(BridgeErrorKind.Internal,
-                        $"map render rejected '{Path.GetFileName(file)}': {e.GetType().Name}: {e.Message}");
-                }
+                source = "carto";
             }
-            if (strokes.Count == 0 && fills.Count == 0)
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Internal,
-                    "Carto export contained no renderable LineString/Polygon features");
-            }
-            Mod.Log.Info($"map_image: {files.Count} files, {strokes.Count} strokes, {fills.Count} footprints" +
-                (hasBounds ? $" (extent {xMin},{zMin} to {xMax},{zMax})" : " (citywide)"));
-            parseTimer.Stop();
-            Mod.Log.Info($"[DEBUG-mapex1] parse finished in {parseTimer.ElapsedMilliseconds}ms");
-            DebugPhase($"parse-done strokes={strokes.Count} fills={fills.Count}");
+            collectTimer.Stop();
+            Mod.Log.Info($"map_image ({source}): {strokes.Count} strokes, {fills.Count} footprints" +
+                (hasBounds ? $" (extent {xMin},{zMin} to {xMax},{zMax})" : " (citywide)") +
+                $" in {collectTimer.ElapsedMilliseconds}ms");
+            DebugPhase($"collect-done source={source} strokes={strokes.Count} fills={fills.Count}");
 
             MapLayering.Result layering = AssignRoadLayers(strokes);
             DebugPhase($"layers-done segments={layering.Segments} pairs={layering.PairChecks} " +
@@ -162,13 +133,13 @@ namespace CS2MCP
             Texture2D texture = null;
             try
             {
-                // Water sampling needs game meters: bounded frames are forced
-                // to the Game CRS above, so they are always game meters.
-                // Citywide keeps the meter heuristic for degree/UTM frames,
-                // which stay land-only instead of painting water from wrong
-                // coordinates.
+                // Water sampling needs game meters: native frames always are,
+                // and bounded fallback frames are forced to the Game CRS
+                // above. Citywide fallback keeps the meter heuristic for
+                // degree/UTM frames, which stay land-only instead of painting
+                // water from wrong coordinates.
                 Func<double, double, bool> isWater =
-                    (hasBounds || FrameIsMeters(frame)) ? BuildWaterSampler() : null;
+                    (useNative || hasBounds || FrameIsMeters(frame)) ? BuildWaterSampler() : null;
                 var rasterTimer = Stopwatch.StartNew();
                 DebugPhase("raster-enter");
                 texture = Rasterize(strokes, fills, frame, isWater, layering.Merges);
@@ -275,6 +246,70 @@ namespace CS2MCP
             {
                 return MapLayerKind.Route;
             }
+            return null;
+        }
+
+        /// <summary>
+        /// Carto fallback adapter: reflection export, then in-process parse of
+        /// the fresh GeoJSON vectors into the shared stroke/fill lists.
+        /// Returns null on success, else the error response to return.
+        /// </summary>
+        private BridgeResponse TryCollectCartoMapGeometry(bool hasBounds, List<MapStroke> strokes, List<MapPolygon> fills)
+        {
+            List<string> exported;
+            var exportTimer = Stopwatch.StartNew();
+            DebugPhase("export-invoke-enter");
+            BridgeResponse exportError = InvokeCartoExport(out exported, hasBounds);
+            DebugPhase("export-invoke-returned");
+            exportTimer.Stop();
+            Mod.Log.Info($"[DEBUG-mapex1] export finished in {exportTimer.ElapsedMilliseconds}ms");
+            if (exportError != null)
+            {
+                return exportError;
+            }
+
+            var files = new List<string>();
+            foreach (string path in exported)
+            {
+                // Carto names vector output *.json (GeoJSON); accept *.geojson too.
+                if (!string.IsNullOrWhiteSpace(path)
+                    && path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                {
+                    files.Add(path);
+                }
+            }
+            if (files.Count == 0)
+            {
+                return BridgeResponse.Error(BridgeErrorKind.Internal,
+                    "Carto export wrote no GeoJSON files; enable vector layers in Carto settings and retry");
+            }
+
+            var parseTimer = Stopwatch.StartNew();
+            foreach (string file in files)
+            {
+                MapLayerKind? layer = ClassifyExportFile(file);
+                if (layer == null)
+                {
+                    continue;
+                }
+                try
+                {
+                    ParseVectorFile(file, layer.Value, strokes, fills);
+                }
+                catch (Exception e)
+                {
+                    return BridgeResponse.Error(BridgeErrorKind.Internal,
+                        $"map render rejected '{Path.GetFileName(file)}': {e.GetType().Name}: {e.Message}");
+                }
+            }
+            if (strokes.Count == 0 && fills.Count == 0)
+            {
+                return BridgeResponse.Error(BridgeErrorKind.Internal,
+                    "Carto export contained no renderable LineString/Polygon features");
+            }
+            parseTimer.Stop();
+            Mod.Log.Info($"[DEBUG-mapex1] parse finished in {parseTimer.ElapsedMilliseconds}ms");
+            DebugPhase($"parse-done strokes={strokes.Count} fills={fills.Count}");
             return null;
         }
 

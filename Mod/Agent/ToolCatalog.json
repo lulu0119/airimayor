@@ -155,7 +155,7 @@
     },
     {
       "name": "map_image",
-      "description": "Undistorted top-down PNG city map via the Carto mod (requires Carto installed). Omit bounds for a citywide planning overview (road layout, expansion direction, district structure); pass x+z+radius or xMin/zMin/xMax/zMax for a zoomed extent (troubleshooting a site). Light cartographic style, no labels. Returns the image directly.",
+      "description": "Undistorted top-down PNG city map from native geometry (no extra install). Omit bounds for a citywide planning overview (road layout, expansion direction, district structure); pass x+z+radius or xMin/zMin/xMax/zMax for a zoomed extent (troubleshooting a site). Light cartographic style, no labels. Returns the image directly.",
       "parameters": {
         "type": "object",
         "properties": {

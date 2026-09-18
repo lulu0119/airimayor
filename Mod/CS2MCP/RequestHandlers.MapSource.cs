@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using Colossal.Mathematics;
+using Game.Common;
 using Game.Prefabs;
+using Game.Routes;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -16,15 +18,17 @@ namespace CS2MCP
     /// 2025 Chang-Yu Ho): Systems/NetworkSystem.cs (Centerline),
     /// Systems/BuildingSystem.cs (Boundary, including its circular-prefab
     /// branch), Systems/RouteSystem.cs (Centerline). No Carto code is copied
-    /// verbatim in v1; only native ECS queries. The Carto reflection path in
-    /// RequestHandlers.MapImage.cs stays the serving adapter until this
-    /// module passes live acceptance.
+    /// verbatim in v1; only native ECS queries. Routes are stop-to-stop loops
+    /// (the exact on-road path port is deferred); rails match by prefab name.
+    /// The Carto reflection path in RequestHandlers.MapImage.cs stays as the
+    /// fallback adapter until the native source passes live acceptance.
     /// </summary>
     public sealed partial class RequestHandlers
     {
         /// <summary>
         /// Every Carto System kind, so deferred layers stay visible instead of
-        /// silently dropped. Only Network and Building are collected in v1.
+        /// silently dropped. Network, Building, and Route are collected; the
+        /// rest stay deferred with per-kind reasons.
         /// </summary>
         internal enum MapSourceKind
         {
@@ -39,7 +43,9 @@ namespace CS2MCP
 
         internal static bool IsNativeMapSourceSupported(MapSourceKind kind)
         {
-            return kind == MapSourceKind.Network || kind == MapSourceKind.Building;
+            return kind == MapSourceKind.Network
+                || kind == MapSourceKind.Building
+                || kind == MapSourceKind.Route;
         }
 
         internal static string NativeMapSourceDeferredReason(MapSourceKind kind)
@@ -48,9 +54,8 @@ namespace CS2MCP
             {
                 case MapSourceKind.Network:
                 case MapSourceKind.Building:
-                    return null;
                 case MapSourceKind.Route:
-                    return "route-segment curve port missing; transit overlay stays on Carto";
+                    return null;
                 case MapSourceKind.Area:
                     return "district/lot boundary port missing";
                 case MapSourceKind.Zoning:
@@ -105,6 +110,9 @@ namespace CS2MCP
                         case MapSourceKind.Building:
                             CollectNativeBuildingFootprints(xMin, zMin, xMax, zMax, fills);
                             break;
+                        case MapSourceKind.Route:
+                            CollectNativeRouteLoops(xMin, zMin, xMax, zMax, strokes);
+                            break;
                     }
                 }
                 return true;
@@ -118,6 +126,12 @@ namespace CS2MCP
             }
         }
 
+        /// <summary>
+        /// Road centerlines plus name-matched rails (the typed-network graph
+        /// does not classify rails either, so no exact track-component port).
+        /// Elevation is the per-feature mean curve height, the same definition
+        /// the layering solver already consumes from Carto.
+        /// </summary>
         private void CollectNativeNetworkStrokes(
             float? xMin,
             float? zMin,
@@ -125,12 +139,16 @@ namespace CS2MCP
             float? zMax,
             List<MapStroke> strokes)
         {
+            PrefabSystem prefabSystem = World.GetOrCreateSystemManaged<PrefabSystem>();
             using (NativeArray<Entity> entities = PlacedRoadQuery.ToEntityArray(Allocator.Temp))
             {
                 foreach (Entity entity in entities)
                 {
                     PrefabRef prefabRef = EntityManager.GetComponentData<PrefabRef>(entity);
-                    if (!EntityManager.HasComponent<RoadData>(prefabRef.m_Prefab))
+                    PrefabBase prefabBase = prefabSystem.GetPrefab<PrefabBase>(prefabRef.m_Prefab);
+                    string prefabName = prefabBase != null ? prefabBase.name ?? string.Empty : string.Empty;
+                    if (!EntityManager.HasComponent<RoadData>(prefabRef.m_Prefab)
+                        && !IsNativeRailPrefab(prefabName))
                     {
                         continue;
                     }
@@ -139,18 +157,73 @@ namespace CS2MCP
                     {
                         continue;
                     }
-                    var stroke = new MapStroke { Style = ClassifyNativeRoadStyle(prefabRef.m_Prefab) };
+                    var stroke = new MapStroke { Style = ClassifyNativeRoadStyle(prefabRef.m_Prefab, prefabName) };
                     int samples = math.clamp((int)math.ceil(curve.m_Length / 16f), 1, 32);
+                    double heightSum = 0.0;
                     for (int i = 0; i <= samples; i++)
                     {
                         float3 point = BezierPoint(curve.m_Bezier, i / (float)samples);
                         stroke.X.Add(point.x);
                         stroke.Y.Add(point.z);
+                        heightSum += point.y;
                     }
                     if (stroke.X.Count >= 2)
                     {
+                        stroke.Elev = heightSum / stroke.X.Count;
+                        stroke.HasElev = true;
                         strokes.Add(stroke);
                     }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Transit overlay as stop-to-stop loops. Waypoint positions are the
+        /// established line proxy (TransitLineIntersectsRadius); the exact
+        /// on-road path port is deferred. Incomplete routes are skipped, like
+        /// the transit-line write path requires. Loops carry no elevation, so
+        /// they never constrain layering, matching the Carto route features.
+        /// </summary>
+        private void CollectNativeRouteLoops(
+            float? xMin,
+            float? zMin,
+            float? xMax,
+            float? zMax,
+            List<MapStroke> strokes)
+        {
+            using (NativeArray<Entity> entities = TransitLineQuery.ToEntityArray(Allocator.Temp))
+            {
+                foreach (Entity entity in entities)
+                {
+                    if ((EntityManager.GetComponentData<Route>(entity).m_Flags & RouteFlags.Complete) == 0)
+                    {
+                        continue;
+                    }
+                    DynamicBuffer<RouteWaypoint> waypoints =
+                        EntityManager.GetBuffer<RouteWaypoint>(entity, isReadOnly: true);
+                    var stroke = new MapStroke { Style = MapStrokeStyle.Transit };
+                    foreach (RouteWaypoint waypoint in waypoints)
+                    {
+                        if (!EntityManager.Exists(waypoint.m_Waypoint)
+                            || !EntityManager.HasComponent<Position>(waypoint.m_Waypoint))
+                        {
+                            continue;
+                        }
+                        float3 position = EntityManager.GetComponentData<Position>(waypoint.m_Waypoint).m_Position;
+                        stroke.X.Add(position.x);
+                        stroke.Y.Add(position.z);
+                    }
+                    if (stroke.X.Count < 2)
+                    {
+                        continue;
+                    }
+                    stroke.X.Add(stroke.X[0]);
+                    stroke.Y.Add(stroke.Y[0]);
+                    if (xMin.HasValue && !StrokeOverlapsBounds(stroke, xMin.Value, zMin.Value, xMax.Value, zMax.Value))
+                    {
+                        continue;
+                    }
+                    strokes.Add(stroke);
                 }
             }
         }
@@ -206,6 +279,32 @@ namespace CS2MCP
             polygon.Y.Add(point.y);
         }
 
+        private static bool IsNativeRailPrefab(string prefabName)
+        {
+            return prefabName.IndexOf("rail", StringComparison.OrdinalIgnoreCase) >= 0
+                || prefabName.IndexOf("train", StringComparison.OrdinalIgnoreCase) >= 0
+                || prefabName.IndexOf("tram", StringComparison.OrdinalIgnoreCase) >= 0
+                || prefabName.IndexOf("subway", StringComparison.OrdinalIgnoreCase) >= 0
+                || prefabName.IndexOf("metro", StringComparison.OrdinalIgnoreCase) >= 0
+                || prefabName.IndexOf("track", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool StrokeOverlapsBounds(MapStroke stroke, float xMin, float zMin, float xMax, float zMax)
+        {
+            for (int i = 0; i + 1 < stroke.X.Count; i++)
+            {
+                double minX = Math.Min(stroke.X[i], stroke.X[i + 1]);
+                double maxX = Math.Max(stroke.X[i], stroke.X[i + 1]);
+                double minY = Math.Min(stroke.Y[i], stroke.Y[i + 1]);
+                double maxY = Math.Max(stroke.Y[i], stroke.Y[i + 1]);
+                if (maxX >= xMin && minX <= xMax && maxY >= zMin && minY <= zMax)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private static bool CurveOverlapsBounds(Game.Net.Curve curve, float xMin, float zMin, float xMax, float zMax)
         {
             float minX = math.min(math.min(curve.m_Bezier.a.x, curve.m_Bezier.b.x), math.min(curve.m_Bezier.c.x, curve.m_Bezier.d.x));
@@ -216,15 +315,11 @@ namespace CS2MCP
         }
 
         /// <summary>
-        /// v1 hierarchy without Carto's Category: prefab name first, road
-        /// width as fallback. No elevation yet, so every stroke stays on the
-        /// ground layer until the Form/Elevation port lands.
+        /// Hierarchy without Carto's Category: prefab name first, road width
+        /// as fallback. Rails and tram/train-bearing roads draw as transit.
         /// </summary>
-        private MapStrokeStyle ClassifyNativeRoadStyle(Entity prefab)
+        private MapStrokeStyle ClassifyNativeRoadStyle(Entity prefab, string name)
         {
-            PrefabSystem prefabSystem = World.GetOrCreateSystemManaged<PrefabSystem>();
-            PrefabBase prefabBase = prefabSystem.GetPrefab<PrefabBase>(prefab);
-            string name = prefabBase != null ? prefabBase.name ?? string.Empty : string.Empty;
             if (name.IndexOf("Highway", StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 return MapStrokeStyle.Highway;
