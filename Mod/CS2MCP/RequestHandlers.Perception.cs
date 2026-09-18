@@ -310,6 +310,10 @@ namespace CS2MCP
 
                     Game.Net.Edge edge = EntityManager.GetComponentData<Game.Net.Edge>(entity);
                     PrefabBase prefab = prefabSystem.GetPrefab<PrefabBase>(prefabRef.m_Prefab);
+                    RoadPrefabFacts facts = ReadRoadPrefabFacts(
+                        prefabRef.m_Prefab,
+                        prefabSystem,
+                        prefab != null ? prefab.name : "unknown_road");
                     var road = new MapTextRoad
                     {
                         EntityIndex = entity.Index,
@@ -321,6 +325,11 @@ namespace CS2MCP
                         StartDegree = RoadConnectedEdgeCount(edge.m_Start),
                         EndDegree = RoadConnectedEdgeCount(edge.m_End),
                         Prefab = prefab != null ? prefab.name : "unknown_road",
+                        RoadClass = facts.RoadClass,
+                        CarLanes = facts.CarLanes ?? -1,
+                        SpeedKmh = facts.SpeedKmh ?? -1,
+                        HighwayRules = facts.HighwayRules,
+                        Zonable = facts.Zonable,
                     };
                     int samples = math.clamp((int)math.ceil(curve.m_Length / math.max(snapshot.Quantum * 2f, 8f)), 1, 32);
                     for (int i = 0; i <= samples; i++)

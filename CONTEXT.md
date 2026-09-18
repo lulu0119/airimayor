@@ -76,6 +76,10 @@ _Avoid_: a second utility-versus-road taxonomy; high-voltage as part of this set
 A connected set of typed-network edges that does not reach an outside connection (roads) or a road edge (pipes and cables).
 _Avoid_: treating every degree-1 dead end as isolated
 
+**Road facts**:
+Native per-prefab road identity on `list_prefabs`, `list_networks` and `map_text`: UI-group category, speed limit, car-lane count, highway-rules flag, zoning flag.
+_Avoid_: width as the highway test; a new traffic tool
+
 **Operational area**:
 An owner-linked lot polygon on a facility (storage or extractor). The current product expands only.
 _Avoid_: district, a standalone area with no owner
@@ -99,8 +103,8 @@ Budgeted semantic-vector text from `map_text`. Spatial evidence, not constructio
 _Avoid_: heightmap, 8×8 samples as the Agent interface
 
 **Map image**:
-Undistorted PNG overview from `map_image`: citywide by default, zoomed extent with x+z+radius or xMin/zMin/xMax/zMax bounds. Light style, no labels. Appears only when the player enabled visual tools.
-_Avoid_: model-parsed GeoJSON, treating the map as construction approval
+Undistorted PNG overview from `map_image`: citywide by default, zoomed extent with x+z+radius or xMin/zMin/xMax/zMax bounds. OSM Carto look: scale-dependent density of land, water, parks, buildings, roads, and rails. Names stay in MAP_TEXT. Appears only when the player enabled visual tools.
+_Avoid_: street names in the PNG; stop-to-stop transit overlays; Carto or QGIS as the product renderer; model-parsed GeoJSON; treating the map as construction approval
 
 **Player permission**:
 A durable setting that shows or hides a write tool (demolition, spending Development Points, visual tools).

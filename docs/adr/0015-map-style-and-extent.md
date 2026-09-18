@@ -1,6 +1,6 @@
 # Light map style with bounded extents
 
-Status: accepted
+Status: style and no-labels superseded by [0020](./0020-osm-carto-map-image.md). Bounded extents still stand (refined by [0018](./0018-bounded-map-game-crs.md)).
 
 `map_image` renders a light cartographic style (land, water, beige
 footprints, hierarchy-colored roads, transit lines; no labels or POI icons)

@@ -1,137 +1,92 @@
 using System;
 using System.Collections.Generic;
-using Colossal.Mathematics;
 using Game.Common;
+using Game.Net;
 using Game.Prefabs;
-using Game.Routes;
+using Game.Tools;
+using Game.Zones;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
+using UnityEngine;
 using Transform = Game.Objects.Transform;
+using AreaType = Game.Zones.AreaType;
 
 namespace CS2MCP
 {
     /// <summary>
-    /// Native map source: emits rasterizer input directly in game meters with
-    /// no Carto install, no GeoJSON roundtrip, and no projection branch.
+    /// Native map source: emits rasterizer input directly in game meters.
     /// Geometry shapes are grounded in taipei-native/Carto (MIT, Copyright (c)
     /// 2025 Chang-Yu Ho): Systems/NetworkSystem.cs (Centerline),
     /// Systems/BuildingSystem.cs (Boundary, including its circular-prefab
-    /// branch), Systems/RouteSystem.cs (Centerline). No Carto code is copied
-    /// verbatim in v1; only native ECS queries. Routes are stop-to-stop loops
-    /// (the exact on-road path port is deferred); rails match by prefab name.
-    /// The Carto reflection path in RequestHandlers.MapImage.cs stays as the
-    /// fallback adapter until the native source passes live acceptance.
+    /// branch). No Carto code is copied verbatim; only native ECS queries.
+    /// Rails use TrackData. Transit route overlays are omitted.
     /// </summary>
     public sealed partial class RequestHandlers
     {
-        /// <summary>
-        /// Every Carto System kind, so deferred layers stay visible instead of
-        /// silently dropped. Network, Building, and Route are collected; the
-        /// rest stay deferred with per-kind reasons.
-        /// </summary>
-        internal enum MapSourceKind
-        {
-            Network,
-            Building,
-            Route,
-            Area,
-            Zoning,
-            PointOfInterest,
-            Raster,
-        }
+        private EntityQuery m_MapSurfaceQuery;
+        private bool m_MapSurfaceQueryCreated;
 
-        internal static bool IsNativeMapSourceSupported(MapSourceKind kind)
+        private EntityQuery MapSurfaceQuery
         {
-            return kind == MapSourceKind.Network
-                || kind == MapSourceKind.Building
-                || kind == MapSourceKind.Route;
-        }
-
-        internal static string NativeMapSourceDeferredReason(MapSourceKind kind)
-        {
-            switch (kind)
+            get
             {
-                case MapSourceKind.Network:
-                case MapSourceKind.Building:
-                case MapSourceKind.Route:
-                    return null;
-                case MapSourceKind.Area:
-                    return "district/lot boundary port missing";
-                case MapSourceKind.Zoning:
-                    return "every zoning cell every call does not fit a synchronous tool call";
-                case MapSourceKind.PointOfInterest:
-                    return "text rendering and icons do not belong in this rasterizer";
-                case MapSourceKind.Raster:
-                    return "hillshade stays an offline job; water already samples natively";
-                default:
-                    return "unknown map source kind";
+                if (!m_MapSurfaceQueryCreated)
+                {
+                    m_MapSurfaceQuery = EntityManager.CreateEntityQuery(new EntityQueryDesc
+                    {
+                        All = new[]
+                        {
+                            ComponentType.ReadOnly<Game.Areas.Surface>(),
+                            ComponentType.ReadOnly<Game.Areas.Node>(),
+                            ComponentType.ReadOnly<PrefabRef>(),
+                        },
+                        None = new[]
+                        {
+                            ComponentType.ReadOnly<Temp>(),
+                            ComponentType.ReadOnly<Deleted>(),
+                        },
+                    });
+                    m_MapSurfaceQueryCreated = true;
+                }
+                return m_MapSurfaceQuery;
             }
         }
 
         /// <summary>
-        /// Fills strokes/fills for the requested kinds. Fail-closed: returns
-        /// false with the first unsupported kind's reason, collecting nothing.
         /// Bounds are game XZ; null collects citywide. Never throws.
         /// </summary>
         private bool TryCollectNativeMapGeometry(
-            IList<MapSourceKind> kinds,
             float? xMin,
             float? zMin,
             float? xMax,
             float? zMax,
             List<MapStroke> strokes,
             List<MapPolygon> fills,
-            out string unsupported)
+            out string error)
         {
-            unsupported = null;
-            if (kinds == null || strokes == null || fills == null)
+            error = null;
+            if (strokes == null || fills == null)
             {
-                unsupported = "nil map source request";
+                error = "nil map source request";
                 return false;
-            }
-            foreach (MapSourceKind kind in kinds)
-            {
-                if (!IsNativeMapSourceSupported(kind))
-                {
-                    unsupported = NativeMapSourceDeferredReason(kind) ?? kind.ToString();
-                    return false;
-                }
             }
             try
             {
-                foreach (MapSourceKind kind in kinds)
-                {
-                    switch (kind)
-                    {
-                        case MapSourceKind.Network:
-                            CollectNativeNetworkStrokes(xMin, zMin, xMax, zMax, strokes);
-                            break;
-                        case MapSourceKind.Building:
-                            CollectNativeBuildingFootprints(xMin, zMin, xMax, zMax, fills);
-                            break;
-                        case MapSourceKind.Route:
-                            CollectNativeRouteLoops(xMin, zMin, xMax, zMax, strokes);
-                            break;
-                    }
-                }
+                CollectNativeNetworkStrokes(xMin, zMin, xMax, zMax, strokes);
+                CollectNativeBuildingFootprints(xMin, zMin, xMax, zMax, fills);
+                CollectNativeParkSurfaces(xMin, zMin, xMax, zMax, fills);
                 return true;
             }
             catch (Exception e)
             {
                 strokes.Clear();
                 fills.Clear();
-                unsupported = e.GetType().Name + ": " + e.Message;
+                error = e.GetType().Name + ": " + e.Message;
                 return false;
             }
         }
 
-        /// <summary>
-        /// Road centerlines plus name-matched rails (the typed-network graph
-        /// does not classify rails either, so no exact track-component port).
-        /// Elevation is the per-feature mean curve height, the same definition
-        /// the layering solver already consumes from Carto.
-        /// </summary>
         private void CollectNativeNetworkStrokes(
             float? xMin,
             float? zMin,
@@ -147,8 +102,9 @@ namespace CS2MCP
                     PrefabRef prefabRef = EntityManager.GetComponentData<PrefabRef>(entity);
                     PrefabBase prefabBase = prefabSystem.GetPrefab<PrefabBase>(prefabRef.m_Prefab);
                     string prefabName = prefabBase != null ? prefabBase.name ?? string.Empty : string.Empty;
-                    if (!EntityManager.HasComponent<RoadData>(prefabRef.m_Prefab)
-                        && !IsNativeRailPrefab(prefabName))
+                    bool isRoad = EntityManager.HasComponent<RoadData>(prefabRef.m_Prefab);
+                    bool isTrack = IsNativeTrackEntity(entity, prefabRef.m_Prefab, prefabName);
+                    if (!isRoad && !isTrack)
                     {
                         continue;
                     }
@@ -157,75 +113,152 @@ namespace CS2MCP
                     {
                         continue;
                     }
-                    var stroke = new MapStroke { Style = ClassifyNativeRoadStyle(prefabRef.m_Prefab, prefabName) };
-                    int samples = math.clamp((int)math.ceil(curve.m_Length / 16f), 1, 32);
-                    double heightSum = 0.0;
-                    for (int i = 0; i <= samples; i++)
+                    Game.Net.Edge edge = EntityManager.GetComponentData<Game.Net.Edge>(entity);
+                    float widthM = NativeRoadWidthM(prefabRef.m_Prefab);
+                    MapStrokeStyle style = isRoad
+                        ? ClassifyNativeRoadStyle(
+                            ReadUiGroupName(prefabRef.m_Prefab, prefabSystem),
+                            prefabName)
+                        : ClassifyNativeTrackStyle(entity, prefabRef.m_Prefab, prefabName);
+                    if (widthM <= 0f)
                     {
-                        float3 point = BezierPoint(curve.m_Bezier, i / (float)samples);
-                        stroke.X.Add(point.x);
-                        stroke.Y.Add(point.z);
-                        heightSum += point.y;
+                        widthM = DefaultTrackWidthM(style);
                     }
-                    if (stroke.X.Count >= 2)
-                    {
-                        stroke.Elev = heightSum / stroke.X.Count;
-                        stroke.HasElev = true;
-                        strokes.Add(stroke);
-                    }
+                    EmitNetworkStroke(entity, edge, curve, style, widthM, strokes);
                 }
             }
         }
 
         /// <summary>
-        /// Transit overlay as stop-to-stop loops. Waypoint positions are the
-        /// established line proxy (TransitLineIntersectsRadius); the exact
-        /// on-road path port is deferred. Incomplete routes are skipped, like
-        /// the transit-line write path requires. Loops carry no elevation, so
-        /// they never constrain layering, matching the Carto route features.
+        /// Paint band only. Placement's ground band is ±2 m; carto uses ±4 m
+        /// so slight grade stays the same way, drawn as ground.
         /// </summary>
-        private void CollectNativeRouteLoops(
-            float? xMin,
-            float? zMin,
-            float? xMax,
-            float? zMax,
-            List<MapStroke> strokes)
+        private const float GradeGroundM = 4f;
+
+        /// <summary>
+        /// One polyline per native edge, with relative elevation on vertices.
+        /// Grade does not split the line; the painter uses Rel as paint.
+        /// Start/end native nodes carry the topology; the join walks them.
+        /// </summary>
+        private void EmitNetworkStroke(
+            Entity entity, Game.Net.Edge edge, Game.Net.Curve curve, MapStrokeStyle style, float widthM, List<MapStroke> strokes)
         {
-            using (NativeArray<Entity> entities = TransitLineQuery.ToEntityArray(Allocator.Temp))
+            int samples = math.clamp((int)math.ceil(curve.m_Length / 16f), 1, 32);
+            bool hasRelative = EntityManager.HasComponent<Game.Net.Elevation>(entity);
+            float2 relative = hasRelative
+                ? EntityManager.GetComponentData<Game.Net.Elevation>(entity).m_Elevation
+                : float2.zero;
+            var stroke = new MapStroke
             {
-                foreach (Entity entity in entities)
+                Style = style,
+                WidthM = widthM,
+                HasElev = true,
+                StartNode = NetNodeKey(edge.m_Start),
+                EndNode = NetNodeKey(edge.m_End),
+            };
+            double heightSum = 0.0;
+            AppendSample(stroke, curve, 0f, relative, ref heightSum);
+            for (int i = 0; i < samples; i++)
+            {
+                float t0 = i / (float)samples;
+                float t1 = (i + 1) / (float)samples;
+                float e0 = math.lerp(relative.x, relative.y, t0);
+                float e1 = math.lerp(relative.x, relative.y, t1);
+                if (hasRelative)
                 {
-                    if ((EntityManager.GetComponentData<Route>(entity).m_Flags & RouteFlags.Complete) == 0)
-                    {
-                        continue;
-                    }
-                    DynamicBuffer<RouteWaypoint> waypoints =
-                        EntityManager.GetBuffer<RouteWaypoint>(entity, isReadOnly: true);
-                    var stroke = new MapStroke { Style = MapStrokeStyle.Transit };
-                    foreach (RouteWaypoint waypoint in waypoints)
-                    {
-                        if (!EntityManager.Exists(waypoint.m_Waypoint)
-                            || !EntityManager.HasComponent<Position>(waypoint.m_Waypoint))
-                        {
-                            continue;
-                        }
-                        float3 position = EntityManager.GetComponentData<Position>(waypoint.m_Waypoint).m_Position;
-                        stroke.X.Add(position.x);
-                        stroke.Y.Add(position.z);
-                    }
-                    if (stroke.X.Count < 2)
-                    {
-                        continue;
-                    }
-                    stroke.X.Add(stroke.X[0]);
-                    stroke.Y.Add(stroke.Y[0]);
-                    if (xMin.HasValue && !StrokeOverlapsBounds(stroke, xMin.Value, zMin.Value, xMax.Value, zMax.Value))
-                    {
-                        continue;
-                    }
-                    strokes.Add(stroke);
+                    InsertThresholds(stroke, curve, relative, t0, t1, e0, e1, ref heightSum);
+                }
+                AppendSample(stroke, curve, t1, relative, ref heightSum);
+            }
+            if (stroke.X.Count < 2)
+            {
+                return;
+            }
+            stroke.Elev = heightSum / stroke.X.Count;
+            stroke.Grade = DominantGrade(stroke.Rel);
+            strokes.Add(stroke);
+        }
+
+        private static void InsertThresholds(
+            MapStroke stroke, Game.Net.Curve curve, float2 relative, float t0, float t1, float e0, float e1,
+            ref double heightSum)
+        {
+            float uLow = CrossingU(e0, e1, -GradeGroundM);
+            float uHigh = CrossingU(e0, e1, GradeGroundM);
+            if (uLow > 0f && uHigh > 0f && uHigh < uLow)
+            {
+                float swap = uLow;
+                uLow = uHigh;
+                uHigh = swap;
+            }
+            if (uLow > 0f)
+            {
+                AppendSample(stroke, curve, t0 + (t1 - t0) * uLow, relative, ref heightSum);
+            }
+            if (uHigh > 0f)
+            {
+                AppendSample(stroke, curve, t0 + (t1 - t0) * uHigh, relative, ref heightSum);
+            }
+        }
+
+        private static float CrossingU(float e0, float e1, float threshold)
+        {
+            if ((e0 - threshold) * (e1 - threshold) >= 0f)
+            {
+                return 0f;
+            }
+            float u = (threshold - e0) / (e1 - e0);
+            return u > 0.001f && u < 0.999f ? u : 0f;
+        }
+
+        private static void AppendSample(
+            MapStroke stroke, Game.Net.Curve curve, float t, float2 relative, ref double heightSum)
+        {
+            float3 point = BezierPoint(curve.m_Bezier, t);
+            stroke.X.Add(point.x);
+            stroke.Y.Add(point.z);
+            stroke.Rel.Add(math.lerp(relative.x, relative.y, t));
+            heightSum += point.y;
+        }
+
+        private static MapGrade DominantGrade(List<float> rel)
+        {
+            int tunnel = 0;
+            int bridge = 0;
+            for (int i = 0; i < rel.Count; i++)
+            {
+                MapGrade grade = GradeFromRelative(rel[i]);
+                if (grade == MapGrade.Tunnel)
+                {
+                    tunnel++;
+                }
+                else if (grade == MapGrade.Bridge)
+                {
+                    bridge++;
                 }
             }
+            if (bridge > tunnel && bridge > 0)
+            {
+                return MapGrade.Bridge;
+            }
+            if (tunnel > 0)
+            {
+                return MapGrade.Tunnel;
+            }
+            return MapGrade.Ground;
+        }
+
+        private static MapGrade GradeFromRelative(float elevation)
+        {
+            if (elevation < -GradeGroundM)
+            {
+                return MapGrade.Tunnel;
+            }
+            if (elevation > GradeGroundM)
+            {
+                return MapGrade.Bridge;
+            }
+            return MapGrade.Ground;
         }
 
         private void CollectNativeBuildingFootprints(
@@ -261,12 +294,59 @@ namespace CS2MCP
                     }
                     float2 right = math.mul(transform.m_Rotation, new float3(1f, 0f, 0f)).xz;
                     float2 forward = math.mul(transform.m_Rotation, new float3(0f, 0f, 1f)).xz;
-                    var polygon = new MapPolygon();
+                    var polygon = new MapPolygon { Kind = ClassifyNativeBuildingFill(prefabRef.m_Prefab) };
                     AddFootprintCorner(polygon, center, right, forward, -halfX, -halfZ);
                     AddFootprintCorner(polygon, center, right, forward, halfX, -halfZ);
                     AddFootprintCorner(polygon, center, right, forward, halfX, halfZ);
                     AddFootprintCorner(polygon, center, right, forward, -halfX, halfZ);
                     fills.Add(polygon);
+                }
+            }
+        }
+
+        private void CollectNativeParkSurfaces(
+            float? xMin,
+            float? zMin,
+            float? xMax,
+            float? zMax,
+            List<MapPolygon> fills)
+        {
+            PrefabSystem prefabSystem = World.GetOrCreateSystemManaged<PrefabSystem>();
+            using (NativeArray<Entity> entities = MapSurfaceQuery.ToEntityArray(Allocator.Temp))
+            {
+                foreach (Entity entity in entities)
+                {
+                    PrefabRef prefabRef = EntityManager.GetComponentData<PrefabRef>(entity);
+                    PrefabBase prefabBase = prefabSystem.GetPrefab<PrefabBase>(prefabRef.m_Prefab);
+                    string prefabName = prefabBase != null ? prefabBase.name ?? string.Empty : string.Empty;
+                    if (!IsGreenSurfacePrefab(prefabRef.m_Prefab, prefabName))
+                    {
+                        continue;
+                    }
+                    DynamicBuffer<Game.Areas.Node> nodes =
+                        EntityManager.GetBuffer<Game.Areas.Node>(entity, isReadOnly: true);
+                    if (nodes.Length < 3)
+                    {
+                        continue;
+                    }
+                    var polygon = new MapPolygon { Kind = MapFillKind.Park };
+                    bool anyInside = !xMin.HasValue;
+                    for (int i = 0; i < nodes.Length; i++)
+                    {
+                        float3 position = nodes[i].m_Position;
+                        polygon.X.Add(position.x);
+                        polygon.Y.Add(position.z);
+                        if (!anyInside
+                            && position.x >= xMin.Value && position.x <= xMax.Value
+                            && position.z >= zMin.Value && position.z <= zMax.Value)
+                        {
+                            anyInside = true;
+                        }
+                    }
+                    if (anyInside)
+                    {
+                        fills.Add(polygon);
+                    }
                 }
             }
         }
@@ -279,6 +359,15 @@ namespace CS2MCP
             polygon.Y.Add(point.y);
         }
 
+        private bool IsNativeTrackEntity(Entity entity, Entity prefab, string prefabName)
+        {
+            return EntityManager.HasComponent<TrackData>(prefab)
+                || EntityManager.HasComponent<TrainTrack>(entity)
+                || EntityManager.HasComponent<TramTrack>(entity)
+                || EntityManager.HasComponent<SubwayTrack>(entity)
+                || IsNativeRailPrefab(prefabName);
+        }
+
         private static bool IsNativeRailPrefab(string prefabName)
         {
             return prefabName.IndexOf("rail", StringComparison.OrdinalIgnoreCase) >= 0
@@ -289,20 +378,69 @@ namespace CS2MCP
                 || prefabName.IndexOf("track", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        private static bool StrokeOverlapsBounds(MapStroke stroke, float xMin, float zMin, float xMax, float zMax)
+        private bool IsGreenSurfacePrefab(Entity prefab, string name)
         {
-            for (int i = 0; i + 1 < stroke.X.Count; i++)
+            if (EntityManager.HasComponent<AreaColorData>(prefab))
             {
-                double minX = Math.Min(stroke.X[i], stroke.X[i + 1]);
-                double maxX = Math.Max(stroke.X[i], stroke.X[i + 1]);
-                double minY = Math.Min(stroke.Y[i], stroke.Y[i + 1]);
-                double maxY = Math.Max(stroke.Y[i], stroke.Y[i + 1]);
-                if (maxX >= xMin && minX <= xMax && maxY >= zMin && minY <= zMax)
+                Color32 fill = EntityManager.GetComponentData<AreaColorData>(prefab).m_FillColor;
+                if (fill.g > fill.r + 8 && fill.g > fill.b + 8 && fill.g > 40)
                 {
                     return true;
                 }
             }
-            return false;
+            return name.IndexOf("grass", StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf("park", StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf("lawn", StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf("meadow", StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf("forest", StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf("garden", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private MapFillKind ClassifyNativeBuildingFill(Entity prefab)
+        {
+            if (EntityManager.HasComponent<ParkData>(prefab))
+            {
+                return MapFillKind.Park;
+            }
+            if (EntityManager.HasComponent<SpawnableBuildingData>(prefab))
+            {
+                Entity zonePrefab = EntityManager.GetComponentData<SpawnableBuildingData>(prefab).m_ZonePrefab;
+                if (EntityManager.Exists(zonePrefab) && EntityManager.HasComponent<ZoneData>(zonePrefab))
+                {
+                    ZoneData zone = EntityManager.GetComponentData<ZoneData>(zonePrefab);
+                    if (zone.IsOffice())
+                    {
+                        return MapFillKind.Office;
+                    }
+                    switch (zone.m_AreaType)
+                    {
+                        case AreaType.Residential:
+                            return MapFillKind.Residential;
+                        case AreaType.Commercial:
+                            return MapFillKind.Commercial;
+                        case AreaType.Industrial:
+                            return MapFillKind.Industrial;
+                    }
+                }
+            }
+            if (EntityManager.HasComponent<PowerPlantData>(prefab)
+                || EntityManager.HasComponent<PowerLineData>(prefab)
+                || EntityManager.HasComponent<WaterPumpingStationData>(prefab)
+                || EntityManager.HasComponent<WaterTowerData>(prefab)
+                || EntityManager.HasComponent<SewageOutletData>(prefab)
+                || EntityManager.HasComponent<GarbageFacilityData>(prefab)
+                || EntityManager.HasComponent<HospitalData>(prefab)
+                || EntityManager.HasComponent<FireStationData>(prefab)
+                || EntityManager.HasComponent<PoliceStationData>(prefab)
+                || EntityManager.HasComponent<SchoolData>(prefab)
+                || EntityManager.HasComponent<TransportDepotData>(prefab)
+                || EntityManager.HasComponent<TransportStationData>(prefab)
+                || EntityManager.HasComponent<PostFacilityData>(prefab)
+                || EntityManager.HasComponent<TelecomFacilityData>(prefab))
+            {
+                return MapFillKind.Service;
+            }
+            return MapFillKind.Building;
         }
 
         private static bool CurveOverlapsBounds(Game.Net.Curve curve, float xMin, float zMin, float xMax, float zMax)
@@ -314,46 +452,80 @@ namespace CS2MCP
             return maxX >= xMin && minX <= xMax && maxZ >= zMin && minZ <= zMax;
         }
 
-        /// <summary>
-        /// Hierarchy without Carto's Category: prefab name first, road width
-        /// as fallback. Rails and tram/train-bearing roads draw as transit.
-        /// </summary>
-        private MapStrokeStyle ClassifyNativeRoadStyle(Entity prefab, string name)
+        private static long NetNodeKey(Entity node)
         {
-            if (name.IndexOf("Highway", StringComparison.OrdinalIgnoreCase) >= 0)
+            if (node == Entity.Null)
             {
-                return MapStrokeStyle.Highway;
+                return 0;
             }
-            if (name.IndexOf("Large", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return MapStrokeStyle.Large;
-            }
-            if (name.IndexOf("Medium", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return MapStrokeStyle.Medium;
-            }
-            if (name.IndexOf("Tram", StringComparison.OrdinalIgnoreCase) >= 0
-                || name.IndexOf("Subway", StringComparison.OrdinalIgnoreCase) >= 0
-                || name.IndexOf("Train", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return MapStrokeStyle.Transit;
-            }
-            float width = EntityManager.HasComponent<NetGeometryData>(prefab)
+            return ((long)node.Index << 32) | (uint)node.Version;
+        }
+
+        private float NativeRoadWidthM(Entity prefab)
+        {
+            return EntityManager.HasComponent<NetGeometryData>(prefab)
                 ? EntityManager.GetComponentData<NetGeometryData>(prefab).m_DefaultWidth
                 : 0f;
-            if (width >= 24f)
+        }
+
+        private static float DefaultTrackWidthM(MapStrokeStyle style)
+        {
+            switch (style)
             {
-                return MapStrokeStyle.Highway;
+                case MapStrokeStyle.Metro:
+                    return 4f;
+                case MapStrokeStyle.Tram:
+                    return 3f;
+                default:
+                    return 5f;
             }
-            if (width >= 16f)
+        }
+
+        /// <summary>
+        /// Prefab name first, road width as fallback. Dedicated tracks are
+        /// classified separately; tram-bearing roads stay roads.
+        /// </summary>
+        private static MapStrokeStyle ClassifyNativeRoadStyle(string groupName, string name)
+        {
+            switch (RoadFactsMath.Classify(groupName, name))
             {
-                return MapStrokeStyle.Large;
+                case RoadFactsMath.RoadClassHighway:
+                    return MapStrokeStyle.Highway;
+                case RoadFactsMath.RoadClassLarge:
+                    return MapStrokeStyle.Large;
+                case RoadFactsMath.RoadClassMedium:
+                    return MapStrokeStyle.Medium;
+                default:
+                    return MapStrokeStyle.Minor;
             }
-            if (width >= 10f)
+        }
+
+        private MapStrokeStyle ClassifyNativeTrackStyle(Entity entity, Entity prefab, string name)
+        {
+            if (EntityManager.HasComponent<SubwayTrack>(entity)
+                || name.IndexOf("Subway", StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf("Metro", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                return MapStrokeStyle.Medium;
+                return MapStrokeStyle.Metro;
             }
-            return MapStrokeStyle.Minor;
+            if (EntityManager.HasComponent<TramTrack>(entity)
+                || name.IndexOf("Tram", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return MapStrokeStyle.Tram;
+            }
+            if (EntityManager.HasComponent<TrackData>(prefab))
+            {
+                TrackTypes types = EntityManager.GetComponentData<TrackData>(prefab).m_TrackType;
+                if ((types & TrackTypes.Subway) != 0)
+                {
+                    return MapStrokeStyle.Metro;
+                }
+                if ((types & TrackTypes.Tram) != 0)
+                {
+                    return MapStrokeStyle.Tram;
+                }
+            }
+            return MapStrokeStyle.Rail;
         }
     }
 }

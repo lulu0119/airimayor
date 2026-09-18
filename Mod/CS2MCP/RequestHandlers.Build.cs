@@ -273,6 +273,19 @@ namespace CS2MCP
                         {
                             widthM = EntityManager.GetComponentData<NetGeometryData>(entity).m_DefaultWidth;
                         }
+                        object road = null;
+                        if (EntityManager.HasComponent<RoadData>(entity))
+                        {
+                            RoadPrefabFacts facts = ReadRoadPrefabFacts(entity, prefabSystem, prefab.name);
+                            road = new
+                            {
+                                roadClass = facts.RoadClass,
+                                speedKmh = facts.SpeedKmh,
+                                carLanes = facts.CarLanes,
+                                highwayRules = facts.HighwayRules,
+                                zonable = facts.Zonable,
+                            };
+                        }
                         results.Add(new
                         {
                             name = prefab.name,
@@ -282,6 +295,7 @@ namespace CS2MCP
                             lotSize,
                             footprintMeters,
                             widthM,
+                            road,
                         });
                     }
                 }

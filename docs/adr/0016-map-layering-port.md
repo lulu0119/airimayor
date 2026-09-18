@@ -1,6 +1,6 @@
 # Port road layering, defer zoning fills and labels
 
-Status: accepted
+Status: layering solver still stands. Label, zoning-fill, and pretty-maps-offline deferrals superseded by [0020](./0020-osm-carto-map-image.md).
 
 `map_image` ports the grade-separation solver from
 HamsterPark/cs2-carto-citymap (MIT): stroke union by good continuation,

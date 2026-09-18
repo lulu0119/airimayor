@@ -42,6 +42,8 @@ namespace CitiesSkylines2Agent.Agent
 
         public static string ScreenshotsDirectory => Path.Combine(LogsDirectory, "screenshots");
 
+        public static string MapImageDirectory => Path.Combine(LogsDirectory, "map-image");
+
         public static string StateDirectory => Path.Combine(RuntimeDataDirectory, "state");
 
         /// <summary>
@@ -62,6 +64,7 @@ namespace CitiesSkylines2Agent.Agent
             Directory.CreateDirectory(RuntimeDataDirectory);
             Directory.CreateDirectory(LogsDirectory);
             Directory.CreateDirectory(ScreenshotsDirectory);
+            Directory.CreateDirectory(MapImageDirectory);
             Directory.CreateDirectory(StateDirectory);
             Directory.CreateDirectory(HotReloadDirectory);
         }

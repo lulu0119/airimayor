@@ -97,11 +97,23 @@ namespace CS2MCP
                     volumeIndex,
                     congestionIndex,
                     loadRatio);
-                float? widthM = filter == TypedNetworkKinds.Road
-                    ? NetworkWidthM(
-                        EntityManager,
-                        EntityManager.GetComponentData<PrefabRef>(entity).m_Prefab)
-                    : null;
+                float? widthM = null;
+                object road = null;
+                if (filter == TypedNetworkKinds.Road)
+                {
+                    Entity edgePrefab =
+                        EntityManager.GetComponentData<PrefabRef>(entity).m_Prefab;
+                    widthM = NetworkWidthM(EntityManager, edgePrefab);
+                    RoadPrefabFacts facts = ReadRoadPrefabFacts(edgePrefab, prefabSystem, name);
+                    road = new
+                    {
+                        roadClass = facts.RoadClass,
+                        speedKmh = facts.SpeedKmh,
+                        carLanes = facts.CarLanes,
+                        highwayRules = facts.HighwayRules,
+                        zonable = facts.Zonable,
+                    };
+                }
                 object item = BuildNetworkListItem(
                     edge,
                     name,
@@ -110,7 +122,8 @@ namespace CS2MCP
                     distance,
                     widthM,
                     traffic,
-                    electricity);
+                    electricity,
+                    road);
                 if (found.Count < limit)
                 {
                     found.Add((rank, item));
@@ -289,7 +302,8 @@ namespace CS2MCP
             float distance,
             float? widthM,
             object traffic,
-            object electricity)
+            object electricity,
+            object road)
         {
             var entity = new { index = edge.EntityIndex, version = edge.EntityVersion };
             var start = new { x = edge.Points[0].x, z = edge.Points[0].z };
@@ -311,6 +325,7 @@ namespace CS2MCP
                     widthM,
                     distanceM,
                     traffic,
+                    road,
                 };
             }
             if (filter == TypedNetworkKinds.LowVoltage)
@@ -420,6 +435,7 @@ namespace CS2MCP
                 volumeIndex = (float)Math.Round(volumeIndex, 1),
                 congestionIndex = (float)Math.Round(congestionIndex, 1),
                 activeBottlenecks,
+                flowPercent = (float)Math.Round(flowPercent, 1),
             };
         }
 

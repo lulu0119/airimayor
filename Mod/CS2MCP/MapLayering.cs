@@ -9,9 +9,8 @@ namespace CS2MCP
     /// Adapted from HamsterPark/cs2-carto-citymap (MIT,
     /// src/cs2carto/layers.py, docs/road-layering.md): stroke union by good
     /// continuation, spatial-hash crossing detection, longest-path layer
-    /// relaxation. Scale-aware: degree exports use upstream's constants,
-    /// meter exports use meter ones; overfull hash cells are skipped as a
-    /// fuse. Features without elevation stay on the ground layer and never
+    /// relaxation. Game-meter constants; overfull hash cells are skipped as
+    /// a fuse. Features without elevation stay on the ground layer and never
     /// constrain. Pure math, no Unity API.
     /// </summary>
     internal static class MapLayering
@@ -19,8 +18,6 @@ namespace CS2MCP
         private const int MaxLayer = 5;
         private const double SnapMeters = 0.7;
         private const double CellMeters = 65.0;
-        private const double SnapDegrees = 6e-6;
-        private const double CellDegrees = 6e-4;
         private const double MinCrossingGapMeters = 1.0;
         private const double StraightDot = -0.5;
         private const double EndpointEps = 0.01;
@@ -62,49 +59,14 @@ namespace CS2MCP
                 return result;
             }
 
-            // Degree exports span fractions of a degree; meter exports span
-            // thousands of meters. Mixing the constants collapses the whole
-            // city into one hash cell and explodes quadratically, so pick by
-            // data span (full-export data always spans the city; the clip
-            // frame never shrinks it).
-            double minX = double.PositiveInfinity;
-            double minY = double.PositiveInfinity;
-            double maxX = double.NegativeInfinity;
-            double maxY = double.NegativeInfinity;
-            foreach (Feature feature in features)
-            {
-                for (int i = 0; i < feature.X.Count; i++)
-                {
-                    double x = feature.X[i];
-                    double y = feature.Y[i];
-                    if (double.IsNaN(x) || double.IsNaN(y)
-                        || double.IsInfinity(x) || double.IsInfinity(y))
-                    {
-                        continue;
-                    }
-                    if (x < minX) minX = x;
-                    if (y < minY) minY = y;
-                    if (x > maxX) maxX = x;
-                    if (y > maxY) maxY = y;
-                }
-            }
-            double span = Math.Max(maxX - minX, maxY - minY);
-            if (!(span > 0.0))
-            {
-                return result;
-            }
-            bool degrees = span <= 10.0;
-            double snap = degrees ? SnapDegrees : SnapMeters;
-            double cell = degrees ? CellDegrees : CellMeters;
-
-            Dictionary<long, List<EndPoint>> nodeEnds = CollectEnds(features, snap);
+            Dictionary<long, List<EndPoint>> nodeEnds = CollectEnds(features, SnapMeters);
             int[] parent = new int[features.Count];
             for (int i = 0; i < parent.Length; i++)
             {
                 parent[i] = i;
             }
             BuildStrokes(features, nodeEnds, parent);
-            HashSet<long> edges = CrossingConstraints(features, parent, cell, result);
+            HashSet<long> edges = CrossingConstraints(features, parent, CellMeters, result);
 
             var layer = new Dictionary<int, int>();
             var edgeList = new List<long>(edges);
@@ -299,8 +261,7 @@ namespace CS2MCP
 
         /// <summary>
         /// Fuse against quadratic blowup: cells holding more segments are
-        /// skipped and counted. Correct scale constants keep real cells far
-        /// below the cap; only CRS confusion trips it.
+        /// skipped and counted.
         /// </summary>
         private const int MaxSegmentsPerCell = 2000;
 

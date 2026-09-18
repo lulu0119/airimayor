@@ -155,7 +155,7 @@
     },
     {
       "name": "map_image",
-      "description": "Undistorted top-down PNG city map from native geometry (no extra install). Omit bounds for a citywide planning overview (road layout, expansion direction, district structure); pass x+z+radius or xMin/zMin/xMax/zMax for a zoomed extent (troubleshooting a site). Light cartographic style, no labels. Returns the image directly.",
+      "description": "Undistorted top-down PNG city map from native geometry in OSM Carto style (roads, rail, buildings by function, parks, water). Names stay in map_text. Omit bounds for a citywide planning overview (road layout, expansion direction, district structure); pass x+z+radius or xMin/zMin/xMax/zMax for a zoomed extent (troubleshooting a site). Returns the image directly.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -466,7 +466,7 @@
     },
     {
       "name": "list_prefabs",
-      "description": "Search game prefabs by name and/or typed role. Requires role and/or query. Use role for infrastructure/services; query for name substrings like 'Highway' or 'School'. Check 'locked' for milestone blocks. Default limit 16, max 64.",
+      "description": "Search game prefabs by name and/or typed role. Requires role and/or query. Use role for infrastructure/services; query for name substrings like 'Highway' or 'School'. Check 'locked' for milestone blocks. Road rows also return road{roadClass, speedKmh, carLanes, highwayRules, zonable}: roadClass is the native UI group first (highway = Highways category, not a width threshold), speedKmh is the native limit, carLanes counts native car lanes. Default limit 16, max 64.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -938,7 +938,7 @@
     },
     {
       "name": "build_road",
-      "description": "Build a road or utility-network segment between two world coordinates. Use SHORT segments (50-250m) on OWNED map tiles and connect roads near EXISTING road nodes. For ROAD prefabs, omitting mode selects ground: the route is sampled at roughly 4m or finer intervals for water and local grade, rejecting detected water crossings or grades above 10% (or a stricter prefab limit) instead of silently becoming a bridge or tunnel. Use mode=grade-separated only for an intentional bridge, elevated road or tunnel; provide both e1 and e2, with at least one nonzero. Do not pass mode for pipes, cables or other non-road networks. Pipes and Ground Cables remain UNDERGROUND by default (auto -10m buried), so omit e1/e2 to accept that burial. If the call fails, change the route or use shorter segments; do NOT repeat the same coordinates.",
+      "description": "Build a road or utility-network segment between two world coordinates. Use SHORT segments (50-250m) on OWNED map tiles and connect roads near EXISTING road nodes. Small streets may join a highway where native validation allows, but prefer a ramp/collector/arterial path for highway access and verify flowPercent stays at 70 or above via list_networks. For ROAD prefabs, omitting mode selects ground: the route is sampled at roughly 4m or finer intervals for water and local grade, rejecting detected water crossings or grades above 10% (or a stricter prefab limit) instead of silently becoming a bridge or tunnel. Use mode=grade-separated only for an intentional bridge, elevated road or tunnel; provide both e1 and e2, with at least one nonzero. Do not pass mode for pipes, cables or other non-road networks. Pipes and Ground Cables remain UNDERGROUND by default (auto -10m buried), so omit e1/e2 to accept that burial. If the call fails, change the route or use shorter segments; do NOT repeat the same coordinates.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1373,7 +1373,7 @@
     },
     {
       "name": "list_networks",
-      "description": "Inventory of typed network edges for one required kind (road, water, sewage, low_voltage). Zero topology: no isolated/kinds/componentSize. Shared fields: entity, prefab, start, end, length; distanceM when x/z given. Road also returns widthM and traffic{volumeIndex, congestionIndex, activeBottlenecks}. Water and sewage are geometry only. Low-voltage also returns electricity{flow, capacity, bottleneck}. Sort: distance (with x/z); traffic_volume|congestion for road; load for low_voltage. Default limit 16, max 64. Use inspect_network_topology for isolation QA.",
+      "description": "Inventory of typed network edges for one required kind (road, water, sewage, low_voltage). Zero topology: no isolated/kinds/componentSize. Shared fields: entity, prefab, start, end, length; distanceM when x/z given. Road also returns widthM, road{roadClass, speedKmh, carLanes, highwayRules, zonable} and traffic{volumeIndex, congestionIndex, activeBottlenecks, flowPercent}. Keep flowPercent at 70 or above; roadClass is the native UI group first (highway = Highways category, not a width threshold). Water and sewage are geometry only. Low-voltage also returns electricity{flow, capacity, bottleneck}. Sort: distance (with x/z); traffic_volume|congestion for road; load for low_voltage. Default limit 16, max 64. Use inspect_network_topology for isolation QA.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1628,7 +1628,7 @@
     },
     {
       "name": "map_text",
-      "description": "Budgeted semantic-vector MAP_TEXT v1 for a map range. Returns a local coordinate frame, elevation/slope/water/owned/buildable summaries, connected regions, road nodes/edges, directional sectors, and omitted metadata. Use before choosing an expansion direction or placing shoreline/terrain-sensitive infrastructure. Coordinates in region and network geometry are quantized units relative to frame.origin_world; multiply by quantum_m to recover meter offsets. Spatial evidence, not native construction validation. Requires x+z+radius or xMin+zMin+xMax+zMax bounds.",
+      "description": "Budgeted semantic-vector MAP_TEXT v1 for a map range. Returns a local coordinate frame, elevation/slope/water/owned/buildable summaries, connected regions, road nodes/edges, directional sectors, and omitted metadata. Road lines carry roadClass/lanes/speedKmh/highwayRules/zonable; roadClass is the native UI group first (highway = Highways category, not a width threshold). Use before choosing an expansion direction or placing shoreline/terrain-sensitive infrastructure. Coordinates in region and network geometry are quantized units relative to frame.origin_world; multiply by quantum_m to recover meter offsets. Spatial evidence, not native construction validation. Requires x+z+radius or xMin+zMin+xMax+zMax bounds.",
       "parameters": {
         "type": "object",
         "properties": {

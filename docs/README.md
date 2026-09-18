@@ -20,11 +20,18 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0012-docked-chat-transcript.md](./adr/0012-docked-chat-transcript.md) | Docked chat panel; bindings catalog; event-sourced transcript |
 | [0013-carto-map-export.md](./adr/0013-carto-map-export.md) | `map_image` via Carto reflection; shares the vision switch |
 | [0014-tool-image-preview.md](./adr/0014-tool-image-preview.md) | Tool image previews are thumbnails over the event channel |
-| [0015-map-style-and-extent.md](./adr/0015-map-style-and-extent.md) | Light map style; bounded extents verified against game meters |
-| [0016-map-layering-port.md](./adr/0016-map-layering-port.md) | Port road layering; defer zoning fills and labels |
+| [0015-map-style-and-extent.md](./adr/0015-map-style-and-extent.md) | Light map style; bounded extents (style superseded by 0020) |
+| [0016-map-layering-port.md](./adr/0016-map-layering-port.md) | Port road layering; label deferral superseded by 0020 |
 | [0017-map-text-map-image-split.md](./adr/0017-map-text-map-image-split.md) | map_text and map_image stay separate tools |
 | [0018-bounded-map-game-crs.md](./adr/0018-bounded-map-game-crs.md) | Bounded `map_image` forces the Game CRS; no Transform mirroring |
-| [0019-vendored-map-source.md](./adr/0019-vendored-map-source.md) | Vendored native map source; Carto reflection stays until acceptance |
+| [0019-vendored-map-source.md](./adr/0019-vendored-map-source.md) | Native map source; Carto reflection removed after acceptance |
+| [0020-osm-carto-map-image.md](./adr/0020-osm-carto-map-image.md) | `map_image` targets OSM Carto (labels superseded by 0022) |
+| [0021-osm-carto-stroke-painter.md](./adr/0021-osm-carto-stroke-painter.md) | `map_image` paints OSM Carto lines, not Bresenham squares |
+| [0022-map-image-geometry-only.md](./adr/0022-map-image-geometry-only.md) | `map_image` is geometry; names stay in `map_text` |
+| [0023-map-image-no-route-overlay.md](./adr/0023-map-image-no-route-overlay.md) | `map_image` omits stop-to-stop transit overlays |
+| [0024-map-image-ways-not-grade-splits.md](./adr/0024-map-image-ways-not-grade-splits.md) | Ways are the road graph; elevation is paint |
+| [0025-map-image-native-node-ways.md](./adr/0025-map-image-native-node-ways.md) | Ways walk native nodes; width is paint |
+| [0026-road-facts-category-first.md](./adr/0026-road-facts-category-first.md) | Native road facts; category first, width never promotes |
 
 ## Guide
 

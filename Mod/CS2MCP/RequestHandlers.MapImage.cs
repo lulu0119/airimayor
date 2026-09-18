@@ -1,12 +1,11 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
-using System.Reflection;
 using CitiesSkylines2Agent.Agent;
 using Game.Simulation;
-using Newtonsoft.Json.Linq;
+using Newtonsoft.Json;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
@@ -14,32 +13,19 @@ using UnityEngine;
 namespace CS2MCP
 {
     /// <summary>
-    /// Undistorted city map rasterized from native ECS geometry, with the
-    /// Carto mod's own export as fallback. The interface takes an optional
-    /// map range (same convention as map_text); the implementation collects
-    /// road, rail, building, and transit geometry in game meters, then draws
-    /// a light cartographic style in-process to PNG. The fallback owns
-    /// explicit Carto options (a default Options exports nothing) and
-    /// deterministic file names. Citywide fallback renders whatever
-    /// projection the player configured. Bounded fallback requests force the
-    /// Game CRS so the requested game range clips directly with no
-    /// projection math.
+    /// Undistorted city map rasterized from native ECS geometry in game
+    /// meters. Optional map range matches map_text; names stay in map_text.
+    /// Citywide by default; a requested extent clips directly.
     /// Read-only: runs on the simulation thread like other perception tools.
     /// Shares the vision switch with screenshot (gated in AgentToolSurface).
-    /// Option shapes below are grounded in Carto's IO/Options.cs,
-    /// IO/ExportResult.cs, IO/IO.cs, IO/GeoJson.cs, Domain/Enums.cs and
-    /// Systems/NetworkSystem.cs (MIT).
     /// </summary>
     public sealed partial class RequestHandlers
     {
         private const int kMapWidth = 1280;
         private const int kMapMaxHeight = 1920;
-        private const int kMapMaxSegments = 60000;
-        private const string kMapFileName = "map_{Feature}";
 
         private BridgeResponse MapImage(BridgeRequest request)
         {
-            DebugPhase("handler-enter");
             if (!TryGetCity(out _, out BridgeResponse cityError))
             {
                 return cityError;
@@ -62,97 +48,38 @@ namespace CS2MCP
             var strokes = new List<MapStroke>();
             var fills = new List<MapPolygon>();
             var collectTimer = Stopwatch.StartNew();
-            bool useNative = TryCollectNativeMapGeometry(
-                    new[] { MapSourceKind.Network, MapSourceKind.Building, MapSourceKind.Route },
+            if (!TryCollectNativeMapGeometry(
                     hasBounds ? xMin : (float?)null,
                     hasBounds ? zMin : (float?)null,
                     hasBounds ? xMax : (float?)null,
                     hasBounds ? zMax : (float?)null,
-                    strokes, fills, out _)
-                && (strokes.Count > 0 || fills.Count > 0);
-            string source = "native";
-            if (!useNative)
+                    strokes, fills, out string collectError))
             {
-                // Carto fallback behind the TEMPORARY incident gate: its export
-                // freezes the game (under diagnosis). The native path above is
-                // unaffected. Remove when the hang is fixed.
-                if (!CitiesSkylines2Agent.Setting.StaticEnableDevelopmentTools)
-                {
-                    return BridgeResponse.Error(BridgeErrorKind.Unavailable,
-                        "map image is temporarily disabled during diagnosis; use map_text");
-                }
-                strokes.Clear();
-                fills.Clear();
-                BridgeResponse cartoError = TryCollectCartoMapGeometry(hasBounds, strokes, fills);
-                if (cartoError != null)
-                {
-                    return cartoError;
-                }
-                source = "carto";
+                return BridgeResponse.Error(BridgeErrorKind.Internal,
+                    "map geometry collection failed"
+                    + (string.IsNullOrEmpty(collectError) ? "" : ": " + collectError));
             }
             collectTimer.Stop();
-            Mod.Log.Info($"map_image ({source}): {strokes.Count} strokes, {fills.Count} footprints" +
+            MapLayering.Result layering = AssignRoadLayers(strokes);
+            JoinDrawnStrokes(strokes);
+            MapFrame frame = hasBounds
+                ? MapFrame.FromBounds(xMin, zMin, xMax, zMax)
+                : MapFrame.FromData(strokes, fills) ?? MapFrame.World();
+            MapScale mapScale = ScaleOf(frame, kMapWidth);
+            Mod.Log.Info($"map_image: {strokes.Count} strokes, {fills.Count} footprints, {mapScale}" +
                 (hasBounds ? $" (extent {xMin},{zMin} to {xMax},{zMax})" : " (citywide)") +
                 $" in {collectTimer.ElapsedMilliseconds}ms");
-            DebugPhase($"collect-done source={source} strokes={strokes.Count} fills={fills.Count}");
-
-            MapLayering.Result layering = AssignRoadLayers(strokes);
-            DebugPhase($"layers-done segments={layering.Segments} pairs={layering.PairChecks} " +
-                $"constraints={layering.Constraints} skipped={layering.SkippedCells}");
-            Mod.Log.Info("[DEBUG-mapex1] layering finished");
-
-            MapFrame frame;
-            if (hasBounds)
-            {
-                // Bounded exports are forced to game meters (see
-                // InvokeCartoExport), so the requested game range clips
-                // directly with no projection math.
-                frame = MapFrame.FromBounds(xMin, zMin, xMax, zMax);
-                MapFrame data = MapFrame.FromData(strokes, fills);
-                if (data == null)
-                {
-                    return BridgeResponse.Error(BridgeErrorKind.Internal,
-                        "vector features carry no usable coordinates");
-                }
-                if (!FrameIsMeters(data))
-                {
-                    return BridgeResponse.Error(BridgeErrorKind.Internal,
-                        "Carto ignored the game-meter projection request; retry citywide or check Carto projection settings");
-                }
-            }
-            else
-            {
-                frame = MapFrame.FromData(strokes, fills);
-                if (frame == null)
-                {
-                    return BridgeResponse.Error(BridgeErrorKind.Internal,
-                        "vector features carry no usable coordinates");
-                }
-            }
 
             Texture2D texture = null;
             try
             {
-                // Water sampling needs game meters: native frames always are,
-                // and bounded fallback frames are forced to the Game CRS
-                // above. Citywide fallback keeps the meter heuristic for
-                // degree/UTM frames, which stay land-only instead of painting
-                // water from wrong coordinates.
-                Func<double, double, bool> isWater =
-                    (useNative || hasBounds || FrameIsMeters(frame)) ? BuildWaterSampler() : null;
-                var rasterTimer = Stopwatch.StartNew();
-                DebugPhase("raster-enter");
-                texture = Rasterize(strokes, fills, frame, isWater, layering.Merges);
-                rasterTimer.Stop();
-                Mod.Log.Info($"[DEBUG-mapex1] raster finished in {rasterTimer.ElapsedMilliseconds}ms");
-                DebugPhase("raster-done");
+                texture = Rasterize(strokes, fills, frame, mapScale, BuildWaterSampler());
                 byte[] png = ImageConversion.EncodeToPNG(texture);
                 if (png == null || png.Length == 0)
                 {
                     return BridgeResponse.Error(BridgeErrorKind.Internal, "map PNG encode failed");
                 }
-                Mod.Log.Info("[DEBUG-mapex1] map_image complete");
-                DebugPhase("complete");
+                DumpMapImage(strokes, fills, frame, mapScale, layering, png);
                 return BridgeResponse.Png(png, ToolPreview.EncodeThumbnail(texture));
             }
             catch (Exception e)
@@ -170,8 +97,9 @@ namespace CS2MCP
         }
 
         /// <summary>
-        /// Grade separation for road strokes (bridges over ground). Features
-        /// without elevation stay on the ground layer and never constrain.
+        /// Grade-separation solver still assigns integer layers inside a
+        /// grade (stacked ramps). Tunnel / ground / bridge order is a
+        /// separate OSM Carto pass.
         /// </summary>
         private static MapLayering.Result AssignRoadLayers(List<MapStroke> strokes)
         {
@@ -203,617 +131,62 @@ namespace CS2MCP
             }
             return result;
         }
-        /// <summary>
-        /// Zero-arg reflection reader for Carto option accessors such as
-        /// GetTMProjectionDefinition. Returns null when the member is
-        /// missing or the call fails; the caller reports the shape.
-        /// </summary>
-        private static object InvokeZeroArg(object target, string name)
+
+        private static void JoinDrawnStrokes(List<MapStroke> strokes)
         {
-            try
+            var pieces = new List<MapStrokeJoin.Piece>(strokes.Count);
+            foreach (MapStroke stroke in strokes)
             {
-                MethodInfo method = target.GetType().GetMethod(
-                    name, BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
-                if (method == null)
+                pieces.Add(new MapStrokeJoin.Piece
                 {
-                    return null;
-                }
-                return method.Invoke(target, null);
+                    Style = (int)stroke.Style,
+                    Layer = stroke.Layer,
+                    WidthM = stroke.WidthM,
+                    Elev = stroke.Elev,
+                    HasElev = stroke.HasElev,
+                    StartNode = stroke.StartNode,
+                    EndNode = stroke.EndNode,
+                    CapStart = stroke.CapStart,
+                    CapEnd = stroke.CapEnd,
+                    X = stroke.X,
+                    Y = stroke.Y,
+                    Rel = stroke.Rel,
+                });
             }
-            catch
+            List<MapStrokeJoin.Piece> joined = MapStrokeJoin.Join(pieces);
+            strokes.Clear();
+            foreach (MapStrokeJoin.Piece piece in joined)
             {
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Layer identity comes from the file names this module constructed
-        /// (kMapFileName expands to map_{System}_{VectorKind}.geojson),
-        /// not from guessing Carto's layout.
-        /// </summary>
-        private static MapLayerKind? ClassifyExportFile(string path)
-        {
-            string name = Path.GetFileName(path).ToLowerInvariant();
-            if (name.Contains("_network_"))
-            {
-                return MapLayerKind.Network;
-            }
-            if (name.Contains("_building_"))
-            {
-                return MapLayerKind.Building;
-            }
-            if (name.Contains("_route_"))
-            {
-                return MapLayerKind.Route;
-            }
-            return null;
-        }
-
-        /// <summary>
-        /// Carto fallback adapter: reflection export, then in-process parse of
-        /// the fresh GeoJSON vectors into the shared stroke/fill lists.
-        /// Returns null on success, else the error response to return.
-        /// </summary>
-        private BridgeResponse TryCollectCartoMapGeometry(bool hasBounds, List<MapStroke> strokes, List<MapPolygon> fills)
-        {
-            List<string> exported;
-            var exportTimer = Stopwatch.StartNew();
-            DebugPhase("export-invoke-enter");
-            BridgeResponse exportError = InvokeCartoExport(out exported, hasBounds);
-            DebugPhase("export-invoke-returned");
-            exportTimer.Stop();
-            Mod.Log.Info($"[DEBUG-mapex1] export finished in {exportTimer.ElapsedMilliseconds}ms");
-            if (exportError != null)
-            {
-                return exportError;
-            }
-
-            var files = new List<string>();
-            foreach (string path in exported)
-            {
-                // Carto names vector output *.json (GeoJSON); accept *.geojson too.
-                if (!string.IsNullOrWhiteSpace(path)
-                    && path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                var stroke = new MapStroke
                 {
-                    files.Add(path);
-                }
+                    Style = (MapStrokeStyle)piece.Style,
+                    Grade = DominantGrade(piece.Rel),
+                    Layer = piece.Layer,
+                    WidthM = piece.WidthM,
+                    Elev = piece.Elev,
+                    HasElev = piece.HasElev,
+                    StartNode = piece.StartNode,
+                    EndNode = piece.EndNode,
+                    CapStart = piece.CapStart,
+                    CapEnd = piece.CapEnd,
+                };
+                stroke.X.AddRange(piece.X);
+                stroke.Y.AddRange(piece.Y);
+                stroke.Rel.AddRange(piece.Rel);
+                strokes.Add(stroke);
             }
-            if (files.Count == 0)
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Internal,
-                    "Carto export wrote no GeoJSON files; enable vector layers in Carto settings and retry");
-            }
-
-            var parseTimer = Stopwatch.StartNew();
-            foreach (string file in files)
-            {
-                MapLayerKind? layer = ClassifyExportFile(file);
-                if (layer == null)
-                {
-                    continue;
-                }
-                try
-                {
-                    ParseVectorFile(file, layer.Value, strokes, fills);
-                }
-                catch (Exception e)
-                {
-                    return BridgeResponse.Error(BridgeErrorKind.Internal,
-                        $"map render rejected '{Path.GetFileName(file)}': {e.GetType().Name}: {e.Message}");
-                }
-            }
-            if (strokes.Count == 0 && fills.Count == 0)
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Internal,
-                    "Carto export contained no renderable LineString/Polygon features");
-            }
-            parseTimer.Stop();
-            Mod.Log.Info($"[DEBUG-mapex1] parse finished in {parseTimer.ElapsedMilliseconds}ms");
-            DebugPhase($"parse-done strokes={strokes.Count} fills={fills.Count}");
-            return null;
         }
 
         /// <summary>
-        /// Returns null on success (files in the out list), else the error
-        /// response to return. Silent export: never pops Carto's completion
-        /// dialog or sound. Options are explicit: a default Options has
-        /// Systems=Unknown and exports nothing. Bounded requests force the
-        /// Game CRS so the requested game range clips directly; citywide
-        /// keeps the player's projection settings.
+        /// OSM Carto density for this PNG, from meters/pixel of the rendered
+        /// frame — not a model-facing zoom argument.
         /// </summary>
-        private static BridgeResponse InvokeCartoExport(out List<string> files, bool gameProjection)
+        private enum MapScale
         {
-            files = new List<string>();
-            Type ioType = null;
-            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                try
-                {
-                    ioType = assembly.GetType("Carto.IO.IO", throwOnError: false, ignoreCase: false);
-                }
-                catch
-                {
-                    ioType = null;
-                }
-                if (ioType != null)
-                {
-                    break;
-                }
-            }
-            if (ioType == null)
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Unavailable,
-                    "Carto mod not found; install it from Paradox Mods to use map_image (screenshot still works)");
-            }
-
-            Assembly carto = ioType.Assembly;
-            Type optionsType = carto.GetType("Carto.IO.Options");
-            Type systemsType = carto.GetType("Carto.IO.System");
-            Type featureType = carto.GetType("Carto.IO.Feature");
-            Type vectorKindType = carto.GetType("Carto.IO.VectorKind");
-            Type fileFormatType = carto.GetType("Carto.IO.FileFormat");
-            Type propertyType = carto.GetType("Carto.IO.Property");
-            if (optionsType == null || systemsType == null || featureType == null
-                || vectorKindType == null || fileFormatType == null || propertyType == null)
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Unavailable,
-                    "installed Carto has an unknown IO shape; update Carto and retry");
-            }
-
-            MethodInfo export = null;
-            foreach (MethodInfo method in ioType.GetMethods(BindingFlags.Public | BindingFlags.Static))
-            {
-                if (!string.Equals(method.Name, "Export", StringComparison.Ordinal))
-                {
-                    continue;
-                }
-                ParameterInfo[] parameters = method.GetParameters();
-                if (parameters.Length == 1 && parameters[0].ParameterType == optionsType)
-                {
-                    export = method;
-                    break;
-                }
-            }
-            if (export == null)
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Unavailable,
-                    "installed Carto has an unknown Export shape (expected Carto.IO.IO.Export(Carto.IO.Options)); " +
-                    "update Carto and retry");
-            }
-
-            object options;
-            try
-            {
-                options = Activator.CreateInstance(optionsType);
-            }
-            catch (Exception e)
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Internal,
-                    $"Carto options construction failed: {e.GetType().Name}: {e.Message}");
-            }
-
-            BridgeResponse optionsError = ConfigureCartoOptions(
-                options, systemsType, featureType, vectorKindType, fileFormatType, propertyType);
-            if (optionsError != null)
-            {
-                return optionsError;
-            }
-
-            if (gameProjection)
-            {
-                BridgeResponse projectionError = ForceGameTargetProjection(options, carto);
-                if (projectionError != null)
-                {
-                    return projectionError;
-                }
-            }
-
-            object result;
-            try
-            {
-                result = export.Invoke(null, new[] { options });
-            }
-            catch (TargetInvocationException e)
-            {
-                Exception inner = e.InnerException ?? e;
-                return BridgeResponse.Error(BridgeErrorKind.Internal,
-                    $"Carto export threw: {inner.GetType().Name}: {inner.Message}");
-            }
-            catch (Exception e)
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Internal,
-                    $"Carto export failed: {e.GetType().Name}: {e.Message}");
-            }
-            if (result == null)
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Internal, "Carto export returned no result");
-            }
-
-            bool success = ReadBoolProperty(result, "Success");
-            if (!success)
-            {
-                string message = ReadStringProperty(result, "ErrorMessage");
-                return BridgeResponse.Error(BridgeErrorKind.Internal,
-                    "Carto export failed" + (string.IsNullOrEmpty(message) ? "" : ": " + message));
-            }
-            foreach (string path in ReadStringArrayProperty(result, "FilesWritten"))
-            {
-                files.Add(path);
-            }
-            return null;
-        }
-
-        /// <summary>
-        /// Forces a bounded export into the Game CRS so the requested game
-        /// range clips directly with no projection math. The installed
-        /// Carto's Shift/Apply shapes differ from the mirrored older ones,
-        /// and its own code never calls them, so converting with Carto's
-        /// Transform is not available; forcing the target CRS removes that
-        /// dependency. Only used for bounded requests: citywide keeps the
-        /// player's projection settings.
-        /// </summary>
-        private static BridgeResponse ForceGameTargetProjection(object options, Assembly carto)
-        {
-            Type crsType = carto.GetType("Carto.Geodata.CRS");
-            object game = crsType != null ? ParseEnum(crsType, "Game") : null;
-            object targetDef = InvokeZeroArg(options, "GetTMProjectionDefinition");
-            if (game == null || targetDef == null)
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Unavailable,
-                    "installed Carto has an unknown projection shape; update Carto and retry (citywide still works)");
-            }
-            if (!TrySetProperty(options, "TargetProjection", game)
-                || !TrySetProperty(options, "TargetProjectionDefinition", targetDef))
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Unavailable,
-                    "installed Carto rejected the game-meter projection; update Carto and retry (citywide still works)");
-            }
-            return null;
-        }
-
-        /// <summary>
-        /// Explicit export request: GeoJSON centerlines for roads, tracks and
-        /// transit routes plus building footprints, into this mod's own cache
-        /// directory so a triggered export never clobbers the player's manual
-        /// exports. Category selects the cartographic hierarchy; Volume rides
-        /// along as the next overlay input.
-        /// </summary>
-        private static BridgeResponse ConfigureCartoOptions(
-            object options,
-            Type systemsType,
-            Type featureType,
-            Type vectorKindType,
-            Type fileFormatType,
-            Type propertyType)
-        {
-            if (!TrySetEnumFlags(options, "Systems", systemsType,
-                new[] { "Network", "Building", "Route" }))
-            {
-                return UnknownOptionsShape("Systems");
-            }
-            if (!TrySetEnumFlags(options, "Features", featureType,
-                new[] { "Road", "Track", "Building", "RoutePassenger" }))
-            {
-                return UnknownOptionsShape("Features");
-            }
-            if (!TrySetEnumValue(options, "VectorFormat", fileFormatType, "GeoJSON"))
-            {
-                return UnknownOptionsShape("VectorFormat");
-            }
-
-            object vectorKinds = NewDictionary(systemsType, vectorKindType);
-            object centerline = CombineEnumFlags(vectorKindType, new[] { "Centerline" });
-            object boundary = CombineEnumFlags(vectorKindType, new[] { "Boundary" });
-            if (vectorKinds == null || centerline == null || boundary == null)
-            {
-                return UnknownOptionsShape("VectorKinds");
-            }
-            DictionaryAdd(vectorKinds,
-                ParseEnum(systemsType, "Network"), centerline);
-            DictionaryAdd(vectorKinds,
-                ParseEnum(systemsType, "Building"), boundary);
-            DictionaryAdd(vectorKinds,
-                ParseEnum(systemsType, "Route"), centerline);
-            if (!TrySetProperty(options, "VectorKinds", vectorKinds))
-            {
-                return UnknownOptionsShape("VectorKinds");
-            }
-
-            object networkProperties = NewHashSet(propertyType);
-            object emptyProperties = NewHashSet(propertyType);
-            if (networkProperties == null || emptyProperties == null)
-            {
-                return UnknownOptionsShape("Properties");
-            }
-            HashSetAdd(networkProperties, ParseEnum(propertyType, "Category"));
-            HashSetAdd(networkProperties, ParseEnum(propertyType, "Volume"));
-            HashSetAdd(networkProperties, ParseEnum(propertyType, "Elevation"));
-            object properties = NewDictionary(systemsType, networkProperties.GetType());
-            if (properties == null)
-            {
-                return UnknownOptionsShape("Properties");
-            }
-            DictionaryAdd(properties,
-                ParseEnum(systemsType, "Network"), networkProperties);
-            DictionaryAdd(properties,
-                ParseEnum(systemsType, "Building"), emptyProperties);
-            DictionaryAdd(properties,
-                ParseEnum(systemsType, "Route"), emptyProperties);
-            if (!TrySetProperty(options, "Properties", properties))
-            {
-                return UnknownOptionsShape("Properties");
-            }
-
-            // Category rendering reads one Display flag by direct index;
-            // without it the export throws inside Carto.
-            object display = NewDisplayFlag(systemsType, propertyType);
-            if (display == null || !TrySetProperty(options, "Display", display))
-            {
-                return UnknownOptionsShape("Display");
-            }
-
-            if (!TrySetString(options, "FileName", kMapFileName))
-            {
-                return UnknownOptionsShape("FileName");
-            }
-            if (!TrySetString(options, "CustomDirectory",
-                Path.Combine(ModPaths.RuntimeDataDirectory, "carto")))
-            {
-                return UnknownOptionsShape("CustomDirectory");
-            }
-            SetSilentFlag(options, "CompletionDialog", false);
-            SetSilentFlag(options, "CompletionSound", false);
-            // Fail closed: a model tool must never pop a modal dialog or play
-            // sounds. If the silent flags cannot be confirmed, refuse instead
-            // of exporting with unknown side effects.
-            if (!ConfirmSilent(options, "CompletionDialog") || !ConfirmSilent(options, "CompletionSound"))
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Unavailable,
-                    "Carto completion side effects cannot be silenced on the installed version; update Carto and retry");
-            }
-            return null;
-        }
-
-        private static bool ConfirmSilent(object options, string name)
-        {
-            try
-            {
-                PropertyInfo property = options.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
-                return property != null && property.CanRead && property.PropertyType == typeof(bool)
-                    && !(bool)property.GetValue(options, null);
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private static object NewDisplayFlag(Type systemsType, Type propertyType)
-        {
-            try
-            {
-                Type tupleType = typeof(ValueTuple<,>).MakeGenericType(propertyType, systemsType);
-                Type dictionaryType = typeof(Dictionary<,>).MakeGenericType(tupleType, typeof(bool));
-                object display = Activator.CreateInstance(dictionaryType);
-                object category = ParseEnum(propertyType, "Category");
-                object network = ParseEnum(systemsType, "Network");
-                if (category == null || network == null)
-                {
-                    return null;
-                }
-                object key = Activator.CreateInstance(tupleType, category, network);
-                dictionaryType.GetMethod("Add").Invoke(display, new[] { key, (object)false });
-                return display;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private static BridgeResponse UnknownOptionsShape(string member)
-        {
-            return BridgeResponse.Error(BridgeErrorKind.Unavailable,
-                $"installed Carto has an unknown Options shape (member '{member}'); update Carto and retry");
-        }
-
-        private static object ParseEnum(Type enumType, string name)
-        {
-            try
-            {
-                return Enum.Parse(enumType, name, ignoreCase: false);
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private static object CombineEnumFlags(Type enumType, string[] names)
-        {
-            long combined = 0;
-            foreach (string name in names)
-            {
-                object value = ParseEnum(enumType, name);
-                if (value == null)
-                {
-                    return null;
-                }
-                combined |= Convert.ToInt64(value);
-            }
-            try
-            {
-                return Enum.ToObject(enumType, combined);
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private static bool TrySetEnumFlags(object target, string name, Type enumType, string[] flags)
-        {
-            object value = CombineEnumFlags(enumType, flags);
-            return value != null && TrySetProperty(target, name, value);
-        }
-
-        private static bool TrySetEnumValue(object target, string name, Type enumType, string value)
-        {
-            object parsed = ParseEnum(enumType, value);
-            return parsed != null && TrySetProperty(target, name, parsed);
-        }
-
-        private static bool TrySetString(object target, string name, string value)
-        {
-            PropertyInfo property = target.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
-            if (property == null || !property.CanWrite || property.PropertyType != typeof(string))
-            {
-                return false;
-            }
-            property.SetValue(target, value, null);
-            return true;
-        }
-
-        private static bool TrySetProperty(object target, string name, object value)
-        {
-            PropertyInfo property = target.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
-            if (property == null || !property.CanWrite)
-            {
-                return false;
-            }
-            if (value != null && !property.PropertyType.IsAssignableFrom(value.GetType()))
-            {
-                return false;
-            }
-            property.SetValue(target, value, null);
-            return true;
-        }
-
-        private static object NewDictionary(Type keyType, Type valueType)
-        {
-            try
-            {
-                Type dictionaryType = typeof(Dictionary<,>).MakeGenericType(keyType, valueType);
-                return Activator.CreateInstance(dictionaryType);
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private static void DictionaryAdd(object dictionary, object key, object value)
-        {
-            if (dictionary == null || key == null || value == null)
-            {
-                return;
-            }
-            try
-            {
-                dictionary.GetType().GetMethod("Add").Invoke(dictionary, new[] { key, value });
-            }
-            catch
-            {
-                // Leave the dictionary short; the shape check on set rejects it.
-            }
-        }
-
-        private static object NewHashSet(Type elementType)
-        {
-            try
-            {
-                Type setType = typeof(HashSet<>).MakeGenericType(elementType);
-                return Activator.CreateInstance(setType);
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private static void HashSetAdd(object set, object value)
-        {
-            if (set == null || value == null)
-            {
-                return;
-            }
-            try
-            {
-                set.GetType().GetMethod("Add").Invoke(set, new[] { value });
-            }
-            catch
-            {
-                // Leave the set short; Carto exports fewer attributes.
-            }
-        }
-
-        private static void SetSilentFlag(object options, string name, bool value)
-        {
-            PropertyInfo property = options.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
-            if (property != null && property.CanWrite && property.PropertyType == typeof(bool))
-            {
-                property.SetValue(options, value, null);
-            }
-        }
-
-        private static bool ReadBoolProperty(object target, string name)
-        {
-            PropertyInfo property = target.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
-            if (property != null && property.CanRead && property.PropertyType == typeof(bool))
-            {
-                return (bool)property.GetValue(target, null);
-            }
-            return false;
-        }
-
-        private static string ReadStringProperty(object target, string name)
-        {
-            PropertyInfo property = target.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
-            if (property != null && property.CanRead && property.PropertyType == typeof(string))
-            {
-                return (string)property.GetValue(target, null);
-            }
-            return null;
-        }
-
-        private static List<string> ReadStringArrayProperty(object target, string name)
-        {
-            var paths = new List<string>();
-            PropertyInfo property = target.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
-            if (property == null || !property.CanRead)
-            {
-                return paths;
-            }
-            try
-            {
-                object value = property.GetValue(target, null);
-                if (value is string[] array)
-                {
-                    paths.AddRange(array);
-                }
-                else if (value is IEnumerable enumerable)
-                {
-                    foreach (object item in enumerable)
-                    {
-                        if (item is string path && !string.IsNullOrWhiteSpace(path))
-                        {
-                            paths.Add(path);
-                        }
-                    }
-                }
-            }
-            catch
-            {
-                // No file list; the caller reports no output.
-            }
-            return paths;
-        }
-
-        private enum MapLayerKind
-        {
-            Network,
-            Building,
-            Route,
+            Region,
+            City,
+            District,
+            Site,
         }
 
         private enum MapStrokeStyle
@@ -822,21 +195,49 @@ namespace CS2MCP
             Medium,
             Large,
             Highway,
-            Transit,
+            Rail,
+            Metro,
+            Tram,
+        }
+
+        private enum MapGrade
+        {
+            Tunnel,
+            Ground,
+            Bridge,
+        }
+
+        private enum MapFillKind
+        {
+            Building,
+            Residential,
+            Commercial,
+            Industrial,
+            Office,
+            Park,
+            Service,
         }
 
         private sealed class MapStroke
         {
             public MapStrokeStyle Style;
+            public MapGrade Grade;
+            public double WidthM;
             public double Elev = double.NaN;
             public bool HasElev;
             public int Layer;
+            public long StartNode;
+            public long EndNode;
+            public bool CapStart = true;
+            public bool CapEnd = true;
             public readonly List<double> X = new List<double>();
             public readonly List<double> Y = new List<double>();
+            public readonly List<float> Rel = new List<float>();
         }
 
         private sealed class MapPolygon
         {
+            public MapFillKind Kind;
             public readonly List<double> X = new List<double>();
             public readonly List<double> Y = new List<double>();
         }
@@ -867,232 +268,22 @@ namespace CS2MCP
             {
                 return new MapFrame { MinX = xMin, MinY = zMin, MaxX = xMax, MaxY = zMax, Clip = true };
             }
-        }
 
-        /// <summary>
-        /// TEMPORARY diagnosis sink (remove with [DEBUG-mapex1]): synchronous
-        /// write-through phase log that survives a process kill, unlike the
-        /// buffered Player.log and timeline tails.
-        /// </summary>
-        private static void DebugPhase(string phase)
-        {
-            try
+            public static MapFrame World()
             {
-                string directory = ModPaths.RuntimeDataDirectory;
-                Directory.CreateDirectory(Path.Combine(directory, "logs"));
-                string path = Path.Combine(directory, "logs", "map-export-debug.log");
-                using (var stream = new FileStream(
-                    path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite,
-                    4096, FileOptions.WriteThrough))
-                using (var writer = new StreamWriter(stream))
+                return new MapFrame
                 {
-                    writer.WriteLine(DateTime.UtcNow.ToString("o") + " " + phase);
-                    writer.Flush();
-                    stream.Flush(true);
-                }
-            }
-            catch
-            {
-                // Diagnosis must never break the tool.
-            }
-        }
-
-        /// <summary>
-        /// Game-meter exports span thousands with coordinates inside the
-        /// world bounds; degree exports span fractions, UTM sits near
-        /// 500000 easting. Only meter frames may sample native water.
-        /// </summary>
-        private static bool FrameIsMeters(MapFrame frame)
-        {
-            double span = Math.Max(frame.MaxX - frame.MinX, frame.MaxY - frame.MinY);
-            double magnitude = Math.Max(
-                Math.Max(Math.Abs(frame.MinX), Math.Abs(frame.MaxX)),
-                Math.Max(Math.Abs(frame.MinY), Math.Abs(frame.MaxY)));
-            return span > 1000.0 && magnitude < 30000.0;
-        }
-
-        private static void ParseVectorFile(
-            string path, MapLayerKind layer, List<MapStroke> strokes, List<MapPolygon> fills)
-        {
-            JObject document;
-            using (StreamReader reader = new StreamReader(path))
-            using (Newtonsoft.Json.JsonTextReader json = new Newtonsoft.Json.JsonTextReader(reader))
-            {
-                document = JObject.Load(json);
-            }
-            JToken features = document["features"];
-            if (features == null || features.Type != JTokenType.Array)
-            {
-                throw new InvalidDataException("missing GeoJSON 'features' array");
-            }
-            foreach (JToken feature in features)
-            {
-                JToken geometry = feature["geometry"];
-                if (geometry == null)
-                {
-                    continue;
-                }
-                string type = (geometry["type"] ?? "").ToString();
-                JToken coordinates = geometry["coordinates"];
-                if (coordinates == null)
-                {
-                    continue;
-                }
-                if (layer == MapLayerKind.Building)
-                {
-                    if (string.Equals(type, "Polygon", StringComparison.OrdinalIgnoreCase))
-                    {
-                        AddPolygon(coordinates, fills);
-                    }
-                    else if (string.Equals(type, "MultiPolygon", StringComparison.OrdinalIgnoreCase))
-                    {
-                        foreach (JToken polygon in coordinates)
-                        {
-                            AddPolygon(polygon, fills);
-                        }
-                    }
-                    continue;
-                }
-                MapStrokeStyle style = layer == MapLayerKind.Route
-                    ? MapStrokeStyle.Transit
-                    : ClassifyNetworkStroke(feature);
-                double elev;
-                bool hasElev = ReadElevation(feature, out elev);
-                if (string.Equals(type, "LineString", StringComparison.OrdinalIgnoreCase))
-                {
-                    AddStroke(coordinates, style, elev, hasElev, strokes);
-                }
-                else if (string.Equals(type, "MultiLineString", StringComparison.OrdinalIgnoreCase))
-                {
-                    foreach (JToken line in coordinates)
-                    {
-                        AddStroke(line, style, elev, hasElev, strokes);
-                    }
-                }
-            }
-        }
-
-        /// <summary>Ordered first match, mirroring road_class upstream.</summary>
-        private static MapStrokeStyle ClassifyNetworkStroke(JToken feature)
-        {
-            string category = "";
-            JToken properties = feature["properties"];
-            if (properties != null && properties.Type == JTokenType.Object)
-            {
-                foreach (JProperty property in properties.Children<JProperty>())
-                {
-                    if (string.Equals(property.Name, "Category", StringComparison.OrdinalIgnoreCase))
-                    {
-                        category = property.Value != null ? property.Value.ToString() : "";
-                        break;
-                    }
-                }
-            }
-            if (category.IndexOf("Highway", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return MapStrokeStyle.Highway;
-            }
-            if (category.IndexOf("Large", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return MapStrokeStyle.Large;
-            }
-            if (category.IndexOf("Medium", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return MapStrokeStyle.Medium;
-            }
-            if (category.IndexOf("Tram", StringComparison.OrdinalIgnoreCase) >= 0
-                || category.IndexOf("Subway", StringComparison.OrdinalIgnoreCase) >= 0
-                || category.IndexOf("Train", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return MapStrokeStyle.Transit;
-            }
-            return MapStrokeStyle.Minor;
-        }
-
-        /// <summary>Per-feature average elevation in meters, when exported.</summary>
-        private static bool ReadElevation(JToken feature, out double elev)
-        {
-            elev = double.NaN;
-            JToken properties = feature["properties"];
-            if (properties == null || properties.Type != JTokenType.Object)
-            {
-                return false;
-            }
-            foreach (JProperty property in properties.Children<JProperty>())
-            {
-                if (!string.Equals(property.Name, "Elevation", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-                try
-                {
-                    elev = property.Value.ToObject<double>();
-                    return !(double.IsNaN(elev) || double.IsInfinity(elev));
-                }
-                catch
-                {
-                    return false;
-                }
-            }
-            return false;
-        }
-
-        private static void AddStroke(
-            JToken positions, MapStrokeStyle style, double elev, bool hasElev, List<MapStroke> strokes)
-        {
-            if (positions == null || positions.Type != JTokenType.Array)
-            {
-                return;
-            }
-            var stroke = new MapStroke { Style = style, Elev = elev, HasElev = hasElev };
-            foreach (JToken position in positions)
-            {
-                var pair = position as JArray;
-                if (pair == null || pair.Count < 2)
-                {
-                    continue;
-                }
-                stroke.X.Add(pair[0].ToObject<double>());
-                stroke.Y.Add(pair[1].ToObject<double>());
-            }
-            if (stroke.X.Count >= 2)
-            {
-                strokes.Add(stroke);
-            }
-        }
-
-        private static void AddPolygon(JToken rings, List<MapPolygon> fills)
-        {
-            if (rings == null || rings.Type != JTokenType.Array)
-            {
-                return;
-            }
-            // Outer ring only; holes stay uncut in v1 (overview use).
-            JToken outer = rings.First;
-            if (outer == null || outer.Type != JTokenType.Array)
-            {
-                return;
-            }
-            var polygon = new MapPolygon();
-            foreach (JToken position in outer)
-            {
-                var pair = position as JArray;
-                if (pair == null || pair.Count < 2)
-                {
-                    continue;
-                }
-                polygon.X.Add(pair[0].ToObject<double>());
-                polygon.Y.Add(pair[1].ToObject<double>());
-            }
-            if (polygon.X.Count >= 3)
-            {
-                fills.Add(polygon);
+                    MinX = -kWorldHalfSize,
+                    MinY = -kWorldHalfSize,
+                    MaxX = kWorldHalfSize,
+                    MaxY = kWorldHalfSize,
+                };
             }
         }
 
         private static Texture2D Rasterize(
             List<MapStroke> strokes, List<MapPolygon> fills, MapFrame frame,
-            Func<double, double, bool> isWater, List<MapLayering.Merge> merges)
+            MapScale mapScale, Func<double, double, bool> isWater)
         {
             double spanX = frame.MaxX - frame.MinX;
             double spanY = frame.MaxY - frame.MinY;
@@ -1102,23 +293,77 @@ namespace CS2MCP
             double offsetX = (width - spanX * scale) * 0.5;
             double offsetY = (height - spanY * scale) * 0.5;
 
-            var texture = new Texture2D(width, height, TextureFormat.RGB24, false);
-            PaintBackground(texture, frame, scale, offsetX, offsetY, height, isWater);
-
-            var buildingFill = new Color(0.77f, 0.73f, 0.64f);
+            Color[] pixels = PaintBackground(width, height, frame, scale, offsetX, offsetY, isWater);
             foreach (MapPolygon polygon in fills)
             {
-                FillPolygon(texture, polygon, frame, scale, offsetX, offsetY, height, buildingFill);
+                if (polygon.Kind != MapFillKind.Park || !ShowsFill(polygon.Kind, mapScale))
+                {
+                    continue;
+                }
+                FillPolygon(pixels, width, height, polygon, frame, scale, offsetX, offsetY, ColorForFill(polygon.Kind));
             }
-
-            int drawn = DrawStrokes(texture, strokes, merges, frame, scale, offsetX, offsetY, height, width);
-            if (frame.Clip && drawn == 0)
+            foreach (MapPolygon polygon in fills)
             {
-                UnityEngine.Object.Destroy(texture);
-                throw new InvalidDataException("requested extent contains no exported features");
+                if (polygon.Kind == MapFillKind.Park || !ShowsFill(polygon.Kind, mapScale))
+                {
+                    continue;
+                }
+                FillPolygon(pixels, width, height, polygon, frame, scale, offsetX, offsetY, ColorForFill(polygon.Kind));
             }
+            DrawStrokes(pixels, width, height, strokes, frame, mapScale, scale, offsetX, offsetY);
+
+            var texture = new Texture2D(width, height, TextureFormat.RGB24, false);
+            texture.SetPixels(pixels);
             texture.Apply();
             return texture;
+        }
+
+        private static MapScale ScaleOf(MapFrame frame, int pixelWidth)
+        {
+            double metersPerPixel = (frame.MaxX - frame.MinX) / Math.Max(1, pixelWidth);
+            if (metersPerPixel >= 10.0)
+            {
+                return MapScale.Region;
+            }
+            if (metersPerPixel >= 3.5)
+            {
+                return MapScale.City;
+            }
+            if (metersPerPixel >= 1.0)
+            {
+                return MapScale.District;
+            }
+            return MapScale.Site;
+        }
+
+        private static bool ShowsStroke(MapStrokeStyle style, MapScale mapScale)
+        {
+            switch (style)
+            {
+                case MapStrokeStyle.Minor:
+                    return mapScale >= MapScale.District;
+                case MapStrokeStyle.Medium:
+                case MapStrokeStyle.Tram:
+                    return mapScale >= MapScale.City;
+                default:
+                    return true;
+            }
+        }
+
+        private static bool ShowsFill(MapFillKind kind, MapScale mapScale)
+        {
+            switch (kind)
+            {
+                case MapFillKind.Park:
+                    return true;
+                case MapFillKind.Residential:
+                case MapFillKind.Commercial:
+                case MapFillKind.Industrial:
+                case MapFillKind.Office:
+                    return mapScale >= MapScale.City;
+                default:
+                    return mapScale >= MapScale.District;
+            }
         }
 
         /// <summary>
@@ -1151,14 +396,13 @@ namespace CS2MCP
             }
         }
 
-        private static void PaintBackground(
-            Texture2D texture, MapFrame frame, double scale, double offsetX, double offsetY, int height,
+        private static Color[] PaintBackground(
+            int width, int height, MapFrame frame, double scale, double offsetX, double offsetY,
             Func<double, double, bool> isWater)
         {
-            int width = texture.width;
             var land = new Color(0.95f, 0.94f, 0.91f);
             var water = new Color(0.66f, 0.81f, 0.89f);
-            Color[] pixels = new Color[width * height];
+            var pixels = new Color[width * height];
             for (int i = 0; i < pixels.Length; i++)
             {
                 pixels[i] = land;
@@ -1172,15 +416,7 @@ namespace CS2MCP
                     {
                         double worldX = frame.MinX + (col + 0.5 - offsetX) / scale;
                         double worldY = frame.MinY + (height - 1 - row + 0.5 - offsetY) / scale;
-                        bool wet;
-                        try
-                        {
-                            wet = isWater(worldX, worldY);
-                        }
-                        catch
-                        {
-                            wet = false;
-                        }
+                        bool wet = isWater(worldX, worldY);
                         if (!wet)
                         {
                             continue;
@@ -1195,124 +431,326 @@ namespace CS2MCP
                     }
                 }
             }
-            texture.SetPixels(pixels);
+            return pixels;
         }
 
         /// <summary>
-        /// Layer by layer, ground first: each layer gets a casing pass then
-        /// a color pass, so bridges stack over ground roads. Merges redraw
-        /// lower branch ends on top, flowing into the main road.
+        /// Connectivity first: every way is painted as ground. Off-ground
+        /// spans are a tube overlay on the same vertices. Layer > 0 ways are
+        /// full tubes so stacked ramps stay countable.
         /// </summary>
-        private static int DrawStrokes(
-            Texture2D texture, List<MapStroke> strokes, List<MapLayering.Merge> merges,
-            MapFrame frame, double scale, double offsetX, double offsetY, int height, int width)
+        private static void DrawStrokes(
+            Color[] pixels, int width, int height, List<MapStroke> strokes,
+            MapFrame frame, MapScale mapScale, double scale, double offsetX, double offsetY)
         {
+            DrawSpans(pixels, width, height, strokes, frame, mapScale, scale, offsetX, offsetY, MapGrade.Tunnel, tube: false);
+            DrawWaysBatched(pixels, width, height, strokes, frame, mapScale, scale, offsetX, offsetY, layer: 0);
             int top = 0;
             foreach (MapStroke stroke in strokes)
             {
-                if (stroke.Layer > top) top = stroke.Layer;
-            }
-            int drawn = 0;
-            for (int layer = 0; layer <= top; layer++)
-            {
-                foreach (MapStroke stroke in strokes)
+                if (stroke.Layer > top)
                 {
-                    if (stroke.Layer != layer)
-                    {
-                        continue;
-                    }
-                    StrokePaint paint = PaintForStyle(stroke.Style);
-                    if (paint.Casing)
-                    {
-                        drawn += DrawStroke(texture, stroke, frame, scale, offsetX, offsetY,
-                            height, width, paint.CasingColor, paint.Radius + 1);
-                    }
-                }
-                foreach (MapStroke stroke in strokes)
-                {
-                    if (stroke.Layer != layer)
-                    {
-                        continue;
-                    }
-                    StrokePaint paint = PaintForStyle(stroke.Style);
-                    drawn += DrawStroke(texture, stroke, frame, scale, offsetX, offsetY,
-                        height, width, paint.Color, paint.Radius);
+                    top = stroke.Layer;
                 }
             }
-            foreach (MapLayering.Merge merge in merges)
+            for (int layer = 1; layer <= top; layer++)
             {
-                if (merge.Feature < 0 || merge.Feature >= strokes.Count)
+                DrawWaysTubed(pixels, width, height, strokes, frame, mapScale, scale, offsetX, offsetY, layer);
+            }
+            DrawSpans(pixels, width, height, strokes, frame, mapScale, scale, offsetX, offsetY, MapGrade.Bridge, tube: true);
+        }
+
+        private static void DrawWaysBatched(
+            Color[] pixels, int width, int height, List<MapStroke> strokes,
+            MapFrame frame, MapScale mapScale, double scale, double offsetX, double offsetY, int layer)
+        {
+            foreach (MapStroke stroke in strokes)
+            {
+                if (!ShowsStroke(stroke.Style, mapScale) || stroke.Layer != layer)
                 {
                     continue;
                 }
-                MapStroke stroke = strokes[merge.Feature];
-                StrokePaint paint = PaintForStyle(stroke.Style);
-                int x0 = (int)Math.Round((merge.EndX - frame.MinX) * scale + offsetX);
-                int y0 = height - 1 - (int)Math.Round((merge.EndY - frame.MinY) * scale + offsetY);
-                int x1 = (int)Math.Round((merge.AdjX - frame.MinX) * scale + offsetX);
-                int y1 = height - 1 - (int)Math.Round((merge.AdjY - frame.MinY) * scale + offsetY);
-                if (frame.Clip && IsOutsideFrame(x0, y0, x1, y1, width, height))
+                ForEachSpan(stroke, (from, to, grade) =>
+                {
+                    if (grade == MapGrade.Tunnel)
+                    {
+                        return;
+                    }
+                    bool capStart = from == 0 && stroke.CapStart;
+                    bool capEnd = to == stroke.X.Count - 1 && stroke.CapEnd;
+                    DrawRoadCasing(pixels, width, height, stroke, frame, scale, offsetX, offsetY, MapGrade.Ground, false, from, to, capStart, capEnd);
+                });
+            }
+            foreach (MapStroke stroke in strokes)
+            {
+                if (!ShowsStroke(stroke.Style, mapScale) || stroke.Layer != layer)
                 {
                     continue;
                 }
-                DrawLine(texture, x0, y0, x1, y1, paint.Radius, paint.Color);
-                drawn++;
+                ForEachSpan(stroke, (from, to, grade) =>
+                {
+                    if (grade == MapGrade.Tunnel)
+                    {
+                        return;
+                    }
+                    bool capStart = from == 0 && stroke.CapStart;
+                    bool capEnd = to == stroke.X.Count - 1 && stroke.CapEnd;
+                    DrawRoadFill(pixels, width, height, stroke, frame, mapScale, scale, offsetX, offsetY, MapGrade.Ground, from, to, capStart, capEnd);
+                });
             }
-            return drawn;
+        }
+
+        private static void DrawWaysTubed(
+            Color[] pixels, int width, int height, List<MapStroke> strokes,
+            MapFrame frame, MapScale mapScale, double scale, double offsetX, double offsetY, int layer)
+        {
+            foreach (MapStroke stroke in strokes)
+            {
+                if (!ShowsStroke(stroke.Style, mapScale) || stroke.Layer != layer)
+                {
+                    continue;
+                }
+                DrawRoadCasing(pixels, width, height, stroke, frame, scale, offsetX, offsetY, MapGrade.Bridge, true, 0, stroke.X.Count - 1, stroke.CapStart, stroke.CapEnd);
+                DrawRoadFill(pixels, width, height, stroke, frame, mapScale, scale, offsetX, offsetY, MapGrade.Bridge, 0, stroke.X.Count - 1, stroke.CapStart, stroke.CapEnd);
+            }
+        }
+
+        private static void DrawSpans(
+            Color[] pixels, int width, int height, List<MapStroke> strokes,
+            MapFrame frame, MapScale mapScale, double scale, double offsetX, double offsetY,
+            MapGrade grade, bool tube)
+        {
+            foreach (MapStroke stroke in strokes)
+            {
+                if (!ShowsStroke(stroke.Style, mapScale))
+                {
+                    continue;
+                }
+                if (tube && stroke.Layer > 0)
+                {
+                    continue;
+                }
+                int last = stroke.X.Count - 1;
+                ForEachSpan(stroke, (from, to, spanGrade) =>
+                {
+                    if (spanGrade != grade)
+                    {
+                        return;
+                    }
+                    bool capStart = from == 0 && stroke.CapStart;
+                    bool capEnd = to == last && stroke.CapEnd;
+                    DrawRoadCasing(pixels, width, height, stroke, frame, scale, offsetX, offsetY, grade, tube, from, to, capStart, capEnd);
+                    DrawRoadFill(pixels, width, height, stroke, frame, mapScale, scale, offsetX, offsetY, grade, from, to, capStart, capEnd);
+                });
+            }
+        }
+
+        private static void ForEachSpan(MapStroke stroke, Action<int, int, MapGrade> emit)
+        {
+            int last = stroke.X.Count - 1;
+            if (last < 1)
+            {
+                return;
+            }
+            int i = 0;
+            while (i < last)
+            {
+                MapGrade spanGrade = SegmentGrade(stroke, i);
+                int j = i + 1;
+                while (j < last && SegmentGrade(stroke, j) == spanGrade)
+                {
+                    j++;
+                }
+                emit(i, j, spanGrade);
+                i = j;
+            }
+        }
+
+        private static MapGrade SegmentGrade(MapStroke stroke, int i)
+        {
+            if (stroke.Rel.Count != stroke.X.Count || i + 1 >= stroke.Rel.Count)
+            {
+                return stroke.Grade;
+            }
+            return GradeFromRelative(0.5f * (stroke.Rel[i] + stroke.Rel[i + 1]));
+        }
+
+        private static readonly Color BridgeShell = new Color(0.08f, 0.08f, 0.08f);
+        private static readonly Color TunnelCasing = new Color(0.55f, 0.55f, 0.55f);
+        private static readonly Color RailDash = Color.white;
+
+        private static void DrawRoadCasing(
+            Color[] pixels, int width, int height, MapStroke stroke,
+            MapFrame frame, double scale, double offsetX, double offsetY,
+            MapGrade grade, bool shell, int from, int to, bool capStart, bool capEnd)
+        {
+            StrokePaint paint = PaintForGrade(stroke.Style, grade);
+            int radius = StrokePixelRadius(stroke.WidthM, scale, stroke.Style);
+            if (radius < 1)
+            {
+                return;
+            }
+            if (shell && radius >= 2)
+            {
+                DrawStroke(pixels, width, height, stroke, frame, scale, offsetX, offsetY,
+                    BridgeShell, radius + 2, 0, 0, from, to, capStart, capEnd);
+            }
+            if (!paint.Casing)
+            {
+                return;
+            }
+            bool tunnel = grade == MapGrade.Tunnel;
+            DrawStroke(pixels, width, height, stroke, frame, scale, offsetX, offsetY,
+                tunnel ? TunnelCasing : paint.CasingColor, radius + 1, tunnel ? 4 : 0, tunnel ? 2 : 0,
+                from, to, capStart, capEnd);
+        }
+
+        private static void DrawRoadFill(
+            Color[] pixels, int width, int height, MapStroke stroke,
+            MapFrame frame, MapScale mapScale, double scale, double offsetX, double offsetY,
+            MapGrade grade, int from, int to, bool capStart, bool capEnd)
+        {
+            StrokePaint paint = PaintForGrade(stroke.Style, grade);
+            int radius = StrokePixelRadius(stroke.WidthM, scale, stroke.Style);
+            DrawStroke(pixels, width, height, stroke, frame, scale, offsetX, offsetY,
+                paint.Color, radius, 0, 0, from, to, capStart, capEnd);
+            if (stroke.Style == MapStrokeStyle.Rail && mapScale >= MapScale.City)
+            {
+                DrawStroke(pixels, width, height, stroke, frame, scale, offsetX, offsetY,
+                    RailDash, Math.Max(0, radius - 1), 8, 8, from, to, capStart, capEnd);
+            }
         }
 
         private struct StrokePaint
         {
             public Color Color;
-            public int Radius;
             public bool Casing;
             public Color CasingColor;
         }
 
-        /// <summary>Palette mirrors cs2-carto-citymap style.py.</summary>
+        /// <summary>
+        /// Palette only. Stroke width comes from world meters at raster time.
+        /// </summary>
         private static StrokePaint PaintForStyle(MapStrokeStyle style)
         {
             switch (style)
             {
                 case MapStrokeStyle.Highway:
-                    return new StrokePaint { Color = new Color(0.95f, 0.58f, 0f), Radius = 1, Casing = true, CasingColor = new Color(0.75f, 0.44f, 0.07f) };
+                    return new StrokePaint { Color = new Color(0.910f, 0.573f, 0.635f), Casing = true, CasingColor = new Color(0.863f, 0.165f, 0.404f) };
                 case MapStrokeStyle.Large:
-                    return new StrokePaint { Color = new Color(0.98f, 0.76f, 0.31f), Radius = 1, Casing = true, CasingColor = new Color(0.85f, 0.62f, 0.17f) };
+                    return new StrokePaint { Color = new Color(0.98f, 0.76f, 0.31f), Casing = true, CasingColor = new Color(0.85f, 0.62f, 0.17f) };
                 case MapStrokeStyle.Medium:
-                    return new StrokePaint { Color = new Color(0.99f, 0.91f, 0.66f), Radius = 1, Casing = true, CasingColor = new Color(0.84f, 0.77f, 0.49f) };
-                case MapStrokeStyle.Transit:
-                    return new StrokePaint { Color = new Color(0.25f, 0.45f, 0.79f), Radius = 0 };
+                    return new StrokePaint { Color = new Color(0.99f, 0.91f, 0.66f), Casing = true, CasingColor = new Color(0.84f, 0.77f, 0.49f) };
+                case MapStrokeStyle.Rail:
+                    return new StrokePaint { Color = new Color(0.439f, 0.439f, 0.439f) };
+                case MapStrokeStyle.Metro:
+                    return new StrokePaint { Color = new Color(0.14f, 0.14f, 0.14f), Casing = true, CasingColor = new Color(0.04f, 0.04f, 0.04f) };
+                case MapStrokeStyle.Tram:
+                    return new StrokePaint { Color = new Color(0.42f, 0.42f, 0.42f), Casing = true, CasingColor = new Color(0.18f, 0.18f, 0.18f) };
                 default:
-                    return new StrokePaint { Color = new Color(1f, 1f, 1f), Radius = 0, Casing = true, CasingColor = new Color(0.80f, 0.78f, 0.73f) };
+                    return new StrokePaint { Color = new Color(1f, 1f, 1f), Casing = true, CasingColor = new Color(0.80f, 0.78f, 0.73f) };
             }
         }
 
-        private static int DrawStroke(
-            Texture2D texture, MapStroke stroke,
-            MapFrame frame, double scale, double offsetX, double offsetY,
-            int height, int width, Color color, int radius)
+        private static StrokePaint PaintForGrade(MapStrokeStyle style, MapGrade grade)
         {
-            int stride = 1;
-            int segments = Math.Max(0, stroke.X.Count - 1);
-            if (!frame.Clip && segments > kMapMaxSegments)
+            StrokePaint paint = PaintForStyle(style);
+            if (grade == MapGrade.Tunnel)
             {
-                stride = segments / kMapMaxSegments + 1;
+                paint.Color = Color.Lerp(paint.Color, Color.white, 0.12f);
             }
-            int drawn = 0;
-            for (int i = 0; i + 1 < stroke.X.Count; i += stride)
+            return paint;
+        }
+
+        private static Color ColorForFill(MapFillKind kind)
+        {
+            switch (kind)
             {
+                case MapFillKind.Park:
+                    return new Color(0.78f, 0.95f, 0.80f);
+                case MapFillKind.Residential:
+                    return new Color(0.88f, 0.87f, 0.87f);
+                case MapFillKind.Commercial:
+                    return new Color(0.95f, 0.85f, 0.85f);
+                case MapFillKind.Industrial:
+                    return new Color(0.92f, 0.86f, 0.91f);
+                case MapFillKind.Office:
+                    return new Color(0.93f, 0.88f, 0.82f);
+                case MapFillKind.Service:
+                    return new Color(0.82f, 0.80f, 0.76f);
+                default:
+                    return new Color(0.77f, 0.73f, 0.64f);
+            }
+        }
+
+        /// <summary>
+        /// Half-width in pixels: native meters at this scale, but never below
+        /// the OSM Carto class floor so citywide highways stay a few pixels
+        /// and rails keep a casing over water.
+        /// </summary>
+        private static int StrokePixelRadius(double widthM, double scale, MapStrokeStyle style)
+        {
+            int fromMeters = 0;
+            if (widthM > 0.0 && scale > 0.0)
+            {
+                fromMeters = Math.Max(0, (int)Math.Round(widthM * scale * 0.5));
+            }
+            return Math.Max(fromMeters, MinStrokeRadius(style));
+        }
+
+        /// <summary>
+        /// OSM Carto line-width at z12 is ~3.5px for motorway/primary (our
+        /// radius 1). Railway is thin but still a drawn line, not zero.
+        /// </summary>
+        private static int MinStrokeRadius(MapStrokeStyle style)
+        {
+            switch (style)
+            {
+                case MapStrokeStyle.Highway:
+                case MapStrokeStyle.Large:
+                case MapStrokeStyle.Medium:
+                case MapStrokeStyle.Rail:
+                case MapStrokeStyle.Metro:
+                case MapStrokeStyle.Tram:
+                    return 1;
+                default:
+                    return 0;
+            }
+        }
+
+        private static void DrawStroke(
+            Color[] pixels, int width, int height, MapStroke stroke,
+            MapFrame frame, double scale, double offsetX, double offsetY,
+            Color color, int radius, int dash, int gap, int from, int to, bool capStart, bool capEnd)
+        {
+            if (to <= from)
+            {
+                return;
+            }
+            int stride = 1;
+            int along = 0;
+            for (int i = from; i < to; i += stride)
+            {
+                int j = Math.Min(i + stride, to);
                 int x0 = (int)Math.Round((stroke.X[i] - frame.MinX) * scale + offsetX);
                 int y0 = height - 1 - (int)Math.Round((stroke.Y[i] - frame.MinY) * scale + offsetY);
-                int x1 = (int)Math.Round((stroke.X[i + 1] - frame.MinX) * scale + offsetX);
-                int y1 = height - 1 - (int)Math.Round((stroke.Y[i + 1] - frame.MinY) * scale + offsetY);
+                int x1 = (int)Math.Round((stroke.X[j] - frame.MinX) * scale + offsetX);
+                int y1 = height - 1 - (int)Math.Round((stroke.Y[j] - frame.MinY) * scale + offsetY);
                 if (frame.Clip && IsOutsideFrame(x0, y0, x1, y1, width, height))
                 {
                     continue;
                 }
-                DrawLine(texture, x0, y0, x1, y1, radius, color);
-                drawn++;
+                bool start = i == from ? capStart : true;
+                bool end = j == to ? capEnd : true;
+                if (dash > 0)
+                {
+                    along = MapStrokeRaster.Dash(pixels, width, height, x0, y0, x1, y1, radius, color, dash, gap, along, start, end);
+                }
+                else
+                {
+                    MapStrokeRaster.Line(pixels, width, height, x0, y0, x1, y1, radius, color, start, end);
+                }
             }
-            return drawn;
         }
 
         private static bool IsOutsideFrame(int x0, int y0, int x1, int y1, int width, int height)
@@ -1356,56 +794,16 @@ namespace CS2MCP
             if (y > maxY) maxY = y;
         }
 
-        private static void Plot(Texture2D texture, int x, int y, int radius, Color color)
-        {
-            for (int dy = -radius; dy <= radius; dy++)
-            {
-                for (int dx = -radius; dx <= radius; dx++)
-                {
-                    int px = x + dx;
-                    int py = y + dy;
-                    if (px >= 0 && py >= 0 && px < texture.width && py < texture.height)
-                    {
-                        texture.SetPixel(px, py, color);
-                    }
-                }
-            }
-        }
-
-        private static void DrawLine(Texture2D texture, int x0, int y0, int x1, int y1, int radius, Color color)
-        {
-            int dx = Math.Abs(x1 - x0);
-            int dy = Math.Abs(y1 - y0);
-            int sx = x0 < x1 ? 1 : -1;
-            int sy = y0 < y1 ? 1 : -1;
-            int error = dx - dy;
-            while (true)
-            {
-                Plot(texture, x0, y0, radius, color);
-                if (x0 == x1 && y0 == y1)
-                {
-                    break;
-                }
-                int doubled = 2 * error;
-                if (doubled > -dy)
-                {
-                    error -= dy;
-                    x0 += sx;
-                }
-                if (doubled < dx)
-                {
-                    error += dx;
-                    y0 += sy;
-                }
-            }
-        }
-
         private static void FillPolygon(
-            Texture2D texture, MapPolygon polygon,
-            MapFrame frame, double scale, double offsetX, double offsetY, int height,
+            Color[] pixels, int width, int height, MapPolygon polygon,
+            MapFrame frame, double scale, double offsetX, double offsetY,
             Color color)
         {
             int n = polygon.X.Count;
+            if (n < 3)
+            {
+                return;
+            }
             var xs = new int[n];
             var ys = new int[n];
             for (int i = 0; i < n; i++)
@@ -1421,7 +819,7 @@ namespace CS2MCP
                 if (ys[i] > rowMax) rowMax = ys[i];
             }
             rowMin = Math.Max(rowMin, 0);
-            rowMax = Math.Min(rowMax, texture.height - 1);
+            rowMax = Math.Min(rowMax, height - 1);
             var crossings = new List<int>(8);
             for (int row = rowMin; row <= rowMax; row++)
             {
@@ -1441,13 +839,157 @@ namespace CS2MCP
                 for (int k = 0; k + 1 < crossings.Count; k += 2)
                 {
                     int from = Math.Max(crossings[k], 0);
-                    int to = Math.Min(crossings[k + 1], texture.width - 1);
+                    int to = Math.Min(crossings[k + 1], width - 1);
+                    int rowStart = row * width;
                     for (int x = from; x <= to; x++)
                     {
-                        texture.SetPixel(x, row, color);
+                        pixels[rowStart + x] = color;
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Diagnostic overlay for the next live run: game-meter GeoJSON of
+        /// what the painter saw, plus the PNG, next to Carto's Network export.
+        /// Write failures never fail the tool.
+        /// </summary>
+        private static void DumpMapImage(
+            List<MapStroke> strokes, List<MapPolygon> fills,
+            MapFrame frame, MapScale mapScale, MapLayering.Result layering, byte[] png)
+        {
+            try
+            {
+                ModPaths.EnsureDirectories();
+                string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture);
+                string directory = Path.Combine(ModPaths.MapImageDirectory, stamp);
+                Directory.CreateDirectory(directory);
+                File.WriteAllBytes(Path.Combine(directory, "map.png"), png);
+                File.WriteAllText(Path.Combine(directory, "meta.json"), BuildMapMeta(frame, mapScale, strokes, fills, layering));
+                File.WriteAllText(Path.Combine(directory, "source.geojson"), BuildMapSourceGeoJson(strokes, fills));
+                Mod.Log.Info($"map_image dump {directory}");
+            }
+            catch (Exception e)
+            {
+                Mod.Log.Warn($"map_image dump failed: {e.GetType().Name}: {e.Message}");
+            }
+        }
+
+        private static string BuildMapMeta(
+            MapFrame frame, MapScale mapScale, List<MapStroke> strokes, List<MapPolygon> fills,
+            MapLayering.Result layering)
+        {
+            using (var writer = new StringWriter(CultureInfo.InvariantCulture))
+            using (var json = new JsonTextWriter(writer))
+            {
+                json.WriteStartObject();
+                json.WritePropertyName("minX"); json.WriteValue(frame.MinX);
+                json.WritePropertyName("minY"); json.WriteValue(frame.MinY);
+                json.WritePropertyName("maxX"); json.WriteValue(frame.MaxX);
+                json.WritePropertyName("maxY"); json.WriteValue(frame.MaxY);
+                json.WritePropertyName("clip"); json.WriteValue(frame.Clip);
+                json.WritePropertyName("mapScale"); json.WriteValue(mapScale.ToString());
+                json.WritePropertyName("strokes"); json.WriteValue(strokes.Count);
+                json.WritePropertyName("fills"); json.WriteValue(fills.Count);
+                json.WritePropertyName("converged"); json.WriteValue(layering.Converged);
+                json.WritePropertyName("constraints"); json.WriteValue(layering.Constraints);
+                json.WritePropertyName("skippedCells"); json.WriteValue(layering.SkippedCells);
+                json.WriteEndObject();
+                return writer.ToString();
+            }
+        }
+
+        private static string BuildMapSourceGeoJson(
+            List<MapStroke> strokes, List<MapPolygon> fills)
+        {
+            using (var writer = new StringWriter(CultureInfo.InvariantCulture))
+            using (var json = new JsonTextWriter(writer))
+            {
+                json.WriteStartObject();
+                json.WritePropertyName("type"); json.WriteValue("FeatureCollection");
+                json.WritePropertyName("features");
+                json.WriteStartArray();
+                foreach (MapStroke stroke in strokes)
+                {
+                    if (stroke.X.Count < 2)
+                    {
+                        continue;
+                    }
+                    json.WriteStartObject();
+                    json.WritePropertyName("type"); json.WriteValue("Feature");
+                    json.WritePropertyName("properties");
+                    json.WriteStartObject();
+                    json.WritePropertyName("kind"); json.WriteValue("stroke");
+                    json.WritePropertyName("style"); json.WriteValue(stroke.Style.ToString());
+                    json.WritePropertyName("grade"); json.WriteValue(stroke.Grade.ToString());
+                    json.WritePropertyName("layer"); json.WriteValue(stroke.Layer);
+                    json.WritePropertyName("widthM"); json.WriteValue(stroke.WidthM);
+                    json.WritePropertyName("startNode"); json.WriteValue(stroke.StartNode);
+                    json.WritePropertyName("endNode"); json.WriteValue(stroke.EndNode);
+                    json.WritePropertyName("elev");
+                    if (stroke.HasElev)
+                    {
+                        json.WriteValue(stroke.Elev);
+                    }
+                    else
+                    {
+                        json.WriteNull();
+                    }
+                    json.WriteEndObject();
+                    json.WritePropertyName("geometry");
+                    json.WriteStartObject();
+                    json.WritePropertyName("type"); json.WriteValue("LineString");
+                    json.WritePropertyName("coordinates");
+                    json.WriteStartArray();
+                    for (int i = 0; i < stroke.X.Count; i++)
+                    {
+                        WriteCoord(json, stroke.X[i], stroke.Y[i]);
+                    }
+                    json.WriteEndArray();
+                    json.WriteEndObject();
+                    json.WriteEndObject();
+                }
+                foreach (MapPolygon polygon in fills)
+                {
+                    if (polygon.X.Count < 3)
+                    {
+                        continue;
+                    }
+                    json.WriteStartObject();
+                    json.WritePropertyName("type"); json.WriteValue("Feature");
+                    json.WritePropertyName("properties");
+                    json.WriteStartObject();
+                    json.WritePropertyName("kind"); json.WriteValue("fill");
+                    json.WritePropertyName("fillKind"); json.WriteValue(polygon.Kind.ToString());
+                    json.WriteEndObject();
+                    json.WritePropertyName("geometry");
+                    json.WriteStartObject();
+                    json.WritePropertyName("type"); json.WriteValue("Polygon");
+                    json.WritePropertyName("coordinates");
+                    json.WriteStartArray();
+                    json.WriteStartArray();
+                    for (int i = 0; i < polygon.X.Count; i++)
+                    {
+                        WriteCoord(json, polygon.X[i], polygon.Y[i]);
+                    }
+                    WriteCoord(json, polygon.X[0], polygon.Y[0]);
+                    json.WriteEndArray();
+                    json.WriteEndArray();
+                    json.WriteEndObject();
+                    json.WriteEndObject();
+                }
+                json.WriteEndArray();
+                json.WriteEndObject();
+                return writer.ToString();
+            }
+        }
+
+        private static void WriteCoord(JsonTextWriter json, double x, double y)
+        {
+            json.WriteStartArray();
+            json.WriteValue(x);
+            json.WriteValue(y);
+            json.WriteEndArray();
         }
     }
 }

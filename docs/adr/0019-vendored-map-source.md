@@ -1,6 +1,6 @@
 # Vendored map source, not Carto reflection
 
-Status: accepted
+Status: native source still stands. “Rasterizer reused unchanged” superseded by [0021](./0021-osm-carto-stroke-painter.md). Stop-to-stop `Route` overlay superseded by [0023](./0023-map-image-no-route-overlay.md).
 
 `map_image` grows a native `MapSource` module (`Mod/CS2MCP/RequestHandlers.MapSource.cs`)
 that emits `MapStroke`/`MapPolygon` directly in game meters. It serves first

@@ -39,6 +39,11 @@ namespace CS2MCP
         public int StartDegree;
         public int EndDegree;
         public string Prefab;
+        public string RoadClass;
+        public int CarLanes = -1;
+        public double SpeedKmh = -1;
+        public bool HighwayRules;
+        public bool Zonable;
         public readonly List<MapTextPoint> Points = new List<MapTextPoint>();
     }
 
@@ -737,6 +742,15 @@ namespace CS2MCP
             var line = new StringBuilder();
             line.Append("  road R").Append(road.EntityIndex).Append('v').Append(road.EntityVersion)
                 .Append(" class=").Append(SafeToken(road.Prefab))
+                .Append(" roadClass=").Append(SafeToken(road.RoadClass))
+                .Append(" lanes=").Append(road.CarLanes >= 0
+                    ? road.CarLanes.ToString(CultureInfo.InvariantCulture)
+                    : "-")
+                .Append(" speedKmh=").Append(road.SpeedKmh >= 0
+                    ? F((float)road.SpeedKmh, "0.#")
+                    : "-")
+                .Append(" highwayRules=").Append(Bool(road.HighwayRules))
+                .Append(" zonable=").Append(Bool(road.Zonable))
                 .Append(" from=").Append(startId).Append(" to=").Append(endId).Append(" line=[");
             for (int i = 0; i < points.Count; i++)
             {
