@@ -6,7 +6,7 @@ Current inventory. Vocabulary: [CONTEXT.md](../CONTEXT.md). Decisions: [adr/](./
 
 Code still missing.
 
-None.
+- Native map source (`RequestHandlers.MapSource.cs`): skeleton plus `Network`/`Building` collectors exist but are not yet serving `map_image`; `Route` curve port and `Form`/`Elevation` port are missing, Carto reflection stays the serving adapter.
 
 ## Awaiting live acceptance
 

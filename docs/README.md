@@ -24,6 +24,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0016-map-layering-port.md](./adr/0016-map-layering-port.md) | Port road layering; defer zoning fills and labels |
 | [0017-map-text-map-image-split.md](./adr/0017-map-text-map-image-split.md) | map_text and map_image stay separate tools |
 | [0018-bounded-map-game-crs.md](./adr/0018-bounded-map-game-crs.md) | Bounded `map_image` forces the Game CRS; no Transform mirroring |
+| [0019-vendored-map-source.md](./adr/0019-vendored-map-source.md) | Vendored native map source; Carto reflection stays until acceptance |
 
 ## Guide
 
