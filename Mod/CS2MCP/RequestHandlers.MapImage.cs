@@ -19,9 +19,10 @@ namespace CS2MCP
     /// an optional map range (same convention as map_text); the
     /// implementation owns explicit Carto options (a default Options exports
     /// nothing), deterministic file names, a light cartographic style, and
-    /// in-process rasterization of the returned files to PNG. Requested
-    /// ranges are converted with Carto's own Transform, the exact function
-    /// its writers use, so clipping lands in the right place.
+    /// in-process rasterization of the returned files to PNG. Citywide
+    /// renders whatever projection the player configured. Bounded requests
+    /// force the Game CRS so the requested game range clips directly with
+    /// no projection math.
     /// Read-only: runs on the simulation thread like other perception tools.
     /// Shares the vision switch with screenshot (gated in AgentToolSurface).
     /// Option shapes below are grounded in Carto's IO/Options.cs,
@@ -66,10 +67,9 @@ namespace CS2MCP
             }
 
             List<string> exported;
-            CartoProjector projector;
             var exportTimer = Stopwatch.StartNew();
             DebugPhase("export-invoke-enter");
-            BridgeResponse exportError = InvokeCartoExport(out exported, out projector);
+            BridgeResponse exportError = InvokeCartoExport(out exported, hasBounds);
             DebugPhase("export-invoke-returned");
             exportTimer.Stop();
             Mod.Log.Info($"[DEBUG-mapex1] export finished in {exportTimer.ElapsedMilliseconds}ms");
@@ -133,16 +133,20 @@ namespace CS2MCP
             MapFrame frame;
             if (hasBounds)
             {
-                if (projector == null)
-                {
-                    return BridgeResponse.Error(BridgeErrorKind.Unavailable,
-                        "bounded map_image needs Carto's Transform API; update Carto and retry (citywide still works)");
-                }
-                frame = ProjectExtent(projector, xMin, zMin, xMax, zMax);
-                if (frame == null)
+                // Bounded exports are forced to game meters (see
+                // InvokeCartoExport), so the requested game range clips
+                // directly with no projection math.
+                frame = MapFrame.FromBounds(xMin, zMin, xMax, zMax);
+                MapFrame data = MapFrame.FromData(strokes, fills);
+                if (data == null)
                 {
                     return BridgeResponse.Error(BridgeErrorKind.Internal,
-                        "requested extent could not be projected; retry citywide or check Carto projection settings");
+                        "vector features carry no usable coordinates");
+                }
+                if (!FrameIsMeters(data))
+                {
+                    return BridgeResponse.Error(BridgeErrorKind.Internal,
+                        "Carto ignored the game-meter projection request; retry citywide or check Carto projection settings");
                 }
             }
             else
@@ -158,10 +162,13 @@ namespace CS2MCP
             Texture2D texture = null;
             try
             {
-                // Water sampling needs game meters: degree/UTM frames stay
-                // land-only instead of painting water from wrong coordinates.
+                // Water sampling needs game meters: bounded frames are forced
+                // to the Game CRS above, so they are always game meters.
+                // Citywide keeps the meter heuristic for degree/UTM frames,
+                // which stay land-only instead of painting water from wrong
+                // coordinates.
                 Func<double, double, bool> isWater =
-                    FrameIsMeters(frame) ? BuildWaterSampler() : null;
+                    (hasBounds || FrameIsMeters(frame)) ? BuildWaterSampler() : null;
                 var rasterTimer = Stopwatch.StartNew();
                 DebugPhase("raster-enter");
                 texture = Rasterize(strokes, fills, frame, isWater, layering.Merges);
@@ -226,150 +233,10 @@ namespace CS2MCP
             return result;
         }
         /// <summary>
-        /// Game XZ to export-CRS projector, replicating exactly what Carto's
-        /// writers do (center shift, then Transform.Apply). No CRS math lives
-        /// here: the installed Carto's own function does the conversion, so
-        /// clipping lands in the right place under any projection settings.
+        /// Zero-arg reflection reader for Carto option accessors such as
+        /// GetTMProjectionDefinition. Returns null when the member is
+        /// missing or the call fails; the caller reports the shape.
         /// </summary>
-        private sealed class CartoProjector
-        {
-            private readonly object m_Center;
-            private readonly MethodInfo m_Shift;
-            private readonly MethodInfo m_Apply;
-            private readonly object m_SourceCrs;
-            private readonly object m_SourceDef;
-            private readonly object m_TargetCrs;
-            private readonly object m_TargetDef;
-            private readonly FieldInfo m_FieldX;
-            private readonly FieldInfo m_FieldY;
-
-            public CartoProjector(
-                object center, MethodInfo shift, MethodInfo apply,
-                object sourceCrs, object sourceDef, object targetCrs, object targetDef,
-                FieldInfo fieldX, FieldInfo fieldY)
-            {
-                m_Center = center;
-                m_Shift = shift;
-                m_Apply = apply;
-                m_SourceCrs = sourceCrs;
-                m_SourceDef = sourceDef;
-                m_TargetCrs = targetCrs;
-                m_TargetDef = targetDef;
-                m_FieldX = fieldX;
-                m_FieldY = fieldY;
-            }
-
-            public bool TryProject(double x, double z, out double px, out double py)
-            {
-                px = 0.0;
-                py = 0.0;
-                try
-                {
-                    object shifted = m_Shift.Invoke(m_Center, new object[] { x, 0.0, z });
-                    object result = m_Apply.Invoke(null, new object[]
-                    {
-                        shifted, m_SourceCrs, m_TargetCrs, m_SourceDef, m_TargetDef,
-                    });
-                    double rx = (double)m_FieldX.GetValue(result);
-                    double ry = (double)m_FieldY.GetValue(result);
-                    if (double.IsNaN(rx) || double.IsNaN(ry)
-                        || double.IsInfinity(rx) || double.IsInfinity(ry)
-                        || rx == double.MaxValue || ry == double.MaxValue)
-                    {
-                        return false;
-                    }
-                    px = rx;
-                    py = ry;
-                    return true;
-                }
-                catch
-                {
-                    return false;
-                }
-            }
-        }
-
-        private static bool TryBuildCartoProjector(
-            object options, Type optionsType, Assembly carto, out CartoProjector projector, out string reason)
-        {
-            projector = null;
-            reason = "unknown Carto Transform shape";
-            Type coordType = carto.GetType("Carto.Geodata.Coord");
-            Type crsType = carto.GetType("Carto.Geodata.CRS");
-            Type transformType = carto.GetType("Carto.Geodata.Transform");
-            Type projDefType = carto.GetType("Carto.Geodata.ProjectionDefinition")
-                ?? carto.GetType("Carto.IO.ProjectionDefinition");
-            if (coordType == null || crsType == null || transformType == null || projDefType == null)
-            {
-                return false;
-            }
-
-            MethodInfo shift = null;
-            foreach (MethodInfo method in coordType.GetMethods(BindingFlags.Public | BindingFlags.Instance))
-            {
-                if (!string.Equals(method.Name, "Shift", StringComparison.Ordinal))
-                {
-                    continue;
-                }
-                ParameterInfo[] parameters = method.GetParameters();
-                if (parameters.Length == 3
-                    && parameters[0].ParameterType == typeof(double)
-                    && parameters[1].ParameterType == typeof(double)
-                    && parameters[2].ParameterType == typeof(double))
-                {
-                    shift = method;
-                    break;
-                }
-            }
-            MethodInfo apply = null;
-            foreach (MethodInfo method in transformType.GetMethods(BindingFlags.Public | BindingFlags.Static))
-            {
-                if (!string.Equals(method.Name, "Apply", StringComparison.Ordinal))
-                {
-                    continue;
-                }
-                ParameterInfo[] parameters = method.GetParameters();
-                if (parameters.Length == 5
-                    && parameters[0].ParameterType == coordType
-                    && parameters[1].ParameterType == crsType
-                    && parameters[2].ParameterType == crsType
-                    && parameters[3].ParameterType == projDefType
-                    && parameters[4].ParameterType == projDefType)
-                {
-                    apply = method;
-                    break;
-                }
-            }
-            FieldInfo fieldX = coordType.GetField("x", BindingFlags.Public | BindingFlags.Instance);
-            FieldInfo fieldY = coordType.GetField("y", BindingFlags.Public | BindingFlags.Instance);
-            if (shift == null || apply == null || fieldX == null || fieldY == null
-                || fieldX.FieldType != typeof(double) || fieldY.FieldType != typeof(double))
-            {
-                return false;
-            }
-
-            object center = InvokeZeroArg(options, "GetTMCoord");
-            object sourceCrs = InvokeZeroArg(options, "GetTMProjection");
-            object sourceDef = InvokeZeroArg(options, "GetTMProjectionDefinition");
-            if (center == null || sourceCrs == null || sourceDef == null
-                || sourceCrs.GetType() != crsType)
-            {
-                reason = "unknown Carto projection members on Options";
-                return false;
-            }
-            object targetCrs;
-            object targetDef;
-            if (!TryGetTargetProjection(options, optionsType, carto, out targetCrs, out targetDef))
-            {
-                reason = "unknown Carto target projection lookup";
-                return false;
-            }
-            projector = new CartoProjector(
-                center, shift, apply, sourceCrs, sourceDef, targetCrs, targetDef, fieldX, fieldY);
-            reason = null;
-            return true;
-        }
-
         private static object InvokeZeroArg(object target, string name)
         {
             try
@@ -386,64 +253,6 @@ namespace CS2MCP
             {
                 return null;
             }
-        }
-
-        private static bool TryGetTargetProjection(
-            object options, Type optionsType, Assembly carto, out object targetCrs, out object targetDef)
-        {
-            targetCrs = null;
-            targetDef = null;
-            try
-            {
-                Type ioUtils = carto.GetType("Carto.Utils.IOUtils");
-                if (ioUtils != null)
-                {
-                    foreach (MethodInfo method in ioUtils.GetMethods(BindingFlags.Public | BindingFlags.Static))
-                    {
-                        if (!string.Equals(method.Name, "GetTargetProjections", StringComparison.Ordinal))
-                        {
-                            continue;
-                        }
-                        ParameterInfo[] parameters = method.GetParameters();
-                        if (parameters.Length != 3 || parameters[0].ParameterType != optionsType)
-                        {
-                            continue;
-                        }
-                        var args = new object[] { options, null, null };
-                        method.Invoke(null, args);
-                        if (args[1] != null && args[2] != null)
-                        {
-                            targetCrs = args[1];
-                            targetDef = args[2];
-                            return true;
-                        }
-                    }
-                }
-            }
-            catch
-            {
-                // Fall through to the raw properties below.
-            }
-            targetCrs = ReadMemberObject(options, "TargetProjection");
-            targetDef = ReadMemberObject(options, "TargetProjectionDefinition");
-            return targetCrs != null && targetDef != null;
-        }
-
-        private static object ReadMemberObject(object target, string name)
-        {
-            try
-            {
-                PropertyInfo property = target.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
-                if (property != null && property.CanRead)
-                {
-                    return property.GetValue(target, null);
-                }
-            }
-            catch
-            {
-                // Unknown member; reported by the caller.
-            }
-            return null;
         }
 
         /// <summary>
@@ -473,12 +282,13 @@ namespace CS2MCP
         /// Returns null on success (files in the out list), else the error
         /// response to return. Silent export: never pops Carto's completion
         /// dialog or sound. Options are explicit: a default Options has
-        /// Systems=Unknown and exports nothing.
+        /// Systems=Unknown and exports nothing. Bounded requests force the
+        /// Game CRS so the requested game range clips directly; citywide
+        /// keeps the player's projection settings.
         /// </summary>
-        private static BridgeResponse InvokeCartoExport(out List<string> files, out CartoProjector projector)
+        private static BridgeResponse InvokeCartoExport(out List<string> files, bool gameProjection)
         {
             files = new List<string>();
-            projector = null;
             Type ioType = null;
             foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
@@ -554,15 +364,13 @@ namespace CS2MCP
                 return optionsError;
             }
 
-            CartoProjector built;
-            string projectorReason;
-            if (TryBuildCartoProjector(options, optionsType, carto, out built, out projectorReason))
+            if (gameProjection)
             {
-                projector = built;
-            }
-            else
-            {
-                Mod.Log.Warn("map_image: bounded extents unavailable (" + projectorReason + ")");
+                BridgeResponse projectionError = ForceGameTargetProjection(options, carto);
+                if (projectionError != null)
+                {
+                    return projectionError;
+                }
             }
 
             object result;
@@ -596,6 +404,34 @@ namespace CS2MCP
             foreach (string path in ReadStringArrayProperty(result, "FilesWritten"))
             {
                 files.Add(path);
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Forces a bounded export into the Game CRS so the requested game
+        /// range clips directly with no projection math. The installed
+        /// Carto's Shift/Apply shapes differ from the mirrored older ones,
+        /// and its own code never calls them, so converting with Carto's
+        /// Transform is not available; forcing the target CRS removes that
+        /// dependency. Only used for bounded requests: citywide keeps the
+        /// player's projection settings.
+        /// </summary>
+        private static BridgeResponse ForceGameTargetProjection(object options, Assembly carto)
+        {
+            Type crsType = carto.GetType("Carto.Geodata.CRS");
+            object game = crsType != null ? ParseEnum(crsType, "Game") : null;
+            object targetDef = InvokeZeroArg(options, "GetTMProjectionDefinition");
+            if (game == null || targetDef == null)
+            {
+                return BridgeResponse.Error(BridgeErrorKind.Unavailable,
+                    "installed Carto has an unknown projection shape; update Carto and retry (citywide still works)");
+            }
+            if (!TrySetProperty(options, "TargetProjection", game)
+                || !TrySetProperty(options, "TargetProjectionDefinition", targetDef))
+            {
+                return BridgeResponse.Error(BridgeErrorKind.Unavailable,
+                    "installed Carto rejected the game-meter projection; update Carto and retry (citywide still works)");
             }
             return null;
         }
@@ -991,6 +827,11 @@ namespace CS2MCP
                 }
                 return new MapFrame { MinX = minX, MinY = minY, MaxX = maxX, MaxY = maxY };
             }
+
+            public static MapFrame FromBounds(float xMin, float zMin, float xMax, float zMax)
+            {
+                return new MapFrame { MinX = xMin, MinY = zMin, MaxX = xMax, MaxY = zMax, Clip = true };
+            }
         }
 
         /// <summary>
@@ -1033,39 +874,6 @@ namespace CS2MCP
                 Math.Max(Math.Abs(frame.MinX), Math.Abs(frame.MaxX)),
                 Math.Max(Math.Abs(frame.MinY), Math.Abs(frame.MaxY)));
             return span > 1000.0 && magnitude < 30000.0;
-        }
-
-        /// <summary>
-        /// Converts a requested game range to the export CRS with Carto's own
-        /// function. Four corners because projections rotate slightly.
-        /// </summary>
-        private static MapFrame ProjectExtent(
-            CartoProjector projector, float xMin, float zMin, float xMax, float zMax)
-        {
-            double minX = double.PositiveInfinity;
-            double minY = double.PositiveInfinity;
-            double maxX = double.NegativeInfinity;
-            double maxY = double.NegativeInfinity;
-            double[] xs = { xMin, xMin, xMax, xMax };
-            double[] zs = { zMin, zMax, zMin, zMax };
-            for (int i = 0; i < 4; i++)
-            {
-                double px;
-                double py;
-                if (!projector.TryProject(xs[i], zs[i], out px, out py))
-                {
-                    return null;
-                }
-                if (px < minX) minX = px;
-                if (py < minY) minY = py;
-                if (px > maxX) maxX = px;
-                if (py > maxY) maxY = py;
-            }
-            if (!(maxX > minX) || !(maxY > minY))
-            {
-                return null;
-            }
-            return new MapFrame { MinX = minX, MinY = minY, MaxX = maxX, MaxY = maxY, Clip = true };
         }
 
         private static void ParseVectorFile(
