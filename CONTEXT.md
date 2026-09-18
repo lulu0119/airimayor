@@ -14,9 +14,9 @@ _Avoid_: MCP client, external agent process, apeira
 The tools and text the model is allowed to call or see.
 _Avoid_: HTTP route, backend handler, catalog row (those may exist without being model-facing)
 
-**Mayor skill**:
-The playbook baked into the system prompt (city building, utility networks, transit lines).
-_Avoid_: a lazy skill tool, engineering skills under `.agents/` or `~/.agents/`
+**Mayor playbook**:
+The city-building playbook baked into the system prompt (city building, utility networks, transit lines).
+_Avoid_: engineering skills under `.agents/` or `~/.agents/`
 
 **Traffic governance**:
 The mayor's congestion loop over existing tools: wait plus fresh reads plus topology QA, `list_networks` ranked by congestion or traffic volume, existing road writes, then `wait_simulation` and re-measure.
