@@ -2,6 +2,8 @@ using System;
 using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 
@@ -62,7 +64,7 @@ namespace CitiesSkylines2Agent.Agent
                 {
                     return;
                 }
-                if (!(JsonNode.Parse(message.Request.Content.ToString()) is JsonObject body))
+                if (!(TryReadBody(message.Request.Content) is JsonObject body))
                 {
                     return;
                 }
@@ -76,6 +78,24 @@ namespace CitiesSkylines2Agent.Agent
             catch
             {
                 // The request path must never break because of echo injection.
+            }
+        }
+
+        /// <summary>
+        /// Reads the serialized request JSON. <c>BinaryContent.ToString()</c>
+        /// returns the type name, not the payload, so the bytes must be copied
+        /// out explicitly. Returns null when the body is missing or not JSON.
+        /// </summary>
+        internal static JsonObject TryReadBody(BinaryContent content)
+        {
+            if (content == null)
+            {
+                return null;
+            }
+            using (var stream = new MemoryStream())
+            {
+                content.WriteTo(stream);
+                return JsonNode.Parse(Encoding.UTF8.GetString(stream.ToArray())) as JsonObject;
             }
         }
     }

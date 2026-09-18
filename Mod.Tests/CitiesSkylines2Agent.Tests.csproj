@@ -10,6 +10,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.AI" Version="10.8.3" />
+    <PackageReference Include="System.ClientModel" Version="1.14.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4">
@@ -28,6 +30,7 @@
     <Compile Include="..\Mod\CS2MCP\TypedNetworkMath.cs" Link="Production\TypedNetworkMath.cs" />
     <Compile Include="..\Mod\CS2MCP\SimWaitResult.cs" Link="Production\SimWaitResult.cs" />
     <Compile Include="..\Mod\Agent\ReasoningEchoMatcher.cs" Link="Production\ReasoningEchoMatcher.cs" />
+    <Compile Include="..\Mod\Agent\ReasoningEchoPolicy.cs" Link="Production\ReasoningEchoPolicy.cs" />
     <Reference Include="Unity.Entities" HintPath="$(GameManagedPath)\Unity.Entities.dll" />
     <Reference Include="Unity.Mathematics" HintPath="$(GameManagedPath)\Unity.Mathematics.dll" />
   </ItemGroup>
