@@ -24,3 +24,4 @@ Code exists; a previous save is not the final gate. Close the game before DLL re
 - Cleanup after map acceptance passes: remove the temporary dev-gated `map_image` block, `[DEBUG-mapex1]` lines, `DebugPhase`, and `map-export-debug.log`.
 - Responses API with vision is parked (no per-turn fallback by decision); Chat Completions is the vision path until proven otherwise.
 - Tool image preview (thumbnail data URI on the tool done event, rendered in the tool row): needs in-game acceptance — screenshot/`map_image` rows show the image, text-only rows unchanged, session switch still hydrates.
+- Thinking-model `reasoning_content` echo (request pipeline re-attaches stored reasoning to Chat Completions assistant messages): needs a live thinking-model run proving the turn after a text answer no longer 400s and cache ratios stay green.

@@ -27,6 +27,7 @@
     <Compile Include="..\Mod\CS2MCP\RoadGroundPreflight.cs" Link="Production\RoadGroundPreflight.cs" />
     <Compile Include="..\Mod\CS2MCP\TypedNetworkMath.cs" Link="Production\TypedNetworkMath.cs" />
     <Compile Include="..\Mod\CS2MCP\SimWaitResult.cs" Link="Production\SimWaitResult.cs" />
+    <Compile Include="..\Mod\Agent\ReasoningEchoMatcher.cs" Link="Production\ReasoningEchoMatcher.cs" />
     <Reference Include="Unity.Entities" HintPath="$(GameManagedPath)\Unity.Entities.dll" />
     <Reference Include="Unity.Mathematics" HintPath="$(GameManagedPath)\Unity.Mathematics.dll" />
   </ItemGroup>

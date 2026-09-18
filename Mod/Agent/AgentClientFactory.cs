@@ -1,6 +1,8 @@
 using System;
 using System.ClientModel;
 using System.ClientModel.Primitives;
+using System.Collections.Generic;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.AI;
 using OpenAI;
 using OpenAI.Chat;
@@ -20,15 +22,20 @@ namespace CitiesSkylines2Agent.Agent
 
         private readonly AgentObservability m_Observability;
         private readonly string m_SessionId;
+        private readonly Func<IReadOnlyList<ReasoningEchoSnapshot>> m_ReasoningSnapshots;
         private readonly object m_Lock = new object();
         private IChatClient m_Client;
         private AgentModelProfile m_Profile;
         private string m_ConfigSignature;
 
-        public AgentClientFactory(AgentObservability observability, string sessionId)
+        public AgentClientFactory(
+            AgentObservability observability,
+            string sessionId,
+            Func<IReadOnlyList<ReasoningEchoSnapshot>> reasoningSnapshots = null)
         {
             m_Observability = observability;
             m_SessionId = sessionId;
+            m_ReasoningSnapshots = reasoningSnapshots;
         }
 
         public IChatClient GetClient()
@@ -56,6 +63,9 @@ namespace CitiesSkylines2Agent.Agent
                     };
                     options.AddPolicy(
                         new ConversationHeaderPolicy(m_SessionId),
+                        PipelinePosition.PerCall);
+                    options.AddPolicy(
+                        new ReasoningEchoPolicy(m_ReasoningSnapshots, OnReasoningEchoed),
                         PipelinePosition.PerCall);
                     var openAiClient = new OpenAIClient(
                         new ApiKeyCredential(Setting.StaticApiKey),
@@ -99,6 +109,14 @@ namespace CitiesSkylines2Agent.Agent
                 m_Profile = null;
                 m_ConfigSignature = null;
             }
+        }
+
+        private void OnReasoningEchoed(int injected)
+        {
+            m_Observability?.Record("reasoning-echo", new JsonObject
+            {
+                ["injected"] = injected,
+            });
         }
 
         private void RefreshConfigurationLocked()

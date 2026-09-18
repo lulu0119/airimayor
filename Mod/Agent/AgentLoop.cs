@@ -171,7 +171,7 @@ stable facts or timeline notes. Keep each list item short and concrete.";
             Instance = this;
             m_SessionId = Guid.NewGuid().ToString("N").Substring(0, 8);
             m_Observability = new AgentObservability(m_SessionId);
-            m_ClientFactory = new AgentClientFactory(m_Observability, m_SessionId);
+            m_ClientFactory = new AgentClientFactory(m_Observability, m_SessionId, CaptureReasoningSnapshots);
             m_PromptAssembler = new AgentPromptAssembler(SystemPrompt, SummaryPrefix);
             m_ToolExecutor = new AgentToolExecutor(
                 m_ToolSurface,
@@ -479,6 +479,58 @@ stable facts or timeline notes. Keep each list item short and concrete.";
             lock (m_Lock)
             {
                 m_History.Add(message);
+            }
+        }
+
+        /// <summary>
+        /// Snapshots stored reasoning per assistant message for the request
+        /// pipeline, which echoes it back as <c>reasoning_content</c>.
+        /// Messages without reasoning are omitted so the policy can skip
+        /// untouched requests without parsing them.
+        /// </summary>
+        private IReadOnlyList<ReasoningEchoSnapshot> CaptureReasoningSnapshots()
+        {
+            lock (m_Lock)
+            {
+                var snapshots = new List<ReasoningEchoSnapshot>();
+                foreach (ChatMessage message in m_History)
+                {
+                    if (message.Role != ChatRole.Assistant)
+                    {
+                        continue;
+                    }
+                    StringBuilder reasoning = null;
+                    List<string> callIds = null;
+                    foreach (AIContent content in message.Contents)
+                    {
+                        if (content is TextReasoningContent reasoningContent &&
+                            !string.IsNullOrEmpty(reasoningContent.Text))
+                        {
+                            if (reasoning == null)
+                            {
+                                reasoning = new StringBuilder();
+                            }
+                            reasoning.Append(reasoningContent.Text);
+                        }
+                        else if (content is FunctionCallContent call && !string.IsNullOrEmpty(call.CallId))
+                        {
+                            if (callIds == null)
+                            {
+                                callIds = new List<string>();
+                            }
+                            callIds.Add(call.CallId);
+                        }
+                    }
+                    if (reasoning == null)
+                    {
+                        continue;
+                    }
+                    snapshots.Add(new ReasoningEchoSnapshot(
+                        message.Text ?? "",
+                        callIds?.ToArray() ?? new string[0],
+                        reasoning.ToString()));
+                }
+                return snapshots;
             }
         }
 
