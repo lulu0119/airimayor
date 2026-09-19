@@ -202,12 +202,21 @@ export const ChatPanel = ({ children }: { children?: ReactNode }) => {
             className={styles.panelColumn}
             onClose={() => setPanelOpen(false)}
                 footer={
-                  <Composer
-                    sessionReady={chat.session !== ""}
-                    busy={chat.busy}
-                    onSend={(text) => chat.send(text)}
-                    onInterrupt={() => chat.interrupt()}
-                  />
+                  <div>
+                    {chat.queued.length > 0 ? (
+                      <div className={styles.statusBar}>
+                        <span className={styles.statusText}>
+                          {`${chat.queued.length} queued · ${chat.queued[chat.queued.length - 1].text.slice(0, 60)}`}
+                        </span>
+                      </div>
+                    ) : null}
+                    <Composer
+                      sessionReady={chat.session !== ""}
+                      busy={chat.busy}
+                      onSend={(text) => chat.send(text)}
+                      onInterrupt={() => chat.interrupt()}
+                    />
+                  </div>
                 }
               >
                 <StatusBar

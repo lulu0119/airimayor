@@ -30,6 +30,7 @@ namespace CitiesSkylines2Agent.Agent
         public string Text;
         public string Tool;
         public AgentStatus Status;
+        public bool Steered;
 
         /// <summary>UI-only image preview (data URI) for image tool results.</summary>
         public string Image;
@@ -59,6 +60,10 @@ namespace CitiesSkylines2Agent.Agent
                 obj["imageWidth"] = ImageWidth;
                 obj["imageHeight"] = ImageHeight;
             }
+            if (Steered)
+            {
+                obj["steered"] = true;
+            }
             return obj.ToJsonString();
         }
     }
@@ -66,6 +71,7 @@ namespace CitiesSkylines2Agent.Agent
     internal sealed class AgentInput
     {
         public string Text;
+        public bool Steered;
     }
 
     /// <summary>
@@ -183,7 +189,7 @@ stable facts or timeline notes. Keep each list item short and concrete.";
 
         public bool IsBusy => Status == AgentStatus.Thinking || Status == AgentStatus.Working;
 
-        /// <summary>Queue a user message for the next turn boundary.</summary>
+        /// <summary>Steer the running turn, or queue when idle.</summary>
         public void Send(string text)
         {
             if (!IsInLoadedCity())
@@ -195,8 +201,21 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                 });
                 return;
             }
-            m_Pending.Writer.TryWrite(new AgentInput { Text = text ?? "" });
-            Emit(new AgentUiEvent { Kind = "user", Text = text ?? "" });
+            string safe = text ?? "";
+            if (IsBusy)
+            {
+                lock (m_Lock)
+                {
+                    m_History.Add(new ChatMessage(ChatRole.User, safe));
+                }
+                m_Pending.Writer.TryWrite(new AgentInput { Text = safe, Steered = true });
+                Emit(new AgentUiEvent { Kind = "user", Text = safe, Steered = true });
+            }
+            else
+            {
+                m_Pending.Writer.TryWrite(new AgentInput { Text = safe });
+                Emit(new AgentUiEvent { Kind = "user", Text = safe });
+            }
             EnsureLoop();
         }
 
@@ -396,11 +415,29 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                 }
                 else if (!string.IsNullOrWhiteSpace(input.Text))
                 {
+                    if (input.Steered && !NeedsSteeredFollowUp(input.Text))
+                    {
+                        return false;
+                    }
                     lock (m_Lock)
                     {
-                        m_History.Add(new ChatMessage(
-                            ChatRole.User,
-                            input.Text));
+                        if (input.Steered)
+                        {
+                            // History already carries the steered message; a
+                            // duplicate enqueue must not append it twice.
+                            if (!HistoryEndsWithText(input.Text))
+                            {
+                                m_History.Add(new ChatMessage(
+                                    ChatRole.User,
+                                    input.Text));
+                            }
+                        }
+                        else
+                        {
+                            m_History.Add(new ChatMessage(
+                                ChatRole.User,
+                                input.Text));
+                        }
                     }
                     m_Observability.TurnStart(m_TurnId, input.Text);
                 }
@@ -467,6 +504,50 @@ stable facts or timeline notes. Keep each list item short and concrete.";
             Emit(new AgentUiEvent { Kind = "status", Status = AgentStatus.Idle });
             Emit(new AgentUiEvent { Kind = "turn", Text = m_TurnId });
             return m_ToolExecutor.FunctionCount > 0;
+        }
+
+        private bool HistoryEndsWithText(string text)
+        {
+            for (int i = m_History.Count - 1; i >= 0; i--)
+            {
+                ChatMessage message = m_History[i];
+                if (message.Role != ChatRole.User)
+                {
+                    continue;
+                }
+                return (message.Text ?? "") == (text ?? "");
+            }
+            return false;
+        }
+
+        private bool NeedsSteeredFollowUp(string text)
+        {
+            lock (m_Lock)
+            {
+                int lastUser = -1;
+                for (int i = m_History.Count - 1; i >= 0; i--)
+                {
+                    if (m_History[i].Role == ChatRole.User &&
+                        (m_History[i].Text ?? "") == (text ?? ""))
+                    {
+                        lastUser = i;
+                        break;
+                    }
+                }
+                if (lastUser < 0)
+                {
+                    return true;
+                }
+                for (int i = lastUser + 1; i < m_History.Count; i++)
+                {
+                    if (m_History[i].Role == ChatRole.Assistant &&
+                        !string.IsNullOrWhiteSpace(m_History[i].Text))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }
         }
 
         private void AppendHistoryMessage(ChatMessage message)

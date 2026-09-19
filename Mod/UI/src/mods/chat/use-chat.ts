@@ -9,9 +9,15 @@ import { agentEvents$, agentState$, interruptTurn, sendChatMessage } from "mods/
 import type { AgentContextInfo, AgentSnapshot, AgentWireEvent, ChatLine } from "./chat-types";
 import { applyWireEvent, emptyTranscript, hydrateTranscript } from "./transcript";
 
+export interface QueuedMessage {
+  key: number;
+  text: string;
+}
+
 export interface ChatModel {
   session: string;
   lines: ChatLine[];
+  queued: QueuedMessage[];
   status: string;
   busy: boolean;
   pending: number;
@@ -51,6 +57,7 @@ const parseEvent = (json: string): AgentWireEvent | null => {
 export const useChat = (): ChatModel => {
   const [session, setSession] = useState("");
   const [lines, setLines] = useState<ChatLine[]>(emptyTranscript.lines);
+  const [queued, setQueued] = useState<QueuedMessage[]>([]);
   const [status, setStatus] = useState("Idle");
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState(0);
@@ -58,6 +65,7 @@ export const useChat = (): ChatModel => {
   const [context, setContext] = useState<AgentContextInfo | null>(null);
   const sessionRef = useRef("");
   const nextIdRef = useRef(0);
+  const queuedRef = useRef<QueuedMessage[]>([]);
   const snapshotJson = useValue(agentState$);
   const subscribed = useRef(false);
 
@@ -72,6 +80,9 @@ export const useChat = (): ChatModel => {
         return;
       }
       setLines((current) => {
+        if (event.kind === "user" && event.steered) {
+          return current;
+        }
         const next = applyWireEvent({ lines: current, nextId: nextIdRef.current }, event);
         nextIdRef.current = next.nextId;
         return next.lines;
@@ -80,6 +91,12 @@ export const useChat = (): ChatModel => {
         case "user":
           setBusy(true);
           setNote("");
+          if (event.steered && (event.text ?? "").trim().length > 0) {
+            const queuedText = (event.text ?? "").trim();
+            const item = { key: nextIdRef.current++, text: queuedText };
+            queuedRef.current = [...queuedRef.current, item];
+            setQueued(queuedRef.current);
+          }
           break;
         case "delta":
         case "tool":
@@ -103,6 +120,16 @@ export const useChat = (): ChatModel => {
         case "turn":
           setBusy(false);
           setNote("");
+          if (queuedRef.current.length > 0) {
+            const flushed = queuedRef.current.map((item) => ({
+              id: nextIdRef.current++,
+              kind: "user" as const,
+              text: item.text,
+            }));
+            queuedRef.current = [];
+            setQueued([]);
+            setLines((lines) => [...lines, ...flushed]);
+          }
           break;
         case "compact":
           break;
@@ -119,11 +146,13 @@ export const useChat = (): ChatModel => {
     if (!snapshot) {
       return;
     }
-    if (!snapshot.session) {
+      if (!snapshot.session) {
       if (sessionRef.current) {
         sessionRef.current = "";
         nextIdRef.current = 0;
+        queuedRef.current = [];
         setSession("");
+        setQueued([]);
         setLines([]);
         setStatus("Idle");
         setBusy(false);
@@ -154,6 +183,7 @@ export const useChat = (): ChatModel => {
   return {
     session,
     lines,
+    queued,
     status,
     busy,
     pending,

@@ -66,22 +66,21 @@ export const Composer = ({ sessionReady, busy, onSend, onInterrupt }: ComposerPr
               alt=""
             />
           </button>
-        ) : (
-          <button
-            type="button"
-            title={sendLabel}
-            aria-label={sendLabel}
-            className={`${styles.actionButton} ${styles.sendButton}`}
-            onClick={submit}
-            disabled={!sessionReady || draft.trim().length === 0}
-          >
-            <img
-              className={styles.actionIcon}
-              style={{ maskImage: `url(${sendIcon})` }}
-              alt=""
-            />
-          </button>
-        )}
+        ) : null}
+        <button
+          type="button"
+          title={sendLabel}
+          aria-label={sendLabel}
+          className={`${styles.actionButton} ${styles.sendButton}`}
+          onClick={submit}
+          disabled={!sessionReady || draft.trim().length === 0}
+        >
+          <img
+            className={styles.actionIcon}
+            style={{ maskImage: `url(${sendIcon})` }}
+            alt=""
+          />
+        </button>
       </div>
     </div>
   );
