@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ChatLine, ToolRowState } from "./chat-types";
 import chevronDownIcon from "images/chevron-down.svg";
 import { useChatText } from "./locale";
@@ -26,6 +26,38 @@ const roleClass = (kind: ChatLine["kind"]): string => {
     default:
       return styles.assistantRow;
   }
+};
+
+// Gameface img exposes no natural size and ignores object-fit, so CSS alone
+// cannot keep the aspect. The agent loop therefore sends the source pixel
+// size on the wire; pin an explicit height from the laid-out width. Width is
+// rem-scaled by the engine, the wire ratio is unitless, so every image tool
+// renders at its source aspect on any resolution.
+const ToolImage = ({
+  src,
+  alt,
+  sourceWidth,
+  sourceHeight,
+}: {
+  src: string;
+  alt: string;
+  sourceWidth: number | null;
+  sourceHeight: number | null;
+}) => {
+  const ref = useRef<HTMLImageElement>(null);
+  const fit = () => {
+    const img = ref.current;
+    if (!img) {
+      return;
+    }
+    const laidWidth = img.clientWidth;
+    if (sourceWidth && sourceHeight && sourceWidth > 0 && sourceHeight > 0 && laidWidth > 0) {
+      img.style.height = `${Math.round((laidWidth * sourceHeight) / sourceWidth)}px`;
+    }
+  };
+  return (
+    <img ref={ref} className={styles.toolImage} src={src} alt={alt} onLoad={fit} />
+  );
 };
 
 const ToolRow = ({ line }: { line: Extract<ChatLine, { kind: "tool" }> }) => {
@@ -64,7 +96,12 @@ const ToolRow = ({ line }: { line: Extract<ChatLine, { kind: "tool" }> }) => {
           ) : null}
           <div className={styles.toolSectionLabel}>{text("Tool.Result", "Result")}</div>
           {line.image ? (
-            <img className={styles.toolImage} src={line.image} alt={line.name} />
+            <ToolImage
+              src={line.image}
+              alt={line.name}
+              sourceWidth={line.imageWidth}
+              sourceHeight={line.imageHeight}
+            />
           ) : null}
           <pre className={styles.toolPre}>{line.result ?? text("Tool.NoResult", "No result yet.")}</pre>
         </div>

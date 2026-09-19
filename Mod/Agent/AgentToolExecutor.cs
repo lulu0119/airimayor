@@ -89,6 +89,8 @@ namespace CitiesSkylines2Agent.Agent
                     Text = TruncateToolText(result.Text),
                     Status = result.Success ? AgentStatus.Idle : AgentStatus.Error,
                     Image = ToPreviewDataUri(result.PreviewBytes),
+                    ImageWidth = result.PreviewWidth,
+                    ImageHeight = result.PreviewHeight,
                 });
                 m_AppendHistory(new ChatMessage(ChatRole.Tool,
                     new List<AIContent> { new FunctionResultContent(call.CallId, result.Text) }));

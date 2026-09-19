@@ -80,7 +80,9 @@ namespace CS2MCP
                     return BridgeResponse.Error(BridgeErrorKind.Internal, "map PNG encode failed");
                 }
                 DumpMapImage(strokes, fills, frame, mapScale, layering, png);
-                return BridgeResponse.Png(png, ToolPreview.EncodeThumbnail(texture));
+                return BridgeResponse.Png(png,
+                    ToolPreview.EncodeThumbnail(texture, out int previewWidth, out int previewHeight),
+                    previewWidth, previewHeight);
             }
             catch (Exception e)
             {

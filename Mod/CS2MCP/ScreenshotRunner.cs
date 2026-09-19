@@ -76,7 +76,9 @@ namespace CS2MCP
                     }
                     else
                     {
-                        request.Complete(BridgeResponse.Png(png, ToolPreview.EncodeThumbnail(output)));
+                        request.Complete(BridgeResponse.Png(png,
+                            ToolPreview.EncodeThumbnail(output, out int previewWidth, out int previewHeight),
+                            previewWidth, previewHeight));
                     }
                 }
             }

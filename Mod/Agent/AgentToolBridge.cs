@@ -16,6 +16,8 @@ namespace CitiesSkylines2Agent.Agent
         public string Text;       // JSON or deterministic plain-text tool result
         public string ImagePath;  // screenshot path when the tool returned PNG
         public byte[] PreviewBytes; // UI-only JPEG thumbnail for the chat window
+        public int PreviewWidth;  // source pixels behind PreviewBytes (aspect for UI layout)
+        public int PreviewHeight;
     }
 
     /// <summary>
@@ -74,6 +76,8 @@ namespace CitiesSkylines2Agent.Agent
                     Success = true,
                     ImagePath = path,
                     PreviewBytes = response.Preview,
+                    PreviewWidth = response.PreviewWidth,
+                    PreviewHeight = response.PreviewHeight,
                     Text = "{\"saved\":\"" + JsonEncodedText.Encode(path).ToString() + "\"}",
                 };
             }

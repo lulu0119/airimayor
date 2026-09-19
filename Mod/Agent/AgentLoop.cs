@@ -34,6 +34,10 @@ namespace CitiesSkylines2Agent.Agent
         /// <summary>UI-only image preview (data URI) for image tool results.</summary>
         public string Image;
 
+        /// <summary>Source pixels behind <see cref="Image"/>; UI aspect layout.</summary>
+        public int ImageWidth;
+        public int ImageHeight;
+
         public string ToJsonString()
         {
             var obj = new JsonObject
@@ -49,6 +53,11 @@ namespace CitiesSkylines2Agent.Agent
             if (Image != null)
             {
                 obj["image"] = Image;
+            }
+            if (ImageWidth > 0 && ImageHeight > 0)
+            {
+                obj["imageWidth"] = ImageWidth;
+                obj["imageHeight"] = ImageHeight;
             }
             return obj.ToJsonString();
         }
