@@ -382,28 +382,34 @@
   width: 100%;
   box-sizing: border-box;
   resize: none;
-  padding: 10rem 12rem 58rem 12rem;
-  line-height: 1.3em;
-  font-size: 14rem;
-  color: #eee;
-  background-color: rgba(0, 0, 0, 0.15);
-  border-width: 2.5rem;
-  border-radius: 5rem;
+  padding: 8rem 12rem 44rem 12rem;
+  line-height: 1.35em;
+  font-size: 13rem;
+  color: #f2f5fa;
+  background-color: rgba(255, 255, 255, 0.08);
+  border-width: 1rem;
+  border-radius: 4rem;
   border-style: solid;
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.composerInput::placeholder {
+  color: #9aa3b5;
+  opacity: 0.8;
 }
 
 .composerInput:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.32);
 }
 
 .composerInput:active,
 .composerInput:focus {
-  background-color: rgba(255, 255, 255, 0.2);
-  border-top-color: #9dc0f0;
-  border-left-color: #9dc0f0;
-  border-bottom-color: #9dc0f0;
-  border-right-color: #9dc0f0;
+  background-color: rgba(255, 255, 255, 0.14);
+  border-top-color: #4bc3f1;
+  border-left-color: #4bc3f1;
+  border-bottom-color: #4bc3f1;
+  border-right-color: #4bc3f1;
   outline: none;
 }
 
@@ -421,30 +427,24 @@
   display: flex;
 }
 
-// RoadBuilder baseButton recipe: 4rem rect, 8rem padding, 24rem glyph.
-// Plain buttons, not vanilla Button: full control, no theme specificity
-// fights (Gameface drops var(), so all colors are literals).
+// Close-button recipe: no box, bare glyph, hover tint only.
 .actionButton {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 5rem;
+  padding: 4rem;
   border: none;
   border-radius: 4rem;
+  background-color: transparent;
   cursor: pointer;
-  transition: background-color 0.15s;
 }
 
-.sendButton {
-  background-color: #4bc3f1;
+.actionButton:hover .actionIcon {
+  background-color: #ffffff;
 }
 
-.sendButton:hover {
-  background-color: #63cdf3;
-}
-
-.sendButton:active {
-  background-color: #2f9fd0;
+.actionButton:active .actionIcon {
+  background-color: #9dc0f0;
 }
 
 .sendButton:disabled {
@@ -452,22 +452,18 @@
   cursor: default;
 }
 
-.stopButton {
-  background-color: rgba(255, 255, 255, 0.1);
+.sendButton:disabled .actionIcon {
+  background-color: #8a93a6;
 }
 
-.stopButton:hover {
-  background-color: rgba(255, 255, 255, 0.35);
-}
-
-.stopButton:active {
-  background-color: #2e4f86;
+.stopButton:hover .actionIcon {
+  background-color: #ff8a8a;
 }
 
 .actionIcon {
-  width: 24rem;
-  height: 24rem;
-  background-color: #ffffff;
+  width: 20rem;
+  height: 20rem;
+  background-color: #cfd6e4;
   mask-size: contain;
   mask-position: 50% 50%;
   mask-repeat: no-repeat;
