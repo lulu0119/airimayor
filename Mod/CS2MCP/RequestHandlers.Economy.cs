@@ -76,7 +76,7 @@ namespace CS2MCP
             });
         }
 
-        private BridgeResponse GetTaxes()
+        private BridgeResponse ListTaxes()
         {
             if (!TryGetCity(out _, out BridgeResponse error))
             {
@@ -104,23 +104,52 @@ namespace CS2MCP
             });
         }
 
-        private BridgeResponse HandleSetTax(BridgeRequest request)
+        /// <summary>
+        /// Single finance write: kind=tax|fee|service|loan selects the slider.
+        /// tax: name=Residential|Commercial|Industrial|Office, value=percent.
+        /// fee: name=resource from /city/fees, value=fee.
+        /// service: name=service from /city/service-budgets, value=percent 50-150.
+        /// loan: value=new principal (0 repays fully), name ignored.
+        /// </summary>
+        private BridgeResponse SetBudget(BridgeRequest request)
+        {
+            if (!request.Query.TryGetValue("kind", out string kind) || string.IsNullOrEmpty(kind))
+            {
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "provide ?kind=tax|fee|service|loan");
+            }
+            switch (kind.ToLowerInvariant())
+            {
+                case "tax":
+                    return SetTax(request);
+                case "service":
+                    return SetServiceBudget(request);
+                case "fee":
+                    return SetFee(request);
+                case "loan":
+                    return SetLoan(request);
+                default:
+                    return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, $"unknown kind '{kind}'; use tax|fee|service|loan");
+            }
+        }
+
+        private BridgeResponse SetTax(BridgeRequest request)
         {
             if (!TryGetCity(out _, out BridgeResponse error))
             {
                 return error;
             }
 
-            if (!request.Query.TryGetValue("area", out string areaName)
+            if (!request.Query.TryGetValue("name", out string areaName)
                 || !Enum.TryParse(areaName, ignoreCase: true, out TaxAreaType area)
                 || area == TaxAreaType.None)
             {
-                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "provide ?area=Residential|Commercial|Industrial|Office");
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "provide ?name=Residential|Commercial|Industrial|Office");
             }
-            if (!request.TryGetInt("rate", out int rate))
+            if (!request.TryGetFloat("value", out float rateFloat))
             {
-                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "provide ?rate=<integer percent>");
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "provide ?value=<tax percent>");
             }
+            int rate = (int)rateFloat;
 
             TaxSystem tax = World.GetOrCreateSystemManaged<TaxSystem>();
             int2 limits = tax.GetTaxParameterData().m_TotalTaxLimits;
@@ -137,7 +166,7 @@ namespace CS2MCP
             });
         }
 
-        private BridgeResponse GetServiceBudgets()
+        private BridgeResponse ListServiceBudgets()
         {
             if (!TryGetCity(out _, out BridgeResponse error))
             {
@@ -177,21 +206,22 @@ namespace CS2MCP
             });
         }
 
-        private BridgeResponse HandleSetServiceBudget(BridgeRequest request)
+        private BridgeResponse SetServiceBudget(BridgeRequest request)
         {
             if (!TryGetCity(out _, out BridgeResponse error))
             {
                 return error;
             }
 
-            if (!request.Query.TryGetValue("service", out string serviceName) || string.IsNullOrEmpty(serviceName))
+            if (!request.Query.TryGetValue("name", out string serviceName) || string.IsNullOrEmpty(serviceName))
             {
-                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "provide ?service=<name from /city/service-budgets>");
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "provide ?name=<service from /city/service-budgets>");
             }
-            if (!request.TryGetInt("percentage", out int percentage))
+            if (!request.TryGetFloat("value", out float valueFloat))
             {
-                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "provide ?percentage=<50-150>");
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "provide ?value=<50-150>");
             }
+            int percentage = (int)valueFloat;
 
             CityServiceBudgetSystem budgetSystem = World.GetOrCreateSystemManaged<CityServiceBudgetSystem>();
             PrefabSystem prefabSystem = World.GetOrCreateSystemManaged<PrefabSystem>();

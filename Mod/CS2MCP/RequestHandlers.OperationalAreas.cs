@@ -17,7 +17,7 @@ namespace CS2MCP
 {
     public sealed partial class RequestHandlers
     {
-        private BridgeResponse GetOperationalArea(BridgeRequest request)
+        private BridgeResponse InspectOperationalArea(BridgeRequest request)
         {
             if (!TryGetCity(out _, out BridgeResponse error))
             {

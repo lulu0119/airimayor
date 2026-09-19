@@ -84,7 +84,6 @@ namespace CS2MCP
         private float m_PendingZoneRadius;
         private float2 m_PendingZoneSize;
         private float m_PendingZoneRotationDegrees;
-        private bool m_PendingZoneIsRectangle;
         private float2 m_PendingElevations;
         private quaternion m_PendingRotation;
         private BridgeRequest m_PendingRequest;
@@ -399,32 +398,10 @@ namespace CS2MCP
             return true;
         }
 
-        /// <summary>
-        /// Queues zone-cell painting for ToolUpdate, where ToolOutputBarrier is
+        /// <summary>Queues zone-cell painting for ToolUpdate, where ToolOutputBarrier is
         /// open and the game's zone cell-check lifecycle can observe Updated.
-        /// Must be called on the simulation thread.
-        /// </summary>
-        public bool TryQueueZoneCircle(ZoneType zone, string label, float2 center, float radius, BridgeRequest request)
-        {
-            if (m_Stage != Stage.Idle)
-            {
-                return false;
-            }
-            m_PendingKind = OperationKind.Zone;
-            m_PendingZone = zone;
-            m_PendingLabel = label;
-            m_PendingZoneCenter = center;
-            m_PendingZoneRadius = radius;
-            m_PendingZoneSize = default;
-            m_PendingZoneRotationDegrees = 0f;
-            m_PendingZoneIsRectangle = false;
-            m_PendingRequest = request;
-            Activate();
-            return true;
-        }
-
-        /// <summary>Queues a rotated rectangular zone brush for ToolUpdate.</summary>
-        public bool TryQueueZoneRectangle(
+        /// Must be called on the simulation thread.</summary>
+        public bool TryQueueZone(
             ZoneType zone,
             string label,
             float2 center,
@@ -443,7 +420,6 @@ namespace CS2MCP
             m_PendingZoneSize = size;
             m_PendingZoneRotationDegrees = rotationDegrees;
             m_PendingZoneRadius = math.length(size * 0.5f);
-            m_PendingZoneIsRectangle = true;
             m_PendingRequest = request;
             Activate();
             return true;
@@ -500,7 +476,7 @@ namespace CS2MCP
                                 CreateFacilityUpgradeDefinitions();
                                 break;
                             case OperationKind.TransitLine:
-                                CreateTransitLineDefinitions();
+                                BuildTransitLineDefinitions();
                                 break;
                         }
                         if (m_Stage != Stage.Finish)
@@ -692,35 +668,22 @@ namespace CS2MCP
             var payload = new Dictionary<string, object>
             {
                 ["zone"] = m_PendingLabel,
-                ["shape"] = m_PendingZoneIsRectangle ? "rectangle" : "circle",
                 ["center"] = new { x = m_PendingZoneCenter.x, z = m_PendingZoneCenter.y },
                 ["cellsChanged"] = cellsChanged,
                 ["blocksTouched"] = blocksTouched,
+                ["width"] = m_PendingZoneSize.x,
+                ["depth"] = m_PendingZoneSize.y,
+                ["rotation"] = m_PendingZoneRotationDegrees,
                 ["note"] = cellsChanged == 0
                     ? "no zonable cells found in shape - zone cells only exist along roads and must be unoccupied"
                     : "painted zone cells during ToolUpdate; run the simulation for VacantLots/buildings",
             };
-            if (m_PendingZoneIsRectangle)
-            {
-                payload["width"] = m_PendingZoneSize.x;
-                payload["depth"] = m_PendingZoneSize.y;
-                payload["rotation"] = m_PendingZoneRotationDegrees;
-            }
-            else
-            {
-                payload["radius"] = m_PendingZoneRadius;
-            }
             CompletePending(BridgeResponse.Json(payload));
         }
 
         private bool PendingZoneContains(float2 position)
         {
             float2 delta = position - m_PendingZoneCenter;
-            if (!m_PendingZoneIsRectangle)
-            {
-                return math.length(delta) <= m_PendingZoneRadius;
-            }
-
             float radians = math.radians(m_PendingZoneRotationDegrees);
             float sine = math.sin(radians);
             float cosine = math.cos(radians);
@@ -768,7 +731,7 @@ namespace CS2MCP
                 },
                 connected = false,
                 connectionError = connectionError ?? DescribeValidationBlock(),
-                note = "building placed, but the automatic utility connector was rejected by the game; connect it manually with build_road",
+                note = "building placed, but the automatic utility connector was rejected by the game; connect it manually with build_network",
             });
         }
 
@@ -880,7 +843,7 @@ namespace CS2MCP
                                     : null,
                             },
                         nodes = m_PendingOperationalAreaNodes != null ? m_PendingOperationalAreaNodes.Length : 0,
-                        note = $"native {m_PendingOperationalAreaKind} operational-area relocation committed; call get_operational_area to verify simulation resource/capacity and ownership",
+                        note = $"native {m_PendingOperationalAreaKind} operational-area relocation committed; call inspect_operational_area to verify simulation resource/capacity and ownership",
                     });
                 default:
                     object lotSize = null;
@@ -1478,7 +1441,7 @@ namespace CS2MCP
         /// passenger route: CreationDefinition + ColorDefinition + closed
         /// WaypointDefinition loop attached to existing TransportStop entities.
         /// </summary>
-        private void CreateTransitLineDefinitions()
+        private void BuildTransitLineDefinitions()
         {
             if (m_PendingTransitStops == null || m_PendingTransitStops.Length < 2)
             {

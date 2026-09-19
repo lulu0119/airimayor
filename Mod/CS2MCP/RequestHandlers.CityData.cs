@@ -80,7 +80,7 @@ namespace CS2MCP
                     productionRate = garbage.garbageAccumulation,
                 },
                 problems,
-                note = "garbage.productionRate is daily generation, not a deficit; use notifications for GarbagePilingUp. Healthcare/education coverage: query /city/statistics (e.g. type=EducationCount) until dedicated endpoints land. problems[] is a derived summary of critical service gaps — address those before expanding.",
+                note = "garbage.productionRate is daily generation, not a deficit; use list_notifications for GarbagePilingUp. Healthcare/education coverage: query /city/statistics (e.g. type=EducationCount) until dedicated endpoints land. problems[] is a derived summary of critical service gaps — address those before expanding.",
             });
         }
 

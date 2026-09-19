@@ -102,37 +102,7 @@ namespace CS2MCP
             });
         }
 
-        private BridgeResponse ZoneArea(BridgeRequest request)
-        {
-            if (!TryGetCity(out _, out BridgeResponse error))
-            {
-                return error;
-            }
-
-            if (!request.TryGetFloat("x", out float x) || !request.TryGetFloat("z", out float z))
-            {
-                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "provide ?x=&z= center coordinates");
-            }
-            float radius = request.TryGetFloat("radius", out float rawRadius)
-                ? math.clamp(rawRadius, kCellSize, 200f)
-                : 32f;
-
-            if (!TryResolveZone(request, out ZoneType targetZone, out string resolvedName, out error))
-            {
-                return error;
-            }
-
-            float2 center = new float2(x, z);
-            BridgeToolSystem tool = World.GetOrCreateSystemManaged<BridgeToolSystem>();
-            if (!tool.TryQueueZoneCircle(targetZone, resolvedName, center, radius, request))
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Conflict, "another build operation is in progress, retry shortly");
-            }
-            // Completed asynchronously by BridgeToolSystem during ToolUpdate.
-            return null;
-        }
-
-        private BridgeResponse ZoneRectangle(BridgeRequest request)
+        private BridgeResponse Zone(BridgeRequest request)
         {
             if (!TryGetCity(out _, out BridgeResponse error))
             {
@@ -156,7 +126,7 @@ namespace CS2MCP
             }
 
             BridgeToolSystem tool = World.GetOrCreateSystemManaged<BridgeToolSystem>();
-            if (!tool.TryQueueZoneRectangle(
+            if (!tool.TryQueueZone(
                     targetZone,
                     resolvedName,
                     new float2(x, z),

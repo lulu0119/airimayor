@@ -15,7 +15,7 @@ using UnityEngine;
 namespace CS2MCP
 {
     /// <summary>
-    /// Perception endpoints: camera, map_text, probe_cell_layer, zoning
+    /// Perception endpoints: camera, map_text, probe_layer, zoning
     /// readback, notifications, and entity inspection.
     /// </summary>
     public sealed partial class RequestHandlers
@@ -370,7 +370,7 @@ namespace CS2MCP
             return count;
         }
 
-        private BridgeResponse GetGridMap(BridgeRequest request)
+        private BridgeResponse ProbeLayer(BridgeRequest request)
         {
             if (!TryGetCity(out _, out BridgeResponse error))
             {
@@ -586,7 +586,7 @@ namespace CS2MCP
             return true;
         }
 
-        private BridgeResponse GetZoning(BridgeRequest request)
+        private BridgeResponse GetZoneCounts(BridgeRequest request)
         {
             if (!TryGetCity(out _, out BridgeResponse error))
             {
@@ -699,7 +699,7 @@ namespace CS2MCP
             });
         }
 
-        private BridgeResponse GetNotifications(BridgeRequest request)
+        private BridgeResponse ListNotifications(BridgeRequest request)
         {
             if (!TryGetCity(out _, out BridgeResponse error))
             {

@@ -31,7 +31,7 @@ namespace CS2MCP
                     dailyPayment = current.m_DailyPayment,
                 },
                 creditworthiness = loans.Creditworthiness,
-                note = "set the loan principal with /city/loan/set?amount=N (0 repays fully, max = creditworthiness)",
+                note = "set the loan principal with /city/budget/set?kind=loan&value=N (0 repays fully, max = creditworthiness)",
             });
         }
 
@@ -41,10 +41,11 @@ namespace CS2MCP
             {
                 return error;
             }
-            if (!request.TryGetInt("amount", out int amount))
+            if (!request.TryGetFloat("value", out float amountFloat))
             {
-                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "provide ?amount=<int> (new loan principal; 0 repays fully)");
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "provide ?value=<new loan principal; 0 repays fully>");
             }
+            int amount = (int)amountFloat;
             LoanSystem loans = World.GetOrCreateSystemManaged<LoanSystem>();
             int applied = math.clamp(amount, 0, loans.Creditworthiness);
             LoanInfo offer = loans.RequestLoanOffer(applied);
@@ -59,7 +60,7 @@ namespace CS2MCP
             });
         }
 
-        private BridgeResponse GetFees()
+        private BridgeResponse ListFees()
         {
             if (!TryGetCity(out Entity city, out BridgeResponse error))
             {
@@ -87,7 +88,7 @@ namespace CS2MCP
             }
             return BridgeResponse.Json(new
             {
-                note = "set with /city/fees/set?resource=<name>&fee=<float>; fees affect service income and citizen happiness",
+                note = "set with /city/budget/set?kind=fee&name=<resource>&value=<float>; fees affect service income and citizen happiness",
                 fees = result,
             });
         }
@@ -98,15 +99,15 @@ namespace CS2MCP
             {
                 return error;
             }
-            if (!request.Query.TryGetValue("resource", out string resourceName)
+            if (!request.Query.TryGetValue("name", out string resourceName)
                 || !Enum.TryParse(resourceName, ignoreCase: true, out PlayerResource resource))
             {
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments,
-                    $"provide ?resource=<{string.Join("|", Enum.GetNames(typeof(PlayerResource)))}>");
+                    $"provide ?name=<{string.Join("|", Enum.GetNames(typeof(PlayerResource)))}>");
             }
-            if (!request.TryGetFloat("fee", out float fee))
+            if (!request.TryGetFloat("value", out float fee))
             {
-                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "provide ?fee=<float>");
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "provide ?value=<float>");
             }
             DynamicBuffer<ServiceFee> fees = EntityManager.GetBuffer<ServiceFee>(city);
             if (!ServiceFeeSystem.TryGetFee(resource, fees, out float previous))

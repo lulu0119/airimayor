@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CitiesSkylines2Agent;
 using Game.Prefabs;
 using Game.Simulation;
 using Unity.Collections;
@@ -206,6 +207,7 @@ namespace CS2MCP
             List<NetworkTopologyFinding> issues = filter == TypedNetworkKinds.Road
                 ? TypedNetworkMath.FindRoadIssues(snapshot)
                 : TypedNetworkMath.FindUtilityIsolatedFindings(snapshot, filter);
+            LogTopologySnapshot(filter, hasCenter, center, radius, snapshot, issues);
             var findings = new List<object>(math.min(issues.Count, kNetworkFindingCap));
             int omitted = 0;
             for (int i = 0; i < issues.Count; i++)
@@ -251,7 +253,7 @@ namespace CS2MCP
             }
 
             string note = filter == TypedNetworkKinds.Road
-                ? "each finding carries at{x,z}, the repair site: isolated_road means a road group touches nothing else, join it to the main network with build_road; degree-1 dead ends are facts, not automatic errors"
+                ? "each finding carries at{x,z}, the repair site: isolated_road means a road group touches nothing else, join it to the main network with build_network; degree-1 dead ends are facts, not automatic errors"
                 : "each finding carries at{x,z}, the repair site: isolated components do not share a node with any road edge";
             return BridgeResponse.Json(new
             {
@@ -265,6 +267,47 @@ namespace CS2MCP
                 findings,
                 deadEnds,
             });
+        }
+
+        private void LogTopologySnapshot(
+            TypedNetworkKinds filter,
+            bool hasCenter,
+            float2 center,
+            float radius,
+            List<TypedNetworkEdge> snapshot,
+            List<NetworkTopologyFinding> issues)
+        {
+            int[] labels = TypedNetworkMath.LabelComponents(snapshot, filter);
+            var seen = new HashSet<int>();
+            var components = new List<string>();
+            for (int i = 0; i < snapshot.Count; i++)
+            {
+                int componentId = labels[i];
+                if (componentId < 0 || !seen.Add(componentId))
+                {
+                    continue;
+                }
+                bool isolated = TypedNetworkMath.ComponentIsIsolated(
+                    snapshot, filter, componentId, labels);
+                int size = TypedNetworkMath.ComponentSize(labels, componentId);
+                components.Add(
+                    $"id={componentId} size={size} isolated={isolated} " +
+                    $"edge={snapshot[i].EntityIndex}v{snapshot[i].EntityVersion} " +
+                    $"nodes={snapshot[i].StartNode}/{snapshot[i].EndNode} " +
+                    $"outside={snapshot[i].StartOutside}/{snapshot[i].EndOutside}");
+            }
+            var findings = new List<string>();
+            foreach (NetworkTopologyFinding issue in issues)
+            {
+                findings.Add(
+                    $"{TypedNetworkMath.TopologyClassName(issue.Class)} " +
+                    $"edgeA={issue.EdgeA} size={issue.ComponentSize}");
+            }
+            Mod.Log.Info(
+                "topology: kind=" + TypedNetworkMath.PrimaryKindName(filter) +
+                (hasCenter ? $" center=({center.x:F1},{center.y:F1}) radius={radius:F0}" : " citywide") +
+                $" edges={snapshot.Count} components=[{string.Join("; ", components)}] " +
+                $"findings=[{string.Join("; ", findings)}]");
         }
 
         private static bool TryGetOptionalCenter(

@@ -41,7 +41,7 @@ namespace CS2MCP
             }
         }
 
-        private BridgeResponse GetPolicies()
+        private BridgeResponse ListPolicies()
         {
             if (!TryGetCity(out Entity city, out BridgeResponse error))
             {

@@ -32,6 +32,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0024-map-image-ways-not-grade-splits.md](./adr/0024-map-image-ways-not-grade-splits.md) | Ways are the road graph; elevation is paint |
 | [0025-map-image-native-node-ways.md](./adr/0025-map-image-native-node-ways.md) | Ways walk native nodes; width is paint |
 | [0026-road-facts-category-first.md](./adr/0026-road-facts-category-first.md) | Native road facts; category first, width never promotes |
+| [0027-tool-surface-renaming.md](./adr/0027-tool-surface-renaming.md) | Verbs first, no shape suffixes, one finance write |
 
 ## Guide
 

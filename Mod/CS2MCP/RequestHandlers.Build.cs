@@ -1235,7 +1235,7 @@ namespace CS2MCP
                 $"leading rejections: {reasonSummary}";
         }
 
-        private BridgeResponse BuildRoad(BridgeRequest request)
+        private BridgeResponse BuildNetwork(BridgeRequest request)
         {
             if (!TryGetCity(out _, out BridgeResponse error))
             {

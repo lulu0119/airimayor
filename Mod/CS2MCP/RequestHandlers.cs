@@ -94,23 +94,21 @@ namespace CS2MCP
                 case "/city/statistics":
                     return GetStatistics(request);
                 case "/city/taxes":
-                    return GetTaxes();
-                case "/city/taxes/set":
-                    return HandleSetTax(request);
+                    return ListTaxes();
                 case "/city/policies":
-                    return GetPolicies();
+                    return ListPolicies();
                 case "/city/policies/set":
                     return HandleSetPolicy(request);
                 case "/city/service-budgets":
-                    return GetServiceBudgets();
-                case "/city/service-budgets/set":
-                    return HandleSetServiceBudget(request);
+                    return ListServiceBudgets();
+                case "/city/budget/set":
+                    return SetBudget(request);
                 case "/prefabs":
                     return GetPrefabs(request);
                 case "/build/place":
                     return PlaceBuilding(request);
-                case "/build/road":
-                    return BuildRoad(request);
+                case "/build/network":
+                    return BuildNetwork(request);
                 case "/build/road/features":
                     return SetRoadFeatures(request);
                 case "/build/road/replace":
@@ -118,9 +116,7 @@ namespace CS2MCP
                 case "/zones":
                     return GetZoneTypes();
                 case "/build/zone":
-                    return ZoneArea(request);
-                case "/build/zone/rectangle":
-                    return ZoneRectangle(request);
+                    return Zone(request);
                 case "/debug/zone-blocks":
                     return DebugZoneBlocks(request);
                 case "/build/demolish":
@@ -128,7 +124,7 @@ namespace CS2MCP
                 case "/city/buildings":
                     return ListBuildings(request);
                 case "/city/buildings/operational-area":
-                    return GetOperationalArea(request);
+                    return InspectOperationalArea(request);
                 case "/build/operational-area/expand":
                     return ExpandOperationalArea(request);
                 case "/city/buildings/upgrades":
@@ -140,21 +136,25 @@ namespace CS2MCP
                 case "/city/transit/lines":
                     return ListTransitLines(request);
                 case "/build/transit/line":
-                    return CreateTransitLine(request);
+                    return AddTransitLine(request);
                 case "/build/transit/line/delete":
-                    return DeleteTransitLine(request);
+                    return RemoveTransitLine(request);
                 case "/city/networks":
                     return ListNetworks(request);
                 case "/city/networks/topology":
                     return InspectNetworkTopology(request);
                 case "/city/loan":
                     return GetLoan();
-                case "/city/loan/set":
-                    return SetLoan(request);
                 case "/city/fees":
-                    return GetFees();
-                case "/city/fees/set":
-                    return SetFee(request);
+                    return ListFees();
+                case "/city/layer":
+                    return ProbeLayer(request);
+                case "/city/zoning":
+                    return GetZoneCounts(request);
+                case "/city/notifications":
+                    return ListNotifications(request);
+                case "/entity/inspect":
+                    return InspectEntity(request);
                 case "/camera":
                     return GetCamera();
                 case "/camera/set":
@@ -163,14 +163,6 @@ namespace CS2MCP
                     return MapImage(request);
                 case "/city/terrain":
                     return GetTerrain(request);
-                case "/city/gridmap":
-                    return GetGridMap(request);
-                case "/city/zoning":
-                    return GetZoning(request);
-                case "/city/notifications":
-                    return GetNotifications(request);
-                case "/entity/inspect":
-                    return InspectEntity(request);
                 case "/sim/wait":
                     return SimWait(request);
                 case "/game/save":
@@ -184,9 +176,9 @@ namespace CS2MCP
                 default:
                     return BridgeResponse.Error(BridgeErrorKind.NotFound,
                         $"unknown endpoint: {request.Path}; available: /state /city/overview /city/demand " +
-                        "/city/budget /city/services /city/labor /city/statistics /city/taxes /city/taxes/set " +
-                        "/city/policies /city/policies/set /city/service-budgets /city/service-budgets/set " +
-                        "/prefabs /build/place /build/demolish /city/buildings /sim/wait /screenshot");
+                        "/city/budget /city/budget/set /city/services /city/labor /city/statistics /city/taxes " +
+                        "/city/policies /city/policies/set /city/service-budgets " +
+                        "/prefabs /build/place /build/network /build/zone /build/demolish /city/buildings /sim/wait /screenshot");
             }
         }
 

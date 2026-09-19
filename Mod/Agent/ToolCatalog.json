@@ -49,7 +49,7 @@
       "response": "json"
     },
     {
-      "name": "demand",
+      "name": "get_demand",
       "description": "Residential (low/medium/high density), commercial, industrial, office and storage demand of the loaded city. buildingDemand uses the game's internal 0-255 scale (NOT 0-100); companyDemand counters can exceed 255. Includes the demand factors that explain WHY demand is high or low (e.g. Taxes, Unemployment, EmptyZones, Homelessness). Positive factor values push demand up, negative values push it down.",
       "parameters": {
         "type": "object",
@@ -62,7 +62,7 @@
     },
     {
       "name": "wait_simulation",
-      "description": "Run the simulation forward by in-game time: default 1 in-game hour (about 20-30 real seconds at the engine 8x speed cap). Resumes if paused, then restores the previous speed/pause state. Returns hours/completed/targetReached/note. Read the snapshot yourself after waiting: demand for what to grow, notifications for citywide warning counts, city_services for electricity/water/sewage/garbage, budget for money. Call after zoning or placing buildings so construction and growth can happen; then re-read. First turn can wait before the first reads. Never poll.",
+      "description": "Run the simulation forward by in-game time: default 1 in-game hour (about 20-30 real seconds at the engine 8x speed cap). Resumes if paused, then restores the previous speed/pause state. Returns hours/completed/targetReached/note. Read the snapshot yourself after waiting: get_demand for what to grow, list_notifications for citywide warning counts, get_services for electricity/water/sewage/garbage, get_budget for money. Call after zoning or placing buildings so construction and growth can happen; then re-read. First turn can wait before the first reads. Never poll.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -234,7 +234,7 @@
       "response": "png"
     },
     {
-      "name": "budget",
+      "name": "get_budget",
       "description": "Detailed city budget: total income/expenses, balance, and a per-source breakdown (residential/commercial/industrial/office taxes, service fees, subsidies, service upkeep, loan interest, electricity/water import-export, map tile upkeep). Values are monthly rates; expenses are positive costs.",
       "parameters": {
         "type": "object",
@@ -246,8 +246,8 @@
       "response": "json"
     },
     {
-      "name": "city_services",
-      "description": "Electricity (production/consumption/battery/trade), water & sewage (capacity/consumption/trade), and daily garbage production of the loaded city. Garbage production is not a shortage; use notifications for actual GarbagePilingUp warnings. Compare electricity/water/sewage supply against consumption.",
+      "name": "get_services",
+      "description": "Electricity (production/consumption/battery/trade), water & sewage (capacity/consumption/trade), and daily garbage production of the loaded city. Garbage production is not a shortage; use list_notifications for actual GarbagePilingUp warnings. Compare electricity/water/sewage supply against consumption.",
       "parameters": {
         "type": "object",
         "properties": {},
@@ -258,7 +258,7 @@
       "response": "json"
     },
     {
-      "name": "labor",
+      "name": "get_labor",
       "description": "Employment data: employed citizens, unemployment rate, homelessness, total/free jobs broken down by required education level, and the population age structure (children/teens/adults/seniors).",
       "parameters": {
         "type": "object",
@@ -270,7 +270,7 @@
       "response": "json"
     },
     {
-      "name": "statistics",
+      "name": "get_statistics",
       "description": "Time series of a city statistic (sampled 32x per in-game day). Useful types: Population, Money, Income, Expense, HouseholdCount, WorkerCount, Unemployed, TouristCount, CrimeRate, BirthRate, DeathRate, CitizensMovedIn, CitizensMovedAway, ResidentialTaxableIncome, TrafficFlow-style passenger counts (PassengerCountBus/Subway/Train...). An invalid type returns the full list of valid names.",
       "parameters": {
         "type": "object",
@@ -314,7 +314,7 @@
       "response": "json"
     },
     {
-      "name": "get_taxes",
+      "name": "list_taxes",
       "description": "Current tax rate and allowed range for each tax area: Residential, Commercial, Industrial, Office.",
       "parameters": {
         "type": "object",
@@ -326,46 +326,54 @@
       "response": "json"
     },
     {
-      "name": "set_tax",
-      "description": "Set the tax rate (integer percent) for one tax area. The rate is clamped to the game's allowed range (returned in the response). Higher taxes raise income but lower demand and happiness.",
+      "name": "set_budget",
+      "description": "Single finance write. kind selects the slider: tax (name=Residential|Commercial|Industrial|Office, value=percent, clamped to the allowed range), fee (name=resource from list_fees, value=fee within its slider range), service (name=service from list_service_budgets, value=percent 50-150), loan (value=new loan principal, 0 repays fully, clamped to creditworthiness). Higher taxes/fees raise income but lower demand, usage and happiness.",
       "parameters": {
         "type": "object",
         "properties": {
-          "area": {
+          "kind": {
             "type": "string",
             "enum": [
-              "Residential",
-              "Commercial",
-              "Industrial",
-              "Office"
+              "tax",
+              "fee",
+              "service",
+              "loan"
             ],
-            "description": "Tax area to change"
+            "description": "Which finance slider to change"
           },
-          "rate": {
-            "type": "integer",
-            "description": "New tax rate in percent"
+          "name": {
+            "type": "string",
+            "description": "Tax area, fee resource or service name (not used for loan)"
+          },
+          "value": {
+            "type": "number",
+            "description": "New slider value (percent, fee or loan principal)"
           }
         },
         "required": [
-          "area",
-          "rate"
+          "kind",
+          "value"
         ]
       },
-      "route": "/city/taxes/set",
+      "route": "/city/budget/set",
       "query": [
         {
-          "key": "area",
-          "arg": "area"
+          "key": "kind",
+          "arg": "kind"
         },
         {
-          "key": "rate",
-          "arg": "rate"
+          "key": "name",
+          "arg": "name"
+        },
+        {
+          "key": "value",
+          "arg": "value"
         }
       ],
       "response": "json"
     },
     {
-      "name": "policies",
+      "name": "list_policies",
       "description": "All city-wide policies with their internal name, localized title, active state, locked state and whether they take a slider adjustment value (e.g. Recycling, Education Subsidies, speed limits).",
       "parameters": {
         "type": "object",
@@ -378,13 +386,13 @@
     },
     {
       "name": "set_policy",
-      "description": "Activate or deactivate a city-wide policy by its internal name (from policies). Slider policies additionally accept an adjustment value. Locked policies cannot be set.",
+      "description": "Activate or deactivate a city-wide policy by its internal name (from list_policies). Slider policies additionally accept an adjustment value. Locked policies cannot be set.",
       "parameters": {
         "type": "object",
         "properties": {
           "name": {
             "type": "string",
-            "description": "Policy internal name from policies"
+            "description": "Policy internal name from list_policies"
           },
           "active": {
             "type": "boolean",
@@ -418,7 +426,7 @@
       "response": "json"
     },
     {
-      "name": "service_budgets",
+      "name": "list_service_budgets",
       "description": "Per-service budget sliders (50-150%, 100 = default) with current efficiency, estimated upkeep cost and building count for every city service (police, healthcare, education, transport, ...).",
       "parameters": {
         "type": "object",
@@ -427,41 +435,6 @@
       },
       "route": "/city/service-budgets",
       "query": [],
-      "response": "json"
-    },
-    {
-      "name": "set_service_budget",
-      "description": "Set the budget percentage (50-150) for one city service by name (from service_budgets). Lower budgets save money but reduce service efficiency; higher budgets do the opposite.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "service": {
-            "type": "string",
-            "description": "Service name from service_budgets"
-          },
-          "percentage": {
-            "type": "integer",
-            "minimum": 50,
-            "maximum": 150,
-            "description": "Budget percentage, 100 = default"
-          }
-        },
-        "required": [
-          "service",
-          "percentage"
-        ]
-      },
-      "route": "/city/service-budgets/set",
-      "query": [
-        {
-          "key": "service",
-          "arg": "service"
-        },
-        {
-          "key": "percentage",
-          "arg": "percentage"
-        }
-      ],
       "response": "json"
     },
     {
@@ -535,7 +508,7 @@
       "response": "json"
     },
     {
-      "name": "get_operational_area",
+      "name": "inspect_operational_area",
       "description": "Inspect building-owned operational polygons such as landfill storage or specialized-industry extraction areas. Returns polygon nodes, surface area, current storage/extraction state and native capacity/resource requirements. Use a building entity from list_buildings. This is read-only.",
       "parameters": {
         "type": "object",
@@ -569,7 +542,7 @@
     },
     {
       "name": "expand_operational_area",
-      "description": "Expand one owner-linked landfill storage or specialized-industry extractor area to a requested total surface. The tool preserves the locked building edge, plans a near-circle minus obstacles, adds nodes, samples terrain, rejects candidates crossing unowned land, buildings or roads, and commits through the game's native validation/apply pipeline. Extractors rank clear candidates by polygon/resource intersection; fertile land, ore, oil and fish use the natural-resource map while forest scans productive tree entities. Call get_operational_area afterward to verify simulation state.",
+      "description": "Expand one owner-linked landfill storage or specialized-industry extractor area to a requested total surface. The tool preserves the locked building edge, plans a near-circle minus obstacles, adds nodes, samples terrain, rejects candidates crossing unowned land, buildings or roads, and commits through the game's native validation/apply pipeline. Extractors rank clear candidates by polygon/resource intersection; fertile land, ore, oil and fish use the natural-resource map while forest scans productive tree entities. Call inspect_operational_area afterward to verify simulation state.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -697,7 +670,7 @@
     },
     {
       "name": "list_transit_stops",
-      "description": "List existing transit stops (station sub-stops and roadside stops) with type, position and how many lines already use them. Read-only. Use these entity ids with create_transit_line. Do not use place_building to create a stop.",
+      "description": "List existing transit stops (station sub-stops and roadside stops) with type, position and how many lines already use them. Read-only. Use these entity ids with add_transit_line. Do not use place_building to create a stop.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -812,7 +785,7 @@
       "response": "json"
     },
     {
-      "name": "create_transit_line",
+      "name": "add_transit_line",
       "description": "Create a simple passenger line through the native route-tool apply pipeline (GenerateRoutesSystem / ApplyRoutesSystem after pathfinding). stops is an ordered list of list_transit_stops ids as index:version,index:version. Default type is bus. The line closes back to the first stop. Vehicles spawn from depots natively. Do not use place_building for stops or lines.",
       "parameters": {
         "type": "object",
@@ -844,7 +817,7 @@
       "response": "json"
     },
     {
-      "name": "delete_transit_line",
+      "name": "remove_transit_line",
       "description": "Delete one transit line from list_transit_lines through the same Deleted component the transportation overview uses. Does not demolish stops or stations.",
       "parameters": {
         "type": "object",
@@ -878,7 +851,7 @@
     },
     {
       "name": "place_building",
-      "description": "ONE-STEP placement: give prefab + x/z. For every agent-chosen site, include radius and omit rotation; the tool generates a bounded internal search, derives shoreline snapping and road frontage from PlacementFlags.Shoreline and BuildingFlags.RequireRoad, preflights the full footprint for owned land, rotated building/road overlap and ordinary ground-water intrusion, ranks valid poses deterministically, then sends only one finalist through the game's real validation and placement pipeline. Omit radius or set rotation only when the player explicitly requires an exact pose. If exact placement fails, retry with a larger radius and no rotation. Off-road water/sewage/low-voltage nodes receive the required pipe/cable connection (never High-voltage Line or High-voltage Ground Cable); road-fronted nodes use the networks carried by the road. Do NOT use this for regular zoned residential/commercial/industrial/office buildings - those grow from zone_area.",
+      "description": "ONE-STEP placement: give prefab + x/z. For every agent-chosen site, include radius and omit rotation; the tool generates a bounded internal search, derives shoreline snapping and road frontage from PlacementFlags.Shoreline and BuildingFlags.RequireRoad, preflights the full footprint for owned land, rotated building/road overlap and ordinary ground-water intrusion, ranks valid poses deterministically, then sends only one finalist through the game's real validation and placement pipeline. Omit radius or set rotation only when the player explicitly requires an exact pose. If exact placement fails, retry with a larger radius and no rotation. Off-road water/sewage/low-voltage nodes receive the required pipe/cable connection (never High-voltage Line or High-voltage Ground Cable); road-fronted nodes use the networks carried by the road. Do NOT use this for regular zoned residential/commercial/industrial/office buildings - those grow from zone.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -937,7 +910,7 @@
       "response": "json"
     },
     {
-      "name": "build_road",
+      "name": "build_network",
       "description": "Build a road or utility-network segment between two world coordinates. Use SHORT segments (50-250m) on OWNED map tiles and connect roads near EXISTING road nodes. Small streets may join a highway where native validation allows, but prefer a ramp/collector/arterial path for highway access and verify flowPercent stays at 70 or above via list_networks. For ROAD prefabs, omitting mode selects ground: the route is sampled at roughly 4m or finer intervals for water and local grade, rejecting detected water crossings or grades above 10% (or a stricter prefab limit) instead of silently becoming a bridge or tunnel. Use mode=grade-separated only for an intentional bridge, elevated road or tunnel; provide both e1 and e2, with at least one nonzero. Do not pass mode for pipes, cables or other non-road networks. Pipes and Ground Cables remain UNDERGROUND by default (auto -10m buried), so omit e1/e2 to accept that burial. If the call fails, change the route or use shorter segments; do NOT repeat the same coordinates.",
       "parameters": {
         "type": "object",
@@ -999,7 +972,7 @@
           "z2"
         ]
       },
-      "route": "/build/road",
+      "route": "/build/network",
       "query": [
         {
           "key": "prefab",
@@ -1140,7 +1113,7 @@
     },
     {
       "name": "list_zone_types",
-      "description": "All zone TYPES (residential low/medium/high, commercial, industrial, office...) with internal name, area type and locked state. Small type list (not painted cells); use count_zone_cells for per-type cell counts. Use the exact name with zone_rectangle or zone_area.",
+      "description": "All zone TYPES (residential low/medium/high, commercial, industrial, office...) with internal name, area type and locked state. Small type list (not painted cells); use get_zone_counts for per-type cell counts. Use the exact name with zone.",
       "parameters": {
         "type": "object",
         "properties": {},
@@ -1151,60 +1124,8 @@
       "response": "json"
     },
     {
-      "name": "zone_area",
-      "description": "Paint zoning on all zonable cells within a circular radius. Use this for small irregular patches; prefer zone_rectangle along straight road frontage because circles can spill into occupied neighboring blocks. Do NOT use place_building for zoneable buildings. Generic residential/commercial names automatically resolve to the current map theme. Buildings grow while the simulation runs. Default radius 32m. Check demand first.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "zone": {
-            "type": "string",
-            "description": "Zone name from list_zone_types, a generic residential/commercial name that will resolve to the map theme, or 'None' to dezone"
-          },
-          "x": {
-            "type": "number",
-            "description": "Center X (meters)"
-          },
-          "z": {
-            "type": "number",
-            "description": "Center Z (meters)"
-          },
-          "radius": {
-            "type": "number",
-            "minimum": 8,
-            "maximum": 200,
-            "description": "Radius in meters (default 32)"
-          }
-        },
-        "required": [
-          "zone",
-          "x",
-          "z"
-        ]
-      },
-      "route": "/build/zone",
-      "query": [
-        {
-          "key": "zone",
-          "arg": "zone"
-        },
-        {
-          "key": "x",
-          "arg": "x"
-        },
-        {
-          "key": "z",
-          "arg": "z"
-        },
-        {
-          "key": "radius",
-          "arg": "radius"
-        }
-      ],
-      "response": "json"
-    },
-    {
-      "name": "zone_rectangle",
-      "description": "Paint zoning inside one rotated rectangle. This is the PRIMARY zoning tool for straight road frontage: choose a center, width, depth and rotation that cover fresh zonable strips without touching occupied neighboring blocks. Width follows the rectangle's local X axis; depth follows local Z; rotation is clockwise in world-view degrees. Generic residential/commercial names automatically resolve to the current map theme. Buildings grow while the simulation runs.",
+      "name": "zone",
+      "description": "Paint zoning inside one rotated rectangle along straight road frontage: choose a center, width, depth and rotation that cover fresh zonable strips without touching occupied neighboring blocks. Width follows the rectangle's local X axis; depth follows local Z; rotation is clockwise in world-view degrees. Generic residential/commercial names automatically resolve to the current map theme. Buildings grow while the simulation runs.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1245,7 +1166,7 @@
           "depth"
         ]
       },
-      "route": "/build/zone/rectangle",
+      "route": "/build/zone",
       "query": [
         {
           "key": "zone",
@@ -1455,7 +1376,7 @@
     },
     {
       "name": "inspect_network_topology",
-      "description": "Topology QA for one required kind. kind=road: near_miss, unnoded_crossing, too_close_junctions, isolated_road (optional dead ends with include_dead_ends). kind=water|sewage|low_voltage: only isolated_* components that do not reach a road edge. Each finding carries at{x,z}, the repair-site coordinates for build_road. Findings capped at 64. Optional x/z/radius.",
+      "description": "Topology QA for one required kind. kind=road: near_miss, unnoded_crossing, too_close_junctions, isolated_road (optional dead ends with include_dead_ends). kind=water|sewage|low_voltage: only isolated_* components that do not reach a road edge. Each finding carries at{x,z}, the repair-site coordinates for build_network. Findings capped at 64. Optional x/z/radius.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1707,7 +1628,7 @@
       "response": "text"
     },
     {
-      "name": "probe_cell_layer",
+      "name": "probe_layer",
       "description": "Compact cell-map probe (landValue, pollution, groundWater, …) for a map range: value min/max/mean plus fixed 8x8 samples. Requires x+z+radius or xMin+zMin+xMax+zMax. If the range covers more than 128 native cells, returns truncated=true with a warning and still only 8x8 samples. Never returns full arrays.",
       "parameters": {
         "type": "object",
@@ -1767,7 +1688,7 @@
           "layer"
         ]
       },
-      "route": "/city/gridmap",
+      "route": "/city/layer",
       "query": [
         {
           "key": "layer",
@@ -1805,7 +1726,7 @@
       "response": "json"
     },
     {
-      "name": "count_zone_cells",
+      "name": "get_zone_counts",
       "description": "Aggregated summary of painted zones (counts only, never per-cell rows): cells per zone type with occupied/empty split, whole-city or within an optional x/z/radius. Empty zoned cells are where buildings will grow. Whole-city counts are cheap and safe to call.",
       "parameters": {
         "type": "object",
@@ -1844,7 +1765,7 @@
       "response": "json"
     },
     {
-      "name": "notifications",
+      "name": "list_notifications",
       "description": "Citywide warning-icon summary. countsByType and topIssues are always complete citywide. Optional x/z/radius and limit filter detail items only (default limit 16, max 64). Use type as a substring filter. Inspect targets with inspect.",
       "parameters": {
         "type": "object",
@@ -1902,7 +1823,7 @@
       "response": "json"
     },
     {
-      "name": "inspect",
+      "name": "inspect_entity",
       "description": "Detail view of one entity (building/road) by index+version: prefab, position, status flags (abandoned/condemned/destroyed), renters with citizen/employee counts, and for buildings the lot footprint (lotSize in 8m cells / footprintMeters). Like clicking a building in game.",
       "parameters": {
         "type": "object",
@@ -1947,32 +1868,7 @@
       "response": "json"
     },
     {
-      "name": "set_loan",
-      "description": "Set the city's loan principal: higher than current = borrow more (cash added to treasury), lower = repay, 0 = repay fully. Clamped to creditworthiness. Interest accrues daily.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "amount": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "New total loan principal"
-          }
-        },
-        "required": [
-          "amount"
-        ]
-      },
-      "route": "/city/loan/set",
-      "query": [
-        {
-          "key": "amount",
-          "arg": "amount"
-        }
-      ],
-      "response": "json"
-    },
-    {
-      "name": "get_fees",
+      "name": "list_fees",
       "description": "Current price the city charges per service (electricity, water, healthcare, education levels, garbage, parking, public transport...) with slider ranges and estimated monthly income per fee.",
       "parameters": {
         "type": "object",
@@ -1981,39 +1877,6 @@
       },
       "route": "/city/fees",
       "query": [],
-      "response": "json"
-    },
-    {
-      "name": "set_fee",
-      "description": "Set the fee/price for one service resource (name from get_fees). Higher fees raise income but reduce usage and citizen happiness.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "resource": {
-            "type": "string",
-            "description": "Resource name from get_fees, e.g. 'Electricity'"
-          },
-          "fee": {
-            "type": "number",
-            "description": "Fee value; must be within the resource sliderRange from get_fees (rejected if out of range)."
-          }
-        },
-        "required": [
-          "resource",
-          "fee"
-        ]
-      },
-      "route": "/city/fees/set",
-      "query": [
-        {
-          "key": "resource",
-          "arg": "resource"
-        },
-        {
-          "key": "fee",
-          "arg": "fee"
-        }
-      ],
       "response": "json"
     },
     {

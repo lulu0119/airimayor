@@ -198,7 +198,7 @@ namespace CS2MCP
                 total,
                 truncated = total > stops.Count,
                 stops,
-                note = "read-only snapshot of existing TransportStop entities; create_transit_line connects them. Do not use place_building to make a stop.",
+                note = "read-only snapshot of existing TransportStop entities; add_transit_line connects them. Do not use place_building to make a stop.",
             });
         }
 
@@ -276,7 +276,7 @@ namespace CS2MCP
             }
         }
 
-        private BridgeResponse CreateTransitLine(BridgeRequest request)
+        private BridgeResponse AddTransitLine(BridgeRequest request)
         {
             if (!TryGetCity(out _, out BridgeResponse error))
             {
@@ -311,7 +311,7 @@ namespace CS2MCP
             if (stops.Count > TransitLineMaxStops)
             {
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments,
-                    $"at most {TransitLineMaxStops} stops per create_transit_line call");
+                    $"at most {TransitLineMaxStops} stops per add_transit_line call");
             }
 
             PrefabSystem prefabSystem = World.GetOrCreateSystemManaged<PrefabSystem>();
@@ -358,7 +358,7 @@ namespace CS2MCP
             return null;
         }
 
-        private BridgeResponse DeleteTransitLine(BridgeRequest request)
+        private BridgeResponse RemoveTransitLine(BridgeRequest request)
         {
             if (!TryGetCity(out _, out BridgeResponse error))
             {

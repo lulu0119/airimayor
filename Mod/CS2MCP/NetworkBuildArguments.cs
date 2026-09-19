@@ -5,7 +5,7 @@ using System.Globalization;
 namespace CS2MCP
 {
     /// <summary>
-    /// The validated model-facing options for one build_road call. This module
+    /// The validated model-facing options for one build_network call. This module
     /// owns the distinctions between omitted, malformed and incompatible
     /// values so the ECS handler only has to construct the requested course.
     /// </summary>
