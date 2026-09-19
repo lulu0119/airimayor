@@ -80,7 +80,7 @@ namespace CitiesSkylines2Agent.Agent
     public sealed class AgentLoop : IDisposable
     {
         private const string AutonomousContinuePrompt =
-            "Autonomous continuation: keep building the city, grow population and solve problems. " +
+            "Autonomous continuation: review the whole city, fix what holds the city back, and grow where the city needs it. " +
             "If there is nothing useful left to do, answer with a brief summary and call no tools.";
 
         private const string CompactionTaskPrompt = @"COMPACTION TASK:
