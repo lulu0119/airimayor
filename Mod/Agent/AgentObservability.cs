@@ -95,13 +95,14 @@ namespace CitiesSkylines2Agent.Agent
             }
         }
 
-        public void TaskStart(string model, long windowTokens, double compactThreshold)
+        public void TaskStart(string model, long windowTokens, double compactThreshold, string apiKind)
         {
             Record("task.start", new JsonObject
             {
                 ["model"] = model,
                 ["windowTokens"] = windowTokens,
                 ["compactThreshold"] = compactThreshold,
+                ["apiKind"] = apiKind,
             });
         }
 

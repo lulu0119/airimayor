@@ -322,7 +322,8 @@ stable facts or timeline notes. Keep each list item short and concrete.";
             m_Observability.TaskStart(
                 Setting.StaticModel,
                 profile.ContextWindowTokens,
-                (double)profile.CompactAtTokens / profile.ContextWindowTokens);
+                (double)profile.CompactAtTokens / profile.ContextWindowTokens,
+                Setting.StaticApiKind.ToString());
             while (!m_LoopCts.IsCancellationRequested)
             {
                 AgentInput first;
@@ -700,31 +701,33 @@ stable facts or timeline notes. Keep each list item short and concrete.";
 
             try
             {
-                // Flatten to plain user text so providers never see orphaned
-                // assistant tool_calls without matching tool results.
-                var summaryInput = new List<ChatMessage>
-                {
-                    new ChatMessage(ChatRole.System, CompactionTaskPrompt),
-                };
-                summaryInput.AddRange(AgentContextBudget.FlattenForSummary(oldMessages));
-                ChatResponse summaryResponse = await client.GetResponseAsync(
+                var summaryInput = AgentContextBudget.BuildSummaryInput(oldMessages, CompactionTaskPrompt);
+                // NOTE: unary GetResponseAsync returns zero messages through the
+                // Responses-backed client, so the summary must use the same
+                // streaming path as the main loop.
+                var summaryBuilder = new StringBuilder();
+                await foreach (ChatResponseUpdate update in client.GetStreamingResponseAsync(
                     summaryInput,
                     new ChatOptions
                     {
                         ModelId = Setting.StaticModel,
-                        MaxOutputTokens = 1200,
+                        MaxOutputTokens = (int)Math.Min(int.MaxValue, profile.OutputReserveTokens),
                         ToolMode = ChatToolMode.None,
                     },
-                    cancellationToken);
+                    cancellationToken))
+                {
+                    if (!string.IsNullOrEmpty(update.Text))
+                    {
+                        summaryBuilder.Append(update.Text);
+                    }
+                }
 
-                string summary = (summaryResponse.Text ?? "").Trim();
+                string summary = summaryBuilder.ToString().Trim();
                 if (!AgentContextBudget.IsUsableSummary(summary))
                 {
                     m_Observability.Error(
                         "compact",
-                        "rejected unusable summary (len=" + summary.Length
-                        + " kinds=" + DescribeSummaryResponse(summaryResponse) + "): "
-                        + AgentContextBudget.Truncate(summary, 400));
+                        "rejected unusable summary: " + AgentContextBudget.Truncate(summary, 400));
                     Emit(new AgentUiEvent
                     {
                         Kind = "error",
@@ -773,28 +776,6 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                     Text = "Compaction failed: " + AgentObservability.RedactSecrets(e.Message),
                 });
             }
-        }
-
-        // Temporary diagnostic for empty compaction summaries; remove once
-        // the next live log shows what the summarizer actually returned.
-        private static string DescribeSummaryResponse(ChatResponse response)
-        {
-            if (response?.Messages == null)
-            {
-                return "null";
-            }
-            var parts = new List<string>();
-            foreach (ChatMessage message in response.Messages)
-            {
-                var kinds = new List<string>();
-                foreach (AIContent content in message.Contents)
-                {
-                    kinds.Add(content.GetType().Name);
-                }
-                parts.Add(message.Role + ":["
-                    + string.Join("+", kinds) + "]:" + (message.Text ?? "").Length);
-            }
-            return string.Join(";", parts);
         }
 
         private static string TruncateForLog(string text, int maxChars)

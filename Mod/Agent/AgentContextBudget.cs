@@ -45,26 +45,18 @@ namespace CitiesSkylines2Agent.Agent
             return start;
         }
 
-        public static List<ChatMessage> FlattenForSummary(IReadOnlyList<ChatMessage> messages)
+        /// <summary>
+        /// opencode shape: the normal instructions and history go in intact so
+        /// the cached prefix still matches; the summary task is only appended
+        /// as the final user message. Callers must pass pair-safe slices.
+        /// </summary>
+        public static List<ChatMessage> BuildSummaryInput(
+            IReadOnlyList<ChatMessage> oldMessages,
+            string taskPrompt)
         {
-            var flattened = new List<ChatMessage>();
-            foreach (ChatMessage message in messages)
-            {
-                var builder = new StringBuilder();
-                string role = message.Role == ChatRole.Assistant ? "assistant" :
-                    message.Role == ChatRole.Tool ? "tool" :
-                    message.Role == ChatRole.System ? "system" : "user";
-                builder.Append(role).Append(": ");
-                if (!string.IsNullOrWhiteSpace(message.Text)) builder.Append(message.Text.Trim());
-                foreach (AIContent content in message.Contents)
-                {
-                    if (content is FunctionCallContent call) builder.Append(" [call:").Append(call.Name).Append(']');
-                    else if (content is FunctionResultContent result) builder.Append(" [result:").Append(Truncate(result.Result?.ToString() ?? "", 240)).Append(']');
-                }
-                string line = builder.ToString().Trim();
-                if (line.Length > 0) flattened.Add(new ChatMessage(ChatRole.User, Truncate(line, 2500)));
-            }
-            return flattened;
+            var input = new List<ChatMessage>(oldMessages);
+            input.Add(new ChatMessage(ChatRole.User, taskPrompt));
+            return input;
         }
 
         public static bool IsUsableSummary(string summary)
