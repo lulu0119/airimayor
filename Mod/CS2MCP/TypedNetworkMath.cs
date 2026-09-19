@@ -384,8 +384,17 @@ namespace CS2MCP
                 return false;
             }
 
+            if (kind == TypedNetworkKinds.Road)
+            {
+                if (ComponentHasOutside(edges, componentId, labels))
+                {
+                    return false;
+                }
+                int size = ComponentSize(labels, componentId);
+                return size > 0 && size != LargestComponentSize(edges, kind, labels);
+            }
+
             var nodes = new HashSet<int>();
-            bool hasOutside = false;
             for (int i = 0; i < edges.Count; i++)
             {
                 if (labels[i] != componentId)
@@ -395,18 +404,10 @@ namespace CS2MCP
                 TypedNetworkEdge edge = edges[i];
                 nodes.Add(edge.StartNode);
                 nodes.Add(edge.EndNode);
-                if (edge.StartOutside || edge.EndOutside)
-                {
-                    hasOutside = true;
-                }
             }
             if (nodes.Count == 0)
             {
                 return false;
-            }
-            if (kind == TypedNetworkKinds.Road)
-            {
-                return !hasOutside;
             }
             for (int i = 0; i < edges.Count; i++)
             {
@@ -497,6 +498,59 @@ namespace CS2MCP
                 }
             }
             return size;
+        }
+
+        public static int LargestComponentSize(
+            IReadOnlyList<TypedNetworkEdge> edges,
+            TypedNetworkKinds kind,
+            int[] labels)
+        {
+            if (edges == null || labels == null)
+            {
+                return 0;
+            }
+            var sizes = new Dictionary<int, int>();
+            for (int i = 0; i < edges.Count; i++)
+            {
+                if (labels[i] < 0 || (edges[i].Kinds & kind) == 0)
+                {
+                    continue;
+                }
+                sizes.TryGetValue(labels[i], out int size);
+                sizes[labels[i]] = size + 1;
+            }
+            int largest = 0;
+            foreach (int size in sizes.Values)
+            {
+                if (size > largest)
+                {
+                    largest = size;
+                }
+            }
+            return largest;
+        }
+
+        public static bool ComponentHasOutside(
+            IReadOnlyList<TypedNetworkEdge> edges,
+            int componentId,
+            int[] labels)
+        {
+            if (edges == null || labels == null || componentId < 0)
+            {
+                return false;
+            }
+            for (int i = 0; i < edges.Count; i++)
+            {
+                if (labels[i] != componentId)
+                {
+                    continue;
+                }
+                if (edges[i].StartOutside || edges[i].EndOutside)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         public static Dictionary<int, int> RoadDegrees(IReadOnlyList<TypedNetworkEdge> edges)

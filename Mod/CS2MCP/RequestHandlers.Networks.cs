@@ -201,13 +201,12 @@ namespace CS2MCP
             float radius = request.TryGetFloat("radius", out float rawRadius) ? math.max(rawRadius, 1f) : 500f;
             bool includeDeadEnds = request.TryGetBool("include_dead_ends", out bool rawDeadEnds) && rawDeadEnds;
 
-            List<TypedNetworkEdge> snapshot = SnapshotTypedNetworks(
-                hasCenter ? (float2?)center : null,
-                radius);
-            List<NetworkTopologyFinding> issues = filter == TypedNetworkKinds.Road
+            List<TypedNetworkEdge> snapshot = SnapshotTypedNetworks(null, 0f);
+            List<NetworkTopologyFinding> computed = filter == TypedNetworkKinds.Road
                 ? TypedNetworkMath.FindRoadIssues(snapshot)
                 : TypedNetworkMath.FindUtilityIsolatedFindings(snapshot, filter);
-            LogTopologySnapshot(filter, hasCenter, center, radius, snapshot, issues);
+            List<NetworkTopologyFinding> issues = FilterFindingsByRadius(snapshot, computed, hasCenter, center, radius);
+            LogTopologySnapshot(filter, hasCenter, center, radius, snapshot, issues, computed.Count);
             var findings = new List<object>(math.min(issues.Count, kNetworkFindingCap));
             int omitted = 0;
             for (int i = 0; i < issues.Count; i++)
@@ -253,8 +252,8 @@ namespace CS2MCP
             }
 
             string note = filter == TypedNetworkKinds.Road
-                ? "each finding carries at{x,z}, the repair site: isolated_road means a road group touches nothing else, join it to the main network with build_network; degree-1 dead ends are facts, not automatic errors"
-                : "each finding carries at{x,z}, the repair site: isolated components do not share a node with any road edge";
+                ? "isolated_road: join the at{x,z} group to the main road network or to an outside connection; omit x/z/radius when checking isolation; degree-1 dead ends are facts, not automatic errors"
+                : "isolated components share no node with any road edge; omit x/z/radius when checking isolation";
             return BridgeResponse.Json(new
             {
                 kind = TypedNetworkMath.PrimaryKindName(filter),
@@ -275,7 +274,8 @@ namespace CS2MCP
             float2 center,
             float radius,
             List<TypedNetworkEdge> snapshot,
-            List<NetworkTopologyFinding> issues)
+            List<NetworkTopologyFinding> issues,
+            int computedCount)
         {
             int[] labels = TypedNetworkMath.LabelComponents(snapshot, filter);
             var seen = new HashSet<int>();
@@ -290,11 +290,12 @@ namespace CS2MCP
                 bool isolated = TypedNetworkMath.ComponentIsIsolated(
                     snapshot, filter, componentId, labels);
                 int size = TypedNetworkMath.ComponentSize(labels, componentId);
+                bool hasOutside = TypedNetworkMath.ComponentHasOutside(snapshot, componentId, labels);
                 components.Add(
                     $"id={componentId} size={size} isolated={isolated} " +
                     $"edge={snapshot[i].EntityIndex}v{snapshot[i].EntityVersion} " +
                     $"nodes={snapshot[i].StartNode}/{snapshot[i].EndNode} " +
-                    $"outside={snapshot[i].StartOutside}/{snapshot[i].EndOutside}");
+                    $"hasOutside={hasOutside}");
             }
             var findings = new List<string>();
             foreach (NetworkTopologyFinding issue in issues)
@@ -306,8 +307,31 @@ namespace CS2MCP
             Mod.Log.Info(
                 "topology: kind=" + TypedNetworkMath.PrimaryKindName(filter) +
                 (hasCenter ? $" center=({center.x:F1},{center.y:F1}) radius={radius:F0}" : " citywide") +
-                $" edges={snapshot.Count} components=[{string.Join("; ", components)}] " +
+                $" edges={snapshot.Count} computed={computedCount} returned={issues.Count} components=[{string.Join("; ", components)}] " +
                 $"findings=[{string.Join("; ", findings)}]");
+        }
+
+        private static List<NetworkTopologyFinding> FilterFindingsByRadius(
+            IReadOnlyList<TypedNetworkEdge> snapshot,
+            List<NetworkTopologyFinding> computed,
+            bool hasCenter,
+            float2 center,
+            float radius)
+        {
+            if (!hasCenter || computed.Count == 0)
+            {
+                return computed;
+            }
+            var kept = new List<NetworkTopologyFinding>(computed.Count);
+            foreach (NetworkTopologyFinding finding in computed)
+            {
+                if (!TryFindingPosition(snapshot, finding.EdgeA, out float2 position)
+                    || math.distance(position, center) <= radius)
+                {
+                    kept.Add(finding);
+                }
+            }
+            return kept;
         }
 
         private static bool TryGetOptionalCenter(
@@ -568,17 +592,31 @@ namespace CS2MCP
             IReadOnlyList<TypedNetworkEdge> snapshot,
             int index)
         {
-            if (index < 0 || index >= snapshot.Count)
+            if (!TryFindingPosition(snapshot, index, out float2 position))
             {
                 return null;
+            }
+            return new { x = (float)Math.Round(position.x, 1), z = (float)Math.Round(position.y, 1) };
+        }
+
+        private static bool TryFindingPosition(
+            IReadOnlyList<TypedNetworkEdge> snapshot,
+            int index,
+            out float2 position)
+        {
+            position = default;
+            if (index < 0 || index >= snapshot.Count)
+            {
+                return false;
             }
             float3[] points = snapshot[index].Points;
             if (points == null || points.Length == 0)
             {
-                return null;
+                return false;
             }
             float3 mid = points[points.Length / 2];
-            return new { x = (float)Math.Round(mid.x, 1), z = (float)Math.Round(mid.z, 1) };
+            position = mid.xz;
+            return true;
         }
 
         private static object[] TopologyEdgeRefs(

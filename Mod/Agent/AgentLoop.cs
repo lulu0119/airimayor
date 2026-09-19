@@ -540,7 +540,6 @@ stable facts or timeline notes. Keep each list item short and concrete.";
             var options = new ChatOptions
             {
                 ModelId = Setting.StaticModel,
-                Temperature = 0.3f,
                 MaxOutputTokens = (int)Math.Min(int.MaxValue, profile.OutputReserveTokens),
                 Tools = m_ToolSurface.Build(profile),
                 ToolMode = ChatToolMode.Auto,
@@ -713,8 +712,8 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                     new ChatOptions
                     {
                         ModelId = Setting.StaticModel,
-                        Temperature = 0f,
                         MaxOutputTokens = 1200,
+                        ToolMode = ChatToolMode.None,
                     },
                     cancellationToken);
 
@@ -723,7 +722,9 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                 {
                     m_Observability.Error(
                         "compact",
-                        "rejected unusable summary: " + AgentContextBudget.Truncate(summary, 400));
+                        "rejected unusable summary (len=" + summary.Length
+                        + " kinds=" + DescribeSummaryResponse(summaryResponse) + "): "
+                        + AgentContextBudget.Truncate(summary, 400));
                     Emit(new AgentUiEvent
                     {
                         Kind = "error",
@@ -772,6 +773,28 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                     Text = "Compaction failed: " + AgentObservability.RedactSecrets(e.Message),
                 });
             }
+        }
+
+        // Temporary diagnostic for empty compaction summaries; remove once
+        // the next live log shows what the summarizer actually returned.
+        private static string DescribeSummaryResponse(ChatResponse response)
+        {
+            if (response?.Messages == null)
+            {
+                return "null";
+            }
+            var parts = new List<string>();
+            foreach (ChatMessage message in response.Messages)
+            {
+                var kinds = new List<string>();
+                foreach (AIContent content in message.Contents)
+                {
+                    kinds.Add(content.GetType().Name);
+                }
+                parts.Add(message.Role + ":["
+                    + string.Join("+", kinds) + "]:" + (message.Text ?? "").Length);
+            }
+            return string.Join(";", parts);
         }
 
         private static string TruncateForLog(string text, int maxChars)
