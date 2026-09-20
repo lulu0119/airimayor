@@ -804,7 +804,8 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                         ModelId = Setting.StaticModel,
                         MaxOutputTokens = (int)Math.Min(int.MaxValue, profile.OutputReserveTokens),
                         Tools = m_ToolSurface.Build(profile),
-                        ToolMode = ChatToolMode.None,
+                        // Console Go gateway only supports tool_choice=auto; None is rejected (400).
+                        ToolMode = ChatToolMode.Auto,
                     },
                     cancellationToken))
                 {
