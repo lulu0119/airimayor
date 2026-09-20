@@ -461,6 +461,7 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                     if (round.ToolCalls.Count > 0)
                     {
                         await m_ToolExecutor.ExecuteAsync(round.ToolCalls, m_TurnCts.Token);
+                        UpdateTokenEstimate();
                         await MaybeCompactAsync(m_TurnCts.Token);
                         if (m_TurnGenerationCount >= MaxToolRoundsPerTurn)
                         {
@@ -802,6 +803,7 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                     {
                         ModelId = Setting.StaticModel,
                         MaxOutputTokens = (int)Math.Min(int.MaxValue, profile.OutputReserveTokens),
+                        Tools = m_ToolSurface.Build(profile),
                         ToolMode = ChatToolMode.None,
                     },
                     cancellationToken))

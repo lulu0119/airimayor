@@ -54,7 +54,15 @@ namespace CitiesSkylines2Agent.Agent
             IReadOnlyList<ChatMessage> oldMessages,
             string taskPrompt)
         {
-            var input = new List<ChatMessage>(oldMessages);
+            var input = new List<ChatMessage>(oldMessages.Count + 1);
+            foreach (ChatMessage message in oldMessages)
+            {
+                if (IsImageMessage(message))
+                {
+                    continue;
+                }
+                input.Add(message);
+            }
             input.Add(new ChatMessage(ChatRole.User, taskPrompt));
             return input;
         }

@@ -150,7 +150,10 @@ namespace CitiesSkylines2Agent.Agent
         {
             if (agentEvent.Kind == "user" ||
                 agentEvent.Kind == "error" ||
-                agentEvent.Kind == "turn")
+                agentEvent.Kind == "turn" ||
+                agentEvent.Kind == "compact" ||
+                agentEvent.Kind == "tool" ||
+                agentEvent.Kind == "delta")
             {
                 return true;
             }

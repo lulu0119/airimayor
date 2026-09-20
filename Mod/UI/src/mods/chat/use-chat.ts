@@ -80,9 +80,6 @@ export const useChat = (): ChatModel => {
         return;
       }
       setLines((current) => {
-        if (event.kind === "user" && event.steered) {
-          return current;
-        }
         const next = applyWireEvent({ lines: current, nextId: nextIdRef.current }, event);
         nextIdRef.current = next.nextId;
         return next.lines;
@@ -91,12 +88,6 @@ export const useChat = (): ChatModel => {
         case "user":
           setBusy(true);
           setNote("");
-          if (event.steered && (event.text ?? "").trim().length > 0) {
-            const queuedText = (event.text ?? "").trim();
-            const item = { key: nextIdRef.current++, text: queuedText };
-            queuedRef.current = [...queuedRef.current, item];
-            setQueued(queuedRef.current);
-          }
           break;
         case "delta":
         case "tool":
@@ -120,16 +111,6 @@ export const useChat = (): ChatModel => {
         case "turn":
           setBusy(false);
           setNote("");
-          if (queuedRef.current.length > 0) {
-            const flushed = queuedRef.current.map((item) => ({
-              id: nextIdRef.current++,
-              kind: "user" as const,
-              text: item.text,
-            }));
-            queuedRef.current = [];
-            setQueued([]);
-            setLines((lines) => [...lines, ...flushed]);
-          }
           break;
         case "compact":
           break;
