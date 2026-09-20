@@ -204,6 +204,14 @@ stable facts or timeline notes. Keep each list item short and concrete.";
             string safe = text ?? "";
             if (IsBusy)
             {
+                if (CS2MCP.BridgeSystem.Instance != null &&
+                    CS2MCP.BridgeSystem.Instance.AutoPauseTargetFrame != 0)
+                {
+                    // A steer during a timed wait ends the wait first: the
+                    // wait restores the clock and reports partial progress,
+                    // so the new message is handled without waiting it out.
+                    m_TurnCts?.Cancel();
+                }
                 lock (m_Lock)
                 {
                     m_History.Add(new ChatMessage(ChatRole.User, safe));

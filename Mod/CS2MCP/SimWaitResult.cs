@@ -18,11 +18,24 @@ namespace CS2MCP
             "wait aborted: simulation did not advance (game paused or a modal overlay is open)";
         private const string NoteFinished =
             "wait finished; simulation restored to its previous speed/pause state";
+        private const string NoteInterrupted =
+            "wait interrupted by a new message; simulation restored to its previous speed/pause state, partial progress kept";
+        private const string NoteTakenOver =
+            "wait handed over: the clock was changed externally, simulation left as-is";
 
         public static string Build(
             string waitJson,
             string stateJson,
             bool completed)
+        {
+            return Build(waitJson, stateJson, completed, null);
+        }
+
+        public static string Build(
+            string waitJson,
+            string stateJson,
+            bool completed,
+            string noteOverride)
         {
             JsonObject waitRoot = ParseObject(waitJson);
             bool targetReached = TargetReached(waitRoot, ParseObject(stateJson));
@@ -31,10 +44,14 @@ namespace CS2MCP
                 ["hours"] = CopyHours(waitRoot),
                 ["completed"] = completed,
                 ["targetReached"] = targetReached,
-                ["note"] = Note(completed, targetReached),
+                ["note"] = noteOverride ?? Note(completed, targetReached),
             };
             return result.ToJsonString();
         }
+
+        public static string InterruptedNote => NoteInterrupted;
+
+        public static string TakenOverNote => NoteTakenOver;
 
         private static JsonNode CopyHours(JsonObject waitRoot)
         {

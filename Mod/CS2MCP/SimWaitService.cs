@@ -31,17 +31,41 @@ namespace CS2MCP
             // hardware never makes the agent think a wait is stuck.
             int maxWaitMs = (int)(Math.Ceiling(requestedHours) * 300_000) + SimWaitPollMs * 4;
             int waited = 0;
-            while (bridge.AutoPauseTargetFrame != 0 && waited < maxWaitMs)
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                await Task.Delay(SimWaitPollMs, cancellationToken);
-                waited += SimWaitPollMs;
+                while (bridge.AutoPauseTargetFrame != 0 && waited < maxWaitMs)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await Task.Delay(SimWaitPollMs, cancellationToken);
+                    waited += SimWaitPollMs;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // A steer or interrupt ends the wait early: restore the clock
+                // so the player never inherits the run speed, then report
+                // partial progress instead of a bare error.
+                bridge.CancelTimedRun();
+                string state = await TryGetJsonAsync(bridge, "/state");
+                return SimWaitResult.Build(
+                    startJson,
+                    state,
+                    false,
+                    SimWaitResult.InterruptedNote);
             }
 
-            string state = await TryGetJsonAsync(bridge, "/state");
+            string finalState = await TryGetJsonAsync(bridge, "/state");
+            if (bridge.LastWaitOutcome == WaitOutcome.TakenOver)
+            {
+                return SimWaitResult.Build(
+                    startJson,
+                    finalState,
+                    false,
+                    SimWaitResult.TakenOverNote);
+            }
             return SimWaitResult.Build(
                 startJson,
-                state,
+                finalState,
                 bridge.AutoPauseTargetFrame == 0);
         }
 

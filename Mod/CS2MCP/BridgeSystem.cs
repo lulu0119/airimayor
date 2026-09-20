@@ -44,6 +44,9 @@ namespace CS2MCP
         /// <summary>Frame at which a timed wait ends (0 = no wait active).</summary>
         public uint AutoPauseTargetFrame { get; private set; }
 
+        /// <summary>How the last timed wait ended (None while one is active).</summary>
+        public WaitOutcome LastWaitOutcome { get; private set; } = WaitOutcome.None;
+
         /// <summary>
         /// Starts a timed simulation run: at targetFrame the simulation speed
         /// is restored to <paramref name="restoreSpeed"/> (0 = paused).
@@ -51,10 +54,31 @@ namespace CS2MCP
         public void StartTimedRun(uint targetFrame, float restoreSpeed, float runSpeed)
         {
             AutoPauseTargetFrame = targetFrame;
+            LastWaitOutcome = WaitOutcome.None;
             m_WaitRestoreSpeed = restoreSpeed;
             m_WaitRunSpeed = runSpeed;
             m_WaitStartFrame = m_SimulationSystem.frameIndex;
             m_WaitStartedUtc = DateTime.UtcNow;
+        }
+
+        /// <summary>
+        /// Ends the active timed wait early (user steer or interrupt):
+        /// restores the previous speed/pause state so the player never
+        /// inherits the run speed.
+        /// </summary>
+        public void CancelTimedRun()
+        {
+            if (AutoPauseTargetFrame == 0)
+            {
+                return;
+            }
+            m_SimulationSystem.selectedSpeed = m_WaitRestoreSpeed > 0f
+                ? m_WaitRestoreSpeed
+                : 0f;
+            AutoPauseTargetFrame = 0;
+            m_WaitRestoreSpeed = -1f;
+            LastWaitOutcome = WaitOutcome.Cancelled;
+            Mod.Log.Info("timed wait cancelled, simulation state restored");
         }
 
         [Preserve]
@@ -97,6 +121,18 @@ namespace CS2MCP
             }
             if (AutoPauseTargetFrame != 0)
             {
+                float currentSpeed = m_SimulationSystem.selectedSpeed;
+                if (currentSpeed > 0f && currentSpeed != m_WaitRunSpeed)
+                {
+                    // The player (or the game UI) changed the speed mid-wait:
+                    // they own the clock, so hand it over without restoring.
+                    AutoPauseTargetFrame = 0;
+                    m_WaitRestoreSpeed = -1f;
+                    LastWaitOutcome = WaitOutcome.TakenOver;
+                    Mod.Log.Info("timed wait handed over: clock changed externally");
+                }
+                else
+                {
                 if (m_SimulationSystem.selectedSpeed <= 0f)
                 {
                     // Force the run state every frame: the game's UI (pause on
@@ -118,6 +154,7 @@ namespace CS2MCP
                     }
                     AutoPauseTargetFrame = 0;
                     m_WaitRestoreSpeed = -1f;
+                    LastWaitOutcome = WaitOutcome.Finished;
                     Mod.Log.Info("timed wait finished, simulation state restored");
                 }
                 else if ((DateTime.UtcNow - m_WaitStartedUtc).TotalSeconds > WaitNotAdvancingGraceSeconds &&
@@ -131,8 +168,10 @@ namespace CS2MCP
                         : 0f;
                     AutoPauseTargetFrame = 0;
                     m_WaitRestoreSpeed = -1f;
+                    LastWaitOutcome = WaitOutcome.Stalled;
                     Mod.Log.Warn("timed wait aborted: simulation did not advance for " +
                                  WaitNotAdvancingGraceSeconds + "s (modal pause barrier?)");
+                }
                 }
             }
             while (m_Pending.TryDequeue(out BridgeRequest request))

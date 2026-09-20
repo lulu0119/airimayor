@@ -68,6 +68,31 @@ namespace CS2MCP
             }
         }
 
+        [Fact]
+        public void Interrupted_wait_reports_partial_progress_with_restored_clock()
+        {
+            using (JsonDocument document = JsonDocument.Parse(
+                SimWaitResult.Build(WaitJson, StateShort, false, SimWaitResult.InterruptedNote)))
+            {
+                JsonElement root = document.RootElement;
+                Assert.False(root.GetProperty("completed").GetBoolean());
+                Assert.False(root.GetProperty("targetReached").GetBoolean());
+                Assert.Equal(SimWaitResult.InterruptedNote, root.GetProperty("note").GetString());
+            }
+        }
+
+        [Fact]
+        public void Taken_over_wait_leaves_clock_as_is()
+        {
+            using (JsonDocument document = JsonDocument.Parse(
+                SimWaitResult.Build(WaitJson, StateShort, false, SimWaitResult.TakenOverNote)))
+            {
+                JsonElement root = document.RootElement;
+                Assert.False(root.GetProperty("completed").GetBoolean());
+                Assert.Equal(SimWaitResult.TakenOverNote, root.GetProperty("note").GetString());
+            }
+        }
+
         private static JsonDocument Parse(bool completed, string stateJson)
         {
             return JsonDocument.Parse(

@@ -62,7 +62,7 @@
     },
     {
       "name": "wait_simulation",
-      "description": "Run the simulation forward by in-game time: default 1 in-game hour (about 20-30 real seconds at the engine 8x speed cap). Resumes if paused, then restores the previous speed/pause state. Returns hours/completed/targetReached/note. Read the snapshot yourself after waiting: get_demand for what to grow, list_notifications for citywide warning counts, get_services for electricity/water/sewage/garbage, get_budget for money. Call after zoning or placing buildings so construction and growth can happen; then re-read. First turn can wait before the first reads. Never poll.",
+      "description": "Run the simulation forward by in-game time: default 1 in-game hour (about 20-30 real seconds at the engine 8x speed cap). Resumes if paused, then restores the previous speed/pause state. Interruptible: a new player message ends the wait early with partial progress and a restored clock. If the clock is changed externally mid-wait, the wait hands over and leaves it as-is. Returns hours/completed/targetReached/note. Read the snapshot yourself after waiting: get_demand for what to grow, list_notifications for citywide warning counts, get_services for electricity/water/sewage/garbage, get_budget for money. Call after zoning or placing buildings so construction and growth can happen; then re-read. First turn can wait before the first reads. Never poll.",
       "parameters": {
         "type": "object",
         "properties": {
