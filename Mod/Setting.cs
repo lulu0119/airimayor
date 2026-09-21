@@ -187,6 +187,19 @@ namespace CitiesSkylines2Agent
                 { ChatLocale.Id("Status.Queued"), "queued" },
                 { ChatLocale.Id("Status.Vision"), "vision" },
                 { ChatLocale.Id("Plan.None"), "No active plan" },
+                { ChatLocale.Id("Settings.Title"), "Settings" },
+                { ChatLocale.Id("Settings.Connection.Title"), "Connection" },
+                { ChatLocale.Id("Settings.Connection.Endpoint"), "Endpoint" },
+                { ChatLocale.Id("Settings.Connection.ApiKey"), "API key" },
+                { ChatLocale.Id("Settings.Connection.ShowKey"), "Show" },
+                { ChatLocale.Id("Settings.Connection.HideKey"), "Hide" },
+                { ChatLocale.Id("Settings.Model.Title"), "Model" },
+                { ChatLocale.Id("Settings.Model.Name"), "Model" },
+                { ChatLocale.Id("Settings.Model.Hint"), "Fetch models, pick one, or type a name" },
+                { ChatLocale.Id("Settings.Model.Fetch"), "Fetch" },
+                { ChatLocale.Id("Settings.Model.Fetching"), "Fetching…" },
+                { ChatLocale.Id("Settings.Model.Loaded"), "{{count}} models loaded" },
+                { ChatLocale.Id("Settings.Actions.Save"), "Save" },
             };
         }
 

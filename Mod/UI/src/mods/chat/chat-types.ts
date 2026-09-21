@@ -42,7 +42,22 @@ export type WireEventKind =
   | "compact"
   | "turn"
   | "progress"
-  | "plan";
+  | "plan"
+  | "settings"
+  | "models";
+
+// Connection settings round-trip (AgentUISystem getSettings/saveSettings)
+// plus the fetched model list (fetchModels). Payloads arrive as JSON text.
+export interface ConnectionSettings {
+  endpoint: string;
+  apiKey: string;
+  model: string;
+}
+
+export interface ModelsPayload {
+  models: string[];
+  error: string;
+}
 
 export interface AgentWireEvent {
   kind: WireEventKind;

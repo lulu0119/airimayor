@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { ChatLine, ToolRowState } from "./chat-types";
-import chevronDownIcon from "images/chevron-down.svg";
+import chevronDownIcon from "lucide-static/icons/chevron-down.svg";
 import { useChatText } from "./locale";
 import styles from "./chat.module.scss";
 

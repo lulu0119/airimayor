@@ -73,6 +73,19 @@ namespace CitiesSkylines2Agent
                 { ChatLocale.Id("Status.Queued"), "条排队中" },
                 { ChatLocale.Id("Status.Vision"), "视觉" },
                 { ChatLocale.Id("Plan.None"), "没有当前计划" },
+                { ChatLocale.Id("Settings.Title"), "设置" },
+                { ChatLocale.Id("Settings.Connection.Title"), "连接" },
+                { ChatLocale.Id("Settings.Connection.Endpoint"), "服务端地址" },
+                { ChatLocale.Id("Settings.Connection.ApiKey"), "API 密钥" },
+                { ChatLocale.Id("Settings.Connection.ShowKey"), "显示" },
+                { ChatLocale.Id("Settings.Connection.HideKey"), "隐藏" },
+                { ChatLocale.Id("Settings.Model.Title"), "模型" },
+                { ChatLocale.Id("Settings.Model.Name"), "模型" },
+                { ChatLocale.Id("Settings.Model.Hint"), "获取模型后选择，或直接输入名称" },
+                { ChatLocale.Id("Settings.Model.Fetch"), "获取" },
+                { ChatLocale.Id("Settings.Model.Fetching"), "获取中…" },
+                { ChatLocale.Id("Settings.Model.Loaded"), "已加载 {{count}} 个模型" },
+                { ChatLocale.Id("Settings.Actions.Save"), "保存" },
             };
         }
 
