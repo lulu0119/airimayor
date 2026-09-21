@@ -34,6 +34,10 @@ _Avoid_: Endpoint, provider, or model name as the source of the window
 Summarizing older turns when estimated tokens reach the compact threshold.
 _Avoid_: deleting the session, starting a new chat
 
+**Mayor mandate**:
+The loop-owned current city plan. Declared with `set_plan`; cleared by player messages, not by autonomous continuation.
+_Avoid_: a statutory plan, compact JSON as the live plan, gating the tool catalog, the mandate prompting wait_simulation
+
 ### Construction
 
 **Prefab**:

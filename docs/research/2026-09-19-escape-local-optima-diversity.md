@@ -1,6 +1,8 @@
 # Research: escaping local optima and reusing diverse solutions in LLM game agents
 
-Status: frozen 2026-09-19. Question: how should our Cities: Skylines 2 C# agent (tools: `place_building` / `build_road` / zone writes, all enqueued to sim thread) stop copying one successful block and start trying diverse global plans?
+Status: frozen 2026-09-19. Plan-then-commit is superseded by [0028-mayor-mandate](../adr/0028-mayor-mandate.md). Diversity archive / exploiter ideas are not that ADR.
+
+Question: how should our Cities: Skylines 2 C# agent (tools: `place_building` / `build_road` / zone writes, all enqueued to sim thread) stop copying one successful block and start trying diverse global plans?
 
 ## Findings
 

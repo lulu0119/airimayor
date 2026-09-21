@@ -15,17 +15,22 @@ namespace CitiesSkylines2Agent.Agent
         private readonly AgentToolSurface m_ToolSurface;
         private readonly AgentClientFactory m_ClientFactory;
         private readonly AgentObservability m_Observability;
+        private readonly MayorMandate m_Mandate;
         private readonly Action<AgentUiEvent> m_Emit;
         private readonly Action<ChatMessage> m_AppendHistory;
+        private readonly Action m_OnPlanChanged;
 
         public AgentToolExecutor(AgentToolSurface toolSurface, AgentClientFactory clientFactory,
-            AgentObservability observability, Action<AgentUiEvent> emit, Action<ChatMessage> appendHistory)
+            AgentObservability observability, MayorMandate mandate, Action<AgentUiEvent> emit,
+            Action<ChatMessage> appendHistory, Action onPlanChanged)
         {
             m_ToolSurface = toolSurface;
             m_ClientFactory = clientFactory;
             m_Observability = observability;
+            m_Mandate = mandate;
             m_Emit = emit;
             m_AppendHistory = appendHistory;
+            m_OnPlanChanged = onPlanChanged;
         }
 
         public int FunctionCount { get; private set; }
@@ -139,6 +144,15 @@ namespace CitiesSkylines2Agent.Agent
         {
             try
             {
+                if (string.Equals(name, MayorMandate.ToolName, StringComparison.Ordinal))
+                {
+                    MandateCallResult plan = m_Mandate.SetPlan(argumentsJson);
+                    if (plan.Success)
+                    {
+                        m_OnPlanChanged();
+                    }
+                    return new ToolInvocationResult { Success = plan.Success, Text = plan.Text };
+                }
                 if (!m_ToolSurface.IsAvailable(name, m_ClientFactory.GetProfile()))
                 {
                     return Error("tool is not available for this model or current settings");

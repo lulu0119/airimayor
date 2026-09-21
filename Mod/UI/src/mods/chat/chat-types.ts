@@ -18,12 +18,18 @@ export interface AgentContextInfo {
   vision: boolean;
 }
 
+export interface MayorPlan {
+  goal: string;
+  success: string;
+}
+
 export interface AgentSnapshot {
   status: string;
   busy: boolean;
   pendingInputs: number;
   session: string;
   context?: AgentContextInfo;
+  plan?: MayorPlan | null;
   messages: StateMessage[];
 }
 
@@ -35,7 +41,8 @@ export type WireEventKind =
   | "error"
   | "compact"
   | "turn"
-  | "progress";
+  | "progress"
+  | "plan";
 
 export interface AgentWireEvent {
   kind: WireEventKind;

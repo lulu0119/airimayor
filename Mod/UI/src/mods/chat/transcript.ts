@@ -152,6 +152,7 @@ export function applyWireEvent(
     }
     case "progress":
     case "compact":
+    case "plan":
     default: {
       return transcript;
     }

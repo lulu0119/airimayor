@@ -34,6 +34,8 @@
     <Compile Include="..\Mod\Agent\ReasoningEchoMatcher.cs" Link="Production\ReasoningEchoMatcher.cs" />
     <Compile Include="..\Mod\Agent\ReasoningEchoPolicy.cs" Link="Production\ReasoningEchoPolicy.cs" />
     <Compile Include="..\Mod\Agent\AgentContextBudget.cs" Link="Production\AgentContextBudget.cs" />
+    <Compile Include="..\Mod\Agent\MayorMandate.cs" Link="Production\MayorMandate.cs" />
+    <Compile Include="..\Mod\Agent\AgentPromptAssembler.cs" Link="Production\AgentPromptAssembler.cs" />
     <Compile Include="..\Mod\Agent\AgentModelProfile.cs" Link="Production\AgentModelProfile.cs" />
     <Compile Include="..\Mod\Agent\ModelCapabilities.cs" Link="Production\ModelCapabilities.cs" />
     <Reference Include="Unity.Entities" HintPath="$(GameManagedPath)\Unity.Entities.dll" />

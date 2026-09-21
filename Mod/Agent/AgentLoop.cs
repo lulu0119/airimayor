@@ -26,7 +26,7 @@ namespace CitiesSkylines2Agent.Agent
     /// <summary>UI-facing event emitted by the agent loop.</summary>
     public sealed class AgentUiEvent
     {
-        public string Kind;      // status|delta|tool|user|error|compact|turn|progress
+        public string Kind;      // status|delta|tool|user|error|compact|turn|progress|plan
         public string Text;
         public string Tool;
         public AgentStatus Status;
@@ -76,19 +76,16 @@ namespace CitiesSkylines2Agent.Agent
 
     /// <summary>
     /// In-process agent runtime: IChatClient + hand-rolled function-calling
-    /// loop. One user message runs one turn; when Continuous is on, the loop
-    /// itself opens autonomous follow-up turns (system reminders, not fake
-    /// user messages) for as long as the model keeps calling tools. The
-    /// Continuous setting is the master switch; per-turn model requests are
-    /// still capped. Queued user messages always wait for the turn boundary
-    /// and preempt autonomy.
+    /// loop. One user message runs one turn. Each model round pins the
+    /// mayor-mandate live note. When Continuous is on, a turn that used
+    /// tools opens another turn with no extra user or system message. A
+    /// turn ends when the model stops calling tools, a generation times
+    /// out, the player steers or interrupts, or the city unloads.
+    /// Player messages clear the mandate, cancel the running turn, and
+    /// preempt autonomy.
     /// </summary>
     public sealed class AgentLoop : IDisposable
     {
-        private const string AutonomousContinuePrompt =
-            "Autonomous continuation: review the whole city, fix what holds the city back, and grow where the city needs it. " +
-            "If there is nothing useful left to do, answer with a brief summary and call no tools.";
-
         private const string CompactionTaskPrompt = @"COMPACTION TASK:
 Ignore the normal assistant response format for this response.
 Do not call tools. Do not emit tool_calls, DSML, XML tags, or function-call markup.
@@ -96,25 +93,23 @@ Return strict JSON with:
 {
   ""time_anchor"": string,
   ""session_state"": string,
-  ""active_goal"": string,
   ""active_commitments"": string[],
   ""durable_facts"": string[],
   ""relevant_people"": string[],
   ""open_loops"": string[],
   ""recent_timeline"": string[],
   ""forgettable_noise"": string[],
-  ""current_plan"": string,
   ""paused_state"": string,
   ""last_world_snapshot"": string
 }
-Preserve user constraints, operator instructions, active goals, open loops,
-important names, and current world/session state (city money, population,
-demand, notifications). Prefer compressing assistant chatter, tool chatter,
-and stale notices. Do not keep stale relative-time phrases; convert them into
-stable facts or timeline notes. Keep each list item short and concrete.";
+Do not restate the active city plan; the loop pins [active plan] separately.
+Preserve player constraints, operator instructions, open loops, important names,
+and current world/session state (city money, population, demand, notifications)
+in durable_facts. Prefer compressing assistant chatter, tool chatter, and stale
+notices. Do not keep stale relative-time phrases; convert them into stable facts
+or timeline notes. Keep each list item short and concrete.";
 
         private const string SummaryPrefix = "[context summary] ";
-        private const int MaxToolRoundsPerTurn = 30;
 
         public static AgentLoop Instance { get; private set; }
 
@@ -152,6 +147,7 @@ stable facts or timeline notes. Keep each list item short and concrete.";
         private readonly AgentToolSurface m_ToolSurface = new AgentToolSurface();
         private readonly AgentPromptAssembler m_PromptAssembler;
         private readonly AgentToolExecutor m_ToolExecutor;
+        private readonly MayorMandate m_Mandate = new MayorMandate();
 
         private readonly AgentClientFactory m_ClientFactory;
         private Task m_LoopTask;
@@ -177,8 +173,10 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                 m_ToolSurface,
                 m_ClientFactory,
                 m_Observability,
+                m_Mandate,
                 Emit,
-                AppendHistoryMessage);
+                AppendHistoryMessage,
+                EmitPlan);
         }
 
         public event Action<AgentUiEvent> UiEvent;
@@ -189,7 +187,10 @@ stable facts or timeline notes. Keep each list item short and concrete.";
 
         public bool IsBusy => Status == AgentStatus.Thinking || Status == AgentStatus.Working;
 
-        /// <summary>Steer the running turn, or queue when idle.</summary>
+        /// <summary>
+        /// Clear the mandate and queue a player message. Cancels a running
+        /// turn so the text is not stuck behind an uncapped tool loop.
+        /// </summary>
         public void Send(string text)
         {
             if (!IsInLoadedCity())
@@ -202,16 +203,15 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                 return;
             }
             string safe = text ?? "";
-            if (IsBusy)
+            bool busy = IsBusy;
+            if (busy)
             {
-                if (CS2MCP.BridgeSystem.Instance != null &&
-                    CS2MCP.BridgeSystem.Instance.AutoPauseTargetFrame != 0)
-                {
-                    // A steer during a timed wait ends the wait first: the
-                    // wait restores the clock and reports partial progress,
-                    // so the new message is handled without waiting it out.
-                    m_TurnCts?.Cancel();
-                }
+                m_TurnCts?.Cancel();
+            }
+            m_Mandate.Clear();
+            EmitPlan();
+            if (busy)
+            {
                 lock (m_Lock)
                 {
                     m_History.Add(new ChatMessage(ChatRole.User, safe));
@@ -324,7 +324,8 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                     messages.Add(entry);
                 }
                 AgentModelProfile profile = m_ClientFactory.GetProfile();
-                return new JsonObject
+                string planJson = m_Mandate.ToUiJson();
+                var state = new JsonObject
                 {
                     ["status"] = Status.ToString(),
                     ["busy"] = IsBusy,
@@ -339,8 +340,10 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                         ["source"] = profile.Source,
                         ["vision"] = profile.VisionAvailable,
                     },
+                    ["plan"] = string.IsNullOrEmpty(planJson) ? null : JsonNode.Parse(planJson),
                     ["messages"] = messages,
-                }.ToJsonString();
+                };
+                return state.ToJsonString();
             }
         }
 
@@ -395,8 +398,8 @@ stable facts or timeline notes. Keep each list item short and concrete.";
 
         /// <summary>
         /// Runs one turn for a user input, or an autonomous follow-up turn
-        /// driven by a system reminder when input is null. Returns whether any
-        /// tool ran, which decides autonomous continuation.
+        /// when input is null. Returns whether any tool ran, which decides
+        /// autonomous continuation.
         /// </summary>
         private async Task<bool> RunTurnAsync(AgentInput input)
         {
@@ -413,12 +416,6 @@ stable facts or timeline notes. Keep each list item short and concrete.";
             {
                 if (autonomous)
                 {
-                    lock (m_Lock)
-                    {
-                        m_History.Add(new ChatMessage(
-                            ChatRole.System,
-                            AutonomousContinuePrompt));
-                    }
                     m_Observability.TurnStart(m_TurnId, "(autonomous continuation)");
                 }
                 else if (!string.IsNullOrWhiteSpace(input.Text))
@@ -458,7 +455,7 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                 {
                     lock (m_Lock)
                     {
-                        m_PromptAssembler.Apply(m_History);
+                        m_PromptAssembler.Apply(m_History, m_Mandate.LiveNote());
                     }
                     var round = await RunModelRoundAsync(m_TurnCts.Token);
                     if (round.IsError)
@@ -471,16 +468,6 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                         await m_ToolExecutor.ExecuteAsync(round.ToolCalls, m_TurnCts.Token);
                         UpdateTokenEstimate();
                         await MaybeCompactAsync(m_TurnCts.Token);
-                        if (m_TurnGenerationCount >= MaxToolRoundsPerTurn)
-                        {
-                            Emit(new AgentUiEvent
-                            {
-                                Kind = "status",
-                                Status = AgentStatus.Idle,
-                                Text = "Max tool rounds reached; ending this turn",
-                            });
-                            break;
-                        }
                     }
                     else
                     {
@@ -849,6 +836,7 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                         m_History,
                         summary,
                         keptMessages);
+                    m_PromptAssembler.Apply(m_History, m_Mandate.LiveNote());
                 }
                 m_EstimatedTokens = budget.Estimate(m_History);
 
@@ -969,6 +957,11 @@ stable facts or timeline notes. Keep each list item short and concrete.";
                 }
             }
             return names.Count == 0 ? null : string.Join(",", names);
+        }
+
+        private void EmitPlan()
+        {
+            Emit(new AgentUiEvent { Kind = "plan", Text = m_Mandate.ToUiJson() });
         }
 
         private void Emit(AgentUiEvent uiEvent)

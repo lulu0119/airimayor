@@ -186,6 +186,7 @@ namespace CitiesSkylines2Agent
                 { ChatLocale.Id("Status.Error"), "Error" },
                 { ChatLocale.Id("Status.Queued"), "queued" },
                 { ChatLocale.Id("Status.Vision"), "vision" },
+                { ChatLocale.Id("Plan.None"), "No active plan" },
             };
         }
 

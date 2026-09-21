@@ -175,6 +175,34 @@
   margin-left: 0;
 }
 
+.planStrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6rem 10rem;
+  padding: 6rem 10rem;
+  font-size: 12rem;
+  color: #cfd6e4;
+  background-color: rgba(10, 13, 18, 0.94);
+  border-bottom-style: solid;
+  border-bottom-width: 1rem;
+  border-bottom-color: rgba(70, 120, 200, 0.5);
+}
+
+.planGoal {
+  color: #eef2f9;
+  word-break: break-word;
+}
+
+.planSuccess {
+  color: #9aa3b5;
+  word-break: break-word;
+}
+
+.planEmpty {
+  color: #9aa3b5;
+}
+
 .messageList {
   flex: 1 1 auto;
   min-height: 0;

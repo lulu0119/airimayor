@@ -24,3 +24,4 @@ Code exists; a previous save is not the final gate. Close the game before DLL re
 - `map_image` road width now scales from native meters with the frame (zoomed roads match building lots; citywide stays near one pixel). Needs a live run comparing a citywide PNG to a bounded site PNG.
 - OSM Carto `map_image` (rails/metro/tram as tracks and visible over water, building/park fills, tunnel vs ground vs bridge; names stay in `map_text`; no stop-to-stop transit overlay). Needs a live citywide PNG and a zoomed site PNG.
 - Thinking-model `reasoning_content` echo (request pipeline re-attaches stored reasoning to Chat Completions assistant messages): needs a live thinking-model run proving the turn after a text answer no longer 400s and cache ratios stay green.
+- Mayor mandate: the active plan survives autonomous continuation; the chat plan strip shows the plan (empty state and after `set_plan`), not a transcript line.

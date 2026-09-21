@@ -1,12 +1,12 @@
 // Single owner of chat view state. Rule: a fresh mount hydrates the
 // transcript from the state snapshot; afterwards lines only grow via live
 // events, same-session snapshots only patch the chrome (status/busy/pending/
-// context). This keeps the two C# sources from diverging in the UI.
+// context/plan). This keeps the two C# sources from diverging in the UI.
 
 import { useEffect, useRef, useState } from "react";
 import { useValue } from "cs2/api";
 import { agentEvents$, agentState$, interruptTurn, sendChatMessage } from "mods/bindings";
-import type { AgentContextInfo, AgentSnapshot, AgentWireEvent, ChatLine } from "./chat-types";
+import type { AgentContextInfo, AgentSnapshot, AgentWireEvent, ChatLine, MayorPlan } from "./chat-types";
 import { applyWireEvent, emptyTranscript, hydrateTranscript } from "./transcript";
 
 export interface QueuedMessage {
@@ -23,6 +23,7 @@ export interface ChatModel {
   pending: number;
   note: string;
   context: AgentContextInfo | null;
+  plan: MayorPlan | null;
   send: (text: string) => void;
   interrupt: () => void;
 }
@@ -40,6 +41,27 @@ const parseSnapshot = (json: string): AgentSnapshot | null => {
   } catch {
     return null;
   }
+};
+
+const parsePlan = (value: unknown): MayorPlan | null => {
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (value == null || typeof value !== "object") {
+    return null;
+  }
+  const record = value as { goal?: unknown; success?: unknown };
+  if (typeof record.goal !== "string" || record.goal.length === 0) {
+    return null;
+  }
+  return {
+    goal: record.goal,
+    success: typeof record.success === "string" ? record.success : "",
+  };
 };
 
 const parseEvent = (json: string): AgentWireEvent | null => {
@@ -63,6 +85,7 @@ export const useChat = (): ChatModel => {
   const [pending, setPending] = useState(0);
   const [note, setNote] = useState("");
   const [context, setContext] = useState<AgentContextInfo | null>(null);
+  const [plan, setPlan] = useState<MayorPlan | null>(null);
   const sessionRef = useRef("");
   const nextIdRef = useRef(0);
   const queuedRef = useRef<QueuedMessage[]>([]);
@@ -114,6 +137,9 @@ export const useChat = (): ChatModel => {
           break;
         case "compact":
           break;
+        case "plan":
+          setPlan(parsePlan(event.text));
+          break;
       }
     });
     return () => {
@@ -140,6 +166,7 @@ export const useChat = (): ChatModel => {
         setPending(0);
         setNote("");
         setContext(null);
+        setPlan(null);
       }
       return;
     }
@@ -152,6 +179,7 @@ export const useChat = (): ChatModel => {
       setBusy(snapshot.busy);
       setPending(snapshot.pendingInputs ?? 0);
       setContext(snapshot.context ?? null);
+      setPlan(parsePlan(snapshot.plan));
       setLines(hydrated.lines);
       return;
     }
@@ -159,6 +187,7 @@ export const useChat = (): ChatModel => {
     setBusy(snapshot.busy);
     setPending(snapshot.pendingInputs ?? 0);
     setContext(snapshot.context ?? null);
+    setPlan(parsePlan(snapshot.plan));
   }, [snapshotJson]);
 
   return {
@@ -170,6 +199,7 @@ export const useChat = (): ChatModel => {
     pending,
     note,
     context,
+    plan,
     send: (text: string) => {
       if (text.trim().length === 0 || !sessionRef.current) {
         return;

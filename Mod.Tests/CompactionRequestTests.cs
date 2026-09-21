@@ -16,9 +16,9 @@ namespace CitiesSkylines2Agent.Agent
 
         private const string RealSummary =
             "{\"time_anchor\":\"frame ~7487488\",\"session_state\":\"mayor loop\"," +
-            "\"active_goal\":\"grow\",\"active_commitments\":[],\"durable_facts\":[]," +
+            "\"active_commitments\":[],\"durable_facts\":[]," +
             "\"relevant_people\":[],\"open_loops\":[],\"recent_timeline\":[]," +
-            "\"forgettable_noise\":[],\"current_plan\":\"zone\",\"paused_state\":\"\"," +
+            "\"forgettable_noise\":[],\"paused_state\":\"\"," +
             "\"last_world_snapshot\":\"pop 3000\"}";
 
         [Fact]

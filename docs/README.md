@@ -33,6 +33,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0025-map-image-native-node-ways.md](./adr/0025-map-image-native-node-ways.md) | Ways walk native nodes; width is paint |
 | [0026-road-facts-category-first.md](./adr/0026-road-facts-category-first.md) | Native road facts; category first, width never promotes |
 | [0027-tool-surface-renaming.md](./adr/0027-tool-surface-renaming.md) | Verbs first, no shape suffixes, one finance write |
+| [0028-mayor-mandate.md](./adr/0028-mayor-mandate.md) | Loop-owned city plan; no write gating; no per-turn generation cap |
 
 ## Guide
 
@@ -59,6 +60,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [2026-08-14-cs2-multi-instance.md](./research/2026-08-14-cs2-multi-instance.md) | Two CS2 processes on one Windows PC (not supported) |
 | [2026-08-15-ui-gameface-host.md](./research/2026-08-15-ui-gameface-host.md) | Chat UI is Gameface-hosted; the web is not a host |
 | [2026-09-17-agent-game-observation.md](./research/2026-09-17-agent-game-observation.md) | 2026 survey: game-agent observation (structured vs pixels vs hybrid) |
+| [2026-09-21-ai-urban-planning.md](./research/2026-09-21-ai-urban-planning.md) | 2026 survey: real-world AI for urban planning (academia, industry, cities) |
 
 ## Ops
 

@@ -30,7 +30,14 @@ namespace CitiesSkylines2Agent.Agent
         public List<AITool> Build(AgentModelProfile profile)
         {
             bool visionAvailable = profile != null && profile.VisionAvailable;
-            var tools = new List<AITool>();
+            var tools = new List<AITool>
+            {
+                AIFunctionFactory.CreateDeclaration(
+                    MayorMandate.ToolName,
+                    MayorMandate.ToolDescription,
+                    MayorMandate.Parameters,
+                    null),
+            };
             foreach (ToolDefinition tool in ToolCatalog.Tools)
             {
                 if (!IsAllowed(tool.Name, visionAvailable))

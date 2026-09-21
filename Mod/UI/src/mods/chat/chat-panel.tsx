@@ -5,6 +5,7 @@ import { FOCUS_AUTO, Panel, Portal } from "cs2/ui";
 import { useChat } from "./use-chat";
 import { useChatText } from "./locale";
 import { MessageList } from "./message-list";
+import { PlanStrip } from "./plan-strip";
 import { StatusBar } from "./status-bar";
 import { Composer } from "./composer";
 import { setPanelOpen, usePanelOpen } from "./panel-visibility";
@@ -163,7 +164,7 @@ export const ChatPanel = ({ children }: { children?: ReactNode }) => {
     const target = event.target as HTMLElement | null;
     if (
       target?.closest(
-        `.${styles.messageList}, .${styles.statusBar}, .${styles.composer}, button, textarea, input`,
+        `.${styles.messageList}, .${styles.statusBar}, .${styles.planStrip}, .${styles.composer}, button, textarea, input`,
       )
     ) {
       return;
@@ -226,6 +227,7 @@ export const ChatPanel = ({ children }: { children?: ReactNode }) => {
                   note={chat.note}
                   context={chat.context}
                 />
+                <PlanStrip plan={chat.plan} />
                 <MessageList lines={chat.lines} busy={chat.busy} />
           </Panel>
           {RESIZE_HANDLES.map((handle) => (

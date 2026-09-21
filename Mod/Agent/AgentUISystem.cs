@@ -153,7 +153,8 @@ namespace CitiesSkylines2Agent.Agent
                 agentEvent.Kind == "turn" ||
                 agentEvent.Kind == "compact" ||
                 agentEvent.Kind == "tool" ||
-                agentEvent.Kind == "delta")
+                agentEvent.Kind == "delta" ||
+                agentEvent.Kind == "plan")
             {
                 return true;
             }
