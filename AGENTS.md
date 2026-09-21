@@ -27,7 +27,13 @@ When a domain term is used, match [CONTEXT.md](CONTEXT.md). When a seam or modul
 - Use native validation. No Anarchy, `force`, or collision bypass. Construction recovery belongs inside the write tool.
 - Tools enqueue onto the simulation thread. Do not apply construction from the UI or chat thread.
 - Model-facing writes: `place_building` for buildings, `build_road` for linear networks. Do not add preview-then-commit, a `role` argument on place, or silent grade-separated promotion.
+- Mayor-facing text is a city contract: prompts, tool descriptions, and result notes speak city terms. Engine, HTTP, ECS, and loop jargon stay in code.
+- Delete unused model-facing tools for real (catalog, HTTP, and handler together). Network is not a junk drawer.
 - The player owns the clock. `wait_simulation` advances time then restores speed and pause. Do not force pause as the product runtime.
+- The player runs live acceptance on a new city and pastes logs. Agents judge pass/fail from those logs.
+- Read-tool payloads shrink by character budget, not a hard row cap.
+- Fix the cause; no defensive wrappers.
+- Repo language is English (comments, ADRs, README, commit subjects).
 - Design it twice and pick the cleaner design. No unsolicited docs.
 
 ## Skills
@@ -55,5 +61,5 @@ Follow [docs/AGENTS.md](docs/AGENTS.md). `CONTEXT.md` is glossary only. ADRs are
 - C#: `cd Mod && dotnet build` (close the game before redeploying the DLL).
 - UI-only: `cd Mod/UI && npm run build` (needs `CSII_USERDATAPATH`).
 - Prefer targeted checks over inventing large test suites unless asked.
-- After logic changes: deslop; use codebase-design language if a seam moved.
+- After logic changes: deslop; comments and docs must match the code; use codebase-design language if a seam moved.
 - Before claiming done: if unfinished inventory changed, `docs/open-work.md` is updated (not implemented vs awaiting live acceptance; delete passed gates).
