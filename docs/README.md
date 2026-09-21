@@ -9,7 +9,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0001-in-process-meai-loop.md](./adr/0001-in-process-meai-loop.md) | In-process MEAI loop; not apeira, SK, MAF, or an external process |
 | [0002-native-validation.md](./adr/0002-native-validation.md) | Ordinary native validation; no Anarchy or `force` |
 | [0003-one-step-building-placement.md](./adr/0003-one-step-building-placement.md) | `place_building` is the only model-facing building write |
-| [0004-linear-networks.md](./adr/0004-linear-networks.md) | `build_road`; ground vs grade-separated; no silent promotion |
+| [0004-linear-networks.md](./adr/0004-linear-networks.md) | Linear write (`build_network` since [0027](./adr/0027-tool-surface-renaming.md)); ground vs grade-separated; no silent promotion |
 | [0005-player-permissions.md](./adr/0005-player-permissions.md) | Demolish / progression / visual / development tools are settings |
 | [0006-budgeted-local-map.md](./adr/0006-budgeted-local-map.md) | `terrain` returns `LOCAL_MAP`, not a raw grid |
 | [0007-session-lifecycle.md](./adr/0007-session-lifecycle.md) | Session follows the loaded city; data under `ModsData` |
@@ -17,7 +17,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0009-typed-network-graph.md](./adr/0009-typed-network-graph.md) | One typed network behind list, demolish, and topology QA |
 | [0010-native-transit-lines.md](./adr/0010-native-transit-lines.md) | Transit lines via Route Tool apply; stops are not `place_building` |
 | [0011-specialized-industry-hub-identity.md](./adr/0011-specialized-industry-hub-identity.md) | Specialized-industry role follows declared extractor Operational areas |
-| [0012-docked-chat-transcript.md](./adr/0012-docked-chat-transcript.md) | Docked chat panel; bindings catalog; event-sourced transcript |
+| [0012-docked-chat-transcript.md](./adr/0012-docked-chat-transcript.md) | Docked chat on `GameBottomRight` + `Portal`; bindings catalog; event-sourced transcript |
 | [0013-carto-map-export.md](./adr/0013-carto-map-export.md) | `map_image` via Carto reflection; shares the vision switch |
 | [0014-tool-image-preview.md](./adr/0014-tool-image-preview.md) | Tool image previews are thumbnails over the event channel |
 | [0015-map-style-and-extent.md](./adr/0015-map-style-and-extent.md) | Light map style; bounded extents (style superseded by 0020) |
@@ -34,6 +34,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0026-road-facts-category-first.md](./adr/0026-road-facts-category-first.md) | Native road facts; category first, width never promotes |
 | [0027-tool-surface-renaming.md](./adr/0027-tool-surface-renaming.md) | Verbs first, no shape suffixes, one finance write |
 | [0028-mayor-mandate.md](./adr/0028-mayor-mandate.md) | Loop-owned city plan; no write gating; no per-turn generation cap |
+| [0029-player-owned-clock.md](./adr/0029-player-owned-clock.md) | Player owns the clock; `wait_simulation` restores speed/pause; no snapshot on the wait result |
 
 ## Guide
 
@@ -60,6 +61,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [2026-08-14-cs2-multi-instance.md](./research/2026-08-14-cs2-multi-instance.md) | Two CS2 processes on one Windows PC (not supported) |
 | [2026-08-15-ui-gameface-host.md](./research/2026-08-15-ui-gameface-host.md) | Chat UI is Gameface-hosted; the web is not a host |
 | [2026-09-17-agent-game-observation.md](./research/2026-09-17-agent-game-observation.md) | 2026 survey: game-agent observation (structured vs pixels vs hybrid) |
+| [2026-09-20-wait-simulation-background-patterns.md](./research/2026-09-20-wait-simulation-background-patterns.md) | Wait/background patterns; current clock is [0029](./adr/0029-player-owned-clock.md) |
 | [2026-09-21-ai-urban-planning.md](./research/2026-09-21-ai-urban-planning.md) | 2026 survey: real-world AI for urban planning (academia, industry, cities) |
 
 ## Ops

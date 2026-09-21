@@ -48,9 +48,9 @@ _Avoid_: service `role` as a `place_building` argument
 The write that places one standalone prefab and pose.
 _Avoid_: `find_placement`, `find_infrastructure_candidate`, preview-then-commit
 
-**build_road**:
+**build_network**:
 The write that constructs a linear network between endpoints. Distinct from placing a building.
-_Avoid_: `place_road`, `build_bridge` as a current tool
+_Avoid_: `build_road`, `place_road`, `build_bridge` as a current tool
 
 **Ground**:
 Default road mode: follow terrain; reject water and steep grades instead of rewriting the route.
