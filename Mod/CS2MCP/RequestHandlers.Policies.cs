@@ -92,7 +92,7 @@ namespace CS2MCP
 
             return BridgeResponse.Json(new
             {
-                note = "toggle with /city/policies/set?name=<name>&active=true|false (optional &adjustment=<float> for slider policies)",
+                note = "toggle with set_policy(name, active) (optional adjustment for slider policies)",
                 stalenessWarning = LockStalenessWarning,
                 policies,
             });
@@ -136,7 +136,7 @@ namespace CS2MCP
                         name = prefab.name,
                         active,
                         adjustment,
-                        note = "applied at end of frame",
+                        note = "applied",
                     });
                 }
             }

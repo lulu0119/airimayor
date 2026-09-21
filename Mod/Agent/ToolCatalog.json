@@ -26,7 +26,7 @@
     },
     {
       "name": "purchase_development_node",
-      "description": "Purchase one eligible Development Tree node by name from get_progression. Uses the game's native DevTreeSystem validation, spends legitimately earned points, emits the normal unlock event and leaves state unchanged when points, service availability or prerequisites are insufficient.",
+      "description": "Purchase one eligible Development Tree node by name from get_progression. Spends legitimately earned points and unlocks the node; leaves state unchanged when points, service availability or prerequisites are insufficient.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -62,7 +62,7 @@
     },
     {
       "name": "wait_simulation",
-      "description": "Run the simulation forward by in-game time: default 1 in-game hour (about 20-30 real seconds at the engine 8x speed cap). Resumes if paused, then restores the previous speed/pause state. Interruptible: a new player message ends the wait early with partial progress and a restored clock. If the clock is changed externally mid-wait, the wait hands over and leaves it as-is. Returns hours/completed/targetReached/note. Read the snapshot yourself after waiting: get_demand for what to grow, list_notifications for citywide warning counts, get_services for electricity/water/sewage/garbage, get_budget for money. Use when the next decision is gated on simulated time (construction finished, residents moved in, flow or production changed); otherwise keep writing. Finish a related group of writes first, then one wait (1-2 hours) plus one round of re-reads. Do not wait after every step. Never poll.",
+      "description": "Run the simulation forward by in-game time: default 1 in-game hour (about 20-30 real seconds). Resumes if paused, then restores the previous speed/pause state. A new player message ends the wait early with partial progress and a restored clock. If the player changes the clock during the wait, this call stops and leaves the clock as the player set it. Returns hours/completed/targetReached/note. Read the snapshot yourself after waiting: get_demand for what to grow, list_notifications for citywide warning counts, get_services for electricity/water/sewage/garbage, get_budget for money. Use when the next decision is gated on simulated time (construction finished, residents moved in, flow or production changed); otherwise keep writing. Finish a related group of writes first, then one wait (1-2 hours) plus one round of re-reads. Do not wait after every step. Never poll.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -87,7 +87,7 @@
     },
     {
       "name": "debug_zone_blocks",
-      "description": "DEVELOPMENT/ACCEPTANCE DIAGNOSTIC (use only when asked): dump zone prefab metadata, per-block cell state and VacantLot buffers around x,z.",
+      "description": "Diagnostic (use only when asked): dump zone prefab metadata and per-block cell state around x,z.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -155,7 +155,7 @@
     },
     {
       "name": "map_image",
-      "description": "Undistorted top-down PNG city map from native geometry in OSM Carto style (roads, rail, buildings by function, parks, water). Names stay in map_text. Omit bounds for a citywide planning overview (road layout, expansion direction, district structure); pass x+z+radius or xMin/zMin/xMax/zMax for a zoomed extent (troubleshooting a site). Returns the image directly.",
+      "description": "Undistorted top-down PNG city map in OSM Carto style (roads, rail, buildings by function, parks, water). Names stay in map_text. Omit bounds for a citywide planning overview (road layout, expansion direction, district structure); pass x+z+radius or xMin/zMin/xMax/zMax for a zoomed extent (troubleshooting a site). Returns the image directly.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -277,7 +277,7 @@
         "properties": {
           "type": {
             "type": "string",
-            "description": "StatisticType enum name, e.g. 'Population' or 'Money'"
+            "description": "Statistic name, e.g. 'Population' or 'Money'"
           },
           "parameter": {
             "type": "integer",
@@ -439,7 +439,7 @@
     },
     {
       "name": "list_prefabs",
-      "description": "Search game prefabs by name and/or typed role. Requires role and/or query. Use role for infrastructure/services; query for name substrings like 'Highway' or 'School'. Check 'locked' for milestone blocks. Road rows also return road{roadClass, speedKmh, carLanes, highwayRules, zonable}: roadClass is the native UI group first (highway = Highways category, not a width threshold), speedKmh is the native limit, carLanes counts native car lanes. Default limit 16, max 64.",
+      "description": "Search game prefabs by name and/or typed role. Requires role and/or query. Use role for infrastructure/services; query for name substrings like 'Highway' or 'School'. Check 'locked' for milestone blocks. Road rows also return road{roadClass, speedKmh, carLanes, highwayRules, zonable}: roadClass is the game's road category (highway = Highways, not a width threshold), speedKmh is the speed limit, carLanes counts car lanes. Default limit 16, max 64.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -473,7 +473,7 @@
               "telecom",
               "specialized-industry"
             ],
-            "description": "Typed capability filter from prefab ECS data. Prefer over name guessing for infrastructure and services. At least one of role or query is required."
+            "description": "Typed capability filter (power, water, sewage, ...). Prefer over name guessing for infrastructure and services. At least one of role or query is required."
           },
           "limit": {
             "type": "integer",
@@ -509,7 +509,7 @@
     },
     {
       "name": "inspect_operational_area",
-      "description": "Inspect building-owned operational polygons such as landfill storage or specialized-industry extraction areas. Returns polygon nodes, surface area, current storage/extraction state and native capacity/resource requirements. Use a building entity from list_buildings. This is read-only.",
+      "description": "Inspect building-owned operational polygons such as landfill storage or specialized-industry extraction areas. Returns polygon nodes, surface area, current storage/extraction state and capacity/resource requirements. Use index+version from list_buildings. This is read-only.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -542,7 +542,7 @@
     },
     {
       "name": "expand_operational_area",
-      "description": "Expand one owner-linked landfill storage or specialized-industry extractor area to a requested total surface. The tool preserves the locked building edge, plans a near-circle minus obstacles, adds nodes, samples terrain, rejects candidates crossing unowned land, buildings or roads, and commits through the game's native validation/apply pipeline. Extractors rank clear candidates by polygon/resource intersection; fertile land, ore, oil and fish use the natural-resource map while forest scans productive tree entities. Call inspect_operational_area afterward to verify simulation state.",
+      "description": "Expand one owner-linked landfill storage or specialized-industry extractor area to a requested total surface. Keeps the building edge, grows a near-circle around obstacles, and rejects candidates that cross unowned land, buildings or roads. Extractors rank clear candidates by resource coverage; fertile land, ore, oil and fish use the natural-resource map while forest scans productive trees. Call inspect_operational_area afterward to verify production.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -619,7 +619,7 @@
     },
     {
       "name": "set_facility_upgrade",
-      "description": "Install a missing facility upgrade or toggle Out of Service on an installed one through the native object-upgrade and policy pipelines. upgrade is a prefab name from list_facility_upgrades. enabled=true installs or returns the upgrade to service; enabled=false sets Out of Service. Do not use place_building for upgrades.",
+      "description": "Install a missing facility upgrade or toggle Out of Service on an installed one. upgrade is a prefab name from list_facility_upgrades. enabled=true installs or returns the upgrade to service; enabled=false sets Out of Service. Do not use place_building for upgrades.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -786,7 +786,7 @@
     },
     {
       "name": "add_transit_line",
-      "description": "Create a simple passenger line through the native route-tool apply pipeline (GenerateRoutesSystem / ApplyRoutesSystem after pathfinding). stops is an ordered list of list_transit_stops ids as index:version,index:version. Default type is bus. The line closes back to the first stop. Vehicles spawn from depots natively. Do not use place_building for stops or lines.",
+      "description": "Create a simple passenger line. stops is an ordered list of list_transit_stops ids as index:version,index:version. Default type is bus. The line closes back to the first stop and uses native route pathfinding. Vehicles spawn from depots. Do not use place_building for stops or lines.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -818,7 +818,7 @@
     },
     {
       "name": "remove_transit_line",
-      "description": "Delete one transit line from list_transit_lines through the same Deleted component the transportation overview uses. Does not demolish stops or stations.",
+      "description": "Delete one transit line from list_transit_lines. Does not demolish stops or stations.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -851,7 +851,7 @@
     },
     {
       "name": "place_building",
-      "description": "ONE-STEP placement: give prefab + x/z. For every agent-chosen site, include radius and omit rotation; the tool generates a bounded internal search, derives shoreline snapping and road frontage from PlacementFlags.Shoreline and BuildingFlags.RequireRoad, preflights the full footprint for owned land, rotated building/road overlap and ordinary ground-water intrusion, ranks valid poses deterministically, then sends only one finalist through the game's real validation and placement pipeline. Omit radius or set rotation only when the player explicitly requires an exact pose. If exact placement fails, retry with a larger radius and no rotation. Off-road water/sewage/low-voltage nodes receive the required pipe/cable connection (never High-voltage Line or High-voltage Ground Cable); road-fronted nodes use the networks carried by the road. Do NOT use this for regular zoned residential/commercial/industrial/office buildings - those grow from zone.",
+      "description": "Place one standalone prefab at x/z. For every site you choose, include radius and omit rotation so the tool can find a nearby legal pose (clearance, road frontage when the prefab needs a road, shoreline snap when it needs water). Omit radius or set rotation only when the player requires that exact pose. If exact placement fails, retry with a larger radius and no rotation. Off-road water/sewage/low-voltage nodes receive a matching pipe or cable (never High-voltage Line or High-voltage Ground Cable); road-fronted nodes use the networks on that road. Do NOT use this for regular zoned residential/commercial/industrial/office buildings - those grow from zone.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -871,11 +871,11 @@
             "type": "number",
             "minimum": 8,
             "maximum": 300,
-            "description": "Nearby search radius in meters. Required for agent-chosen sites; omit only for a player-selected exact pose. Increase it after a failed exact or narrow placement."
+            "description": "Nearby search radius in meters. Required for sites you choose; omit only for a player-selected exact pose. Increase it after a failed exact or narrow placement."
           },
           "rotation": {
             "type": "number",
-            "description": "Exact Y-axis rotation in degrees. Omit for agent-chosen sites so RequireRoad prefabs face the road and shoreline prefabs derive orientation from the wet/dry boundary."
+            "description": "Exact Y-axis rotation in degrees. Omit for sites you choose so prefabs that need a road face the road and shoreline prefabs orient to the wet/dry boundary."
           }
         },
         "required": [
@@ -1043,7 +1043,7 @@
               "telecom",
               "specialized-industry"
             ],
-            "description": "Typed role derived from prefab ECS components"
+            "description": "Typed role such as power, water, sewage, garbage, or specialized-industry"
           },
           "operational_area": {
             "type": "string",
@@ -1197,7 +1197,7 @@
     },
     {
       "name": "set_road_features",
-      "description": "Set composition features on an existing road segment from list_networks: grass, trees, wideSidewalk, soundBarrier, parking, lighting, medianGrass, medianTrees. This uses the game's native road-feature upgrade pipeline but does NOT change road prefab, width or lane layout.",
+      "description": "Set composition features on an existing road segment from list_networks: grass, trees, wideSidewalk, soundBarrier, parking, lighting, medianGrass, medianTrees. Does NOT change road prefab, width or lane layout.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1252,7 +1252,7 @@
     },
     {
       "name": "replace_road_type",
-      "description": "DEVELOPMENT/ACCEPTANCE EXPERIMENTAL: replace one simple standalone road edge with a different road prefab through the game's native Replace pipeline. Only road-to-road replacement is supported. v0 rejects intersections, chain segments, owned/fixed edges and locked target prefabs. The original edge entity may change; refresh list_networks after success.",
+      "description": "Experimental (use only when asked): replace one simple standalone road edge with a different road prefab. Road-to-road only. Rejects intersections, chain segments, owned/fixed edges and locked target prefabs. The original edge id may change; refresh list_networks after success.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1294,7 +1294,7 @@
     },
     {
       "name": "list_networks",
-      "description": "Inventory of typed network edges for one required kind (road, water, sewage, low_voltage). Zero topology: no isolated/kinds/componentSize. Shared fields: entity, prefab, start, end, length; distanceM when x/z given. Road also returns widthM, road{roadClass, speedKmh, carLanes, highwayRules, zonable} and traffic{volumeIndex, congestionIndex, activeBottlenecks, flowPercent}. Keep flowPercent at 70 or above; roadClass is the native UI group first (highway = Highways category, not a width threshold). Water and sewage are geometry only. Low-voltage also returns electricity{flow, capacity, bottleneck}. Sort: distance (with x/z); traffic_volume|congestion for road; load for low_voltage. Default limit 16, max 64. Use inspect_network_topology for isolation QA.",
+      "description": "Inventory of typed network edges for one required kind (road, water, sewage, low_voltage). Not topology: use inspect_network_topology for isolation QA. Shared fields: entity, prefab, start, end, length; distanceM when x/z given. Road also returns widthM, road{roadClass, speedKmh, carLanes, highwayRules, zonable} and traffic{volumeIndex, congestionIndex, activeBottlenecks, flowPercent}. Keep flowPercent at 70 or above; roadClass is the game's road category (highway = Highways, not a width threshold). Water and sewage are geometry only. Low-voltage also returns electricity{flow, capacity, bottleneck}. Sort: distance (with x/z); traffic_volume|congestion for road; load for low_voltage. Default limit 16, max 64.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1549,7 +1549,7 @@
     },
     {
       "name": "map_text",
-      "description": "Budgeted semantic-vector MAP_TEXT v1 for a map range. Returns a local coordinate frame, elevation/slope/water/owned/buildable summaries, connected regions, road nodes/edges, directional sectors, and omitted metadata. Road lines carry roadClass/lanes/speedKmh/highwayRules/zonable; roadClass is the native UI group first (highway = Highways category, not a width threshold). Use before choosing an expansion direction or placing shoreline/terrain-sensitive infrastructure. Coordinates in region and network geometry are quantized units relative to frame.origin_world; multiply by quantum_m to recover meter offsets. Spatial evidence, not native construction validation. Requires x+z+radius or xMin+zMin+xMax+zMax bounds.",
+      "description": "Compact map text for a range. Returns a local coordinate frame, elevation/slope/water/owned/buildable summaries, connected regions, road nodes/edges, directional sectors, and omitted metadata. Road lines carry roadClass/lanes/speedKmh/highwayRules/zonable; roadClass is the game's road category (highway = Highways, not a width threshold). Use before choosing an expansion direction or placing shoreline/terrain-sensitive infrastructure. Coordinates in region and network geometry are quantized units relative to frame.origin_world; multiply by quantum_m to recover meter offsets. Spatial evidence, not construction approval. Requires x+z+radius or xMin+zMin+xMax+zMax bounds.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1629,7 +1629,7 @@
     },
     {
       "name": "probe_layer",
-      "description": "Compact cell-map probe (landValue, pollution, groundWater, …) for a map range: value min/max/mean plus fixed 8x8 samples. Requires x+z+radius or xMin+zMin+xMax+zMax. If the range covers more than 128 native cells, returns truncated=true with a warning and still only 8x8 samples. Never returns full arrays.",
+      "description": "Compact cell-map probe (landValue, pollution, groundWater, …) for a map range: value min/max/mean plus fixed 8x8 samples. Requires x+z+radius or xMin+zMin+xMax+zMax. If the range covers more than 128 cells, returns truncated=true with a warning and still only 8x8 samples. Never returns full arrays.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1881,7 +1881,7 @@
     },
     {
       "name": "save_game",
-      "description": "DEVELOPMENT/ACCEPTANCE: trigger an asynchronous manual save when an acceptance procedure or the player explicitly requires one. Do not use it as an ordinary autonomous safety step. The default name is timestamped 'CS2MCP ...'.",
+      "description": "Diagnostic (use only when asked): trigger a manual save when the player explicitly requires one. Do not use it as an ordinary safety step. The default name is timestamped.",
       "parameters": {
         "type": "object",
         "properties": {

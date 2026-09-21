@@ -175,7 +175,7 @@ namespace CS2MCP
                     installed = true,
                     building = GetEntityPrefabName(prefabSystem, building),
                     entity = new { index = building.Index, version = building.Version },
-                    note = "toggled Out of Service through PoliciesUISystem, the same path as the building info panel",
+                    note = "toggled Out of Service, the same as the building info panel",
                 });
             }
 

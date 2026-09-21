@@ -31,7 +31,7 @@ namespace CS2MCP
                     dailyPayment = current.m_DailyPayment,
                 },
                 creditworthiness = loans.Creditworthiness,
-                note = "set the loan principal with /city/budget/set?kind=loan&value=N (0 repays fully, max = creditworthiness)",
+                note = "set the loan principal with set_budget(kind=loan, value=N) (0 repays fully, max = creditworthiness)",
             });
         }
 
@@ -88,7 +88,7 @@ namespace CS2MCP
             }
             return BridgeResponse.Json(new
             {
-                note = "set with /city/budget/set?kind=fee&name=<resource>&value=<float>; fees affect service income and citizen happiness",
+                note = "set with set_budget(kind=fee, name=<resource>, value=<float>); fees affect service income and citizen happiness",
                 fees = result,
             });
         }

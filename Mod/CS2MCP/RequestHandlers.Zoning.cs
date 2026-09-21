@@ -96,7 +96,7 @@ namespace CS2MCP
 
             return BridgeResponse.Json(new
             {
-                note = "use 'name' with /build/zone; zone 'None' clears zoning (dezone). Generic names automatically resolve to the current map theme when a themed variant exists",
+                note = "use 'name' with zone; zone 'None' clears zoning (dezone). Generic names automatically resolve to the current map theme when a themed variant exists",
                 stalenessWarning = LockStalenessWarning,
                 zones,
             });

@@ -307,7 +307,7 @@ namespace CS2MCP
                 role = requestedRole,
                 totalMatches = total,
                 returned = results.Count,
-                note = "use the exact 'name' value with /build/place; locked prefabs need milestone progress",
+                note = "use the exact 'name' value with place_building; locked prefabs need milestone progress",
                 stalenessWarning = LockStalenessWarning,
                 prefabs = results,
             });
@@ -1745,7 +1745,7 @@ namespace CS2MCP
                 warning = total > results.Count
                     ? $"too many results: {total} buildings match, only {results.Count} returned; shrink radius / add query filter, or paginate."
                     : null,
-                note = "hard max 64; sorted by distanceM when x/z given; use entity index+version with /build/demolish",
+                note = "hard max 64; sorted by distanceM when x/z given; use entity index+version with demolish",
                 buildings = results,
             });
         }

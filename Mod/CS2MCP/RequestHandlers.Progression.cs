@@ -336,7 +336,7 @@ namespace CS2MCP
                 cost = data.m_Cost,
                 pointsBefore,
                 pointsAfter,
-                note = "purchase accepted through DevTreeSystem; the unlock event applies at end of frame and persists with the save",
+                note = "purchase accepted; the unlock persists with the save",
             });
         }
 

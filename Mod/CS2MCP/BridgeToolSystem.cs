@@ -676,7 +676,7 @@ namespace CS2MCP
                 ["rotation"] = m_PendingZoneRotationDegrees,
                 ["note"] = cellsChanged == 0
                     ? "no zonable cells found in shape - zone cells only exist along roads and must be unoccupied"
-                    : "painted zone cells during ToolUpdate; run the simulation for VacantLots/buildings",
+                    : "zoned; buildings grow after wait_simulation",
             };
             CompletePending(BridgeResponse.Json(payload));
         }
@@ -745,7 +745,7 @@ namespace CS2MCP
                         demolished = true,
                         prefab = m_PendingLabel,
                         entity = new { index = m_PendingTarget.Index, version = m_PendingTarget.Version },
-                        note = "deleted via the game's bulldoze pipeline (nodes/blocks/lanes cleaned up by the game)",
+                        note = "demolished; connected nodes and lanes are cleaned up by the game",
                     });
                 case OperationKind.Upgrade:
                     return BridgeResponse.Json(new
@@ -754,7 +754,7 @@ namespace CS2MCP
                         canonicalTool = "set_road_features",
                         prefab = m_PendingLabel,
                         entity = new { index = m_PendingTarget.Index, version = m_PendingTarget.Version },
-                        note = "road features applied via the native upgrade pipeline; this does not change the road prefab, width or lane layout",
+                        note = "road features applied; this does not change the road prefab, width or lane layout",
                     });
                 case OperationKind.FacilityUpgrade:
                     return BridgeResponse.Json(new
@@ -770,7 +770,7 @@ namespace CS2MCP
                             y = m_PendingPosition.y,
                             z = m_PendingPosition.z,
                         },
-                        note = "installed via ObjectToolBaseSystem.CreateDefinitions with the parent as owner; native validation accepted CreationFlags.Upgrade",
+                        note = "upgrade installed on the parent building",
                     });
                 case OperationKind.TransitLine:
                     return BridgeResponse.Json(new
@@ -778,7 +778,7 @@ namespace CS2MCP
                         created = true,
                         prefab = m_PendingLabel,
                         stopCount = m_PendingTransitStops != null ? m_PendingTransitStops.Length : 0,
-                        note = "passenger line applied through GenerateRoutesSystem / ApplyRoutesSystem after native pathfinding; vehicles spawn from depots. Call list_transit_lines to read the new line.",
+                        note = "passenger line created; vehicles spawn from depots. Call list_transit_lines to read the new line.",
                     });
                 case OperationKind.ReplaceNet:
                     return BridgeResponse.Json(new
@@ -788,7 +788,7 @@ namespace CS2MCP
                         prefab = m_PendingPrefab != null ? m_PendingPrefab.name : null,
                         start = new { x = m_PendingPosition.x, z = m_PendingPosition.z },
                         end = new { x = m_PendingEnd.x, z = m_PendingEnd.z },
-                        note = "native Replace transaction committed; the original edge entity may be replaced, so refresh list_networks and verify lanes, zoning and traffic",
+                        note = "road type replaced; the original edge id may change, so refresh list_networks and verify lanes, zoning and traffic",
                     });
                 case OperationKind.Net:
                     float? widthM = null;
@@ -813,7 +813,7 @@ namespace CS2MCP
                                 endM = (float?)m_PendingElevations.y,
                             },
                         widthM,
-                        note = "committed this frame; verify via list_networks or /screenshot",
+                        note = "built; verify with list_networks or screenshot",
                     });
                 case OperationKind.OperationalArea:
                     return BridgeResponse.Json(new
@@ -843,7 +843,7 @@ namespace CS2MCP
                                     : null,
                             },
                         nodes = m_PendingOperationalAreaNodes != null ? m_PendingOperationalAreaNodes.Length : 0,
-                        note = $"native {m_PendingOperationalAreaKind} operational-area relocation committed; call inspect_operational_area to verify simulation resource/capacity and ownership",
+                        note = $"{m_PendingOperationalAreaKind} operational area expanded; call inspect_operational_area to verify resource, capacity and ownership",
                     });
                 default:
                     object lotSize = null;
@@ -870,7 +870,7 @@ namespace CS2MCP
                         },
                         lotSize,
                         footprintMeters,
-                        note = "committed this frame; verify via /city/buildings or /screenshot",
+                        note = "placed; verify with list_buildings or screenshot",
                     });
             }
         }

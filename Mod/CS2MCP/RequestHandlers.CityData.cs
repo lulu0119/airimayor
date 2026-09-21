@@ -80,7 +80,7 @@ namespace CS2MCP
                     productionRate = garbage.garbageAccumulation,
                 },
                 problems,
-                note = "garbage.productionRate is daily generation, not a deficit; use list_notifications for GarbagePilingUp. Healthcare/education coverage: query /city/statistics (e.g. type=EducationCount) until dedicated endpoints land. problems[] is a derived summary of critical service gaps — address those before expanding.",
+                note = "garbage.productionRate is daily generation, not a deficit; use list_notifications for GarbagePilingUp. Healthcare/education coverage: query get_statistics (e.g. type=EducationCount). problems[] is a derived summary of critical service gaps — address those before expanding.",
             });
         }
 
@@ -181,7 +181,7 @@ namespace CS2MCP
                 current,
                 samplesReturned = values.Count,
                 totalSamples = count,
-                note = "samples are taken 32 times per in-game day (262144 frames = 1 day); frames[i] is the simulation frame of values[i]",
+                note = "samples are taken 32 times per in-game day",
                 frames,
                 values,
             });

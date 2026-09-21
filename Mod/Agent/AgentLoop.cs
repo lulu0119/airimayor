@@ -102,8 +102,8 @@ Return strict JSON with:
   ""paused_state"": string,
   ""last_world_snapshot"": string
 }
-Do not restate the active city plan; the loop pins [active plan] separately.
-Preserve player constraints, operator instructions, open loops, important names,
+Do not restate the active city plan; an [active plan] note is already provided; do not duplicate it.
+Preserve player constraints, player instructions, open loops, important names,
 and current world/session state (city money, population, demand, notifications)
 in durable_facts. Prefer compressing assistant chatter, tool chatter, and stale
 notices. Do not keep stale relative-time phrases; convert them into stable facts

@@ -17,8 +17,7 @@ namespace CitiesSkylines2Agent.Agent
         public const string ToolDescription =
             "Declare the single active city plan. " +
             "goal is one sentence. success is the measurable stop condition. " +
-            "Replaces the previous plan. Player messages clear it; " +
-            "autonomous continuation does not.";
+            "Replaces the previous plan.";
 
         private static readonly JsonDocument ParametersDocument = JsonDocument.Parse(
             @"{

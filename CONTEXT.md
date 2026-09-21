@@ -12,7 +12,7 @@ _Avoid_: MCP client, external agent process, apeira
 
 **Model-facing surface**:
 The tools and text the model is allowed to call or see.
-_Avoid_: HTTP route, backend handler, catalog row (those may exist without being model-facing)
+_Avoid_: HTTP route, backend handler, catalog row (those may exist without being model-facing); engine system and type names; HTTP routes in descriptions or result notes; loop jargon (autonomous continuation, on the surface)
 
 **Mayor playbook**:
 The city-building playbook baked into the system prompt (city building, utility networks, transit lines).

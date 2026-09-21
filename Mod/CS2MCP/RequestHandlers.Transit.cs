@@ -198,7 +198,7 @@ namespace CS2MCP
                 total,
                 truncated = total > stops.Count,
                 stops,
-                note = "read-only snapshot of existing TransportStop entities; add_transit_line connects them. Do not use place_building to make a stop.",
+                note = "read-only snapshot of existing stops; add_transit_line connects them. Do not use place_building to make a stop.",
             });
         }
 
@@ -264,7 +264,7 @@ namespace CS2MCP
                     total,
                     truncated = total > lines.Count,
                     lines,
-                    note = "read-only snapshot; optional x/z/radius keeps lines with a stop inside the range; vehicles and production stay native",
+                    note = "read-only snapshot; optional x/z/radius keeps lines with a stop inside the range; vehicles spawn from depots",
                 });
             }
             finally
@@ -398,7 +398,7 @@ namespace CS2MCP
                 deleted = true,
                 prefab = prefabName,
                 entity = new { index = entity.Index, version = entity.Version },
-                note = "deleted through EndFrameBarrier.Deleted, the same path as the transportation overview",
+                note = "line removed; stops and stations stay",
             });
         }
 
