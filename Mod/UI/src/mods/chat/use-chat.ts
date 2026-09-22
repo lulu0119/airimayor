@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { useValue } from "cs2/api";
 import { agentEvents$, agentState$, interruptTurn, sendChatMessage } from "mods/bindings";
 import type { AgentContextInfo, AgentSnapshot, AgentWireEvent, ChatLine, MayorPlan } from "./chat-types";
+import type { RunningTool } from "./send-effect";
 import { applyWireEvent, emptyTranscript, hydrateTranscript } from "./transcript";
 
 export interface QueuedMessage {
@@ -19,6 +20,7 @@ export interface ChatModel {
   lines: ChatLine[];
   queued: QueuedMessage[];
   status: string;
+  runningTool: RunningTool | null;
   busy: boolean;
   pending: number;
   note: string;
@@ -81,6 +83,7 @@ export const useChat = (): ChatModel => {
   const [lines, setLines] = useState<ChatLine[]>(emptyTranscript.lines);
   const [queued, setQueued] = useState<QueuedMessage[]>([]);
   const [status, setStatus] = useState("Idle");
+  const [runningTool, setRunningTool] = useState<RunningTool | null>(null);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState(0);
   const [note, setNote] = useState("");
@@ -88,9 +91,14 @@ export const useChat = (): ChatModel => {
   const [plan, setPlan] = useState<MayorPlan | null>(null);
   const sessionRef = useRef("");
   const nextIdRef = useRef(0);
+  const runningRef = useRef<RunningTool | null>(null);
   const queuedRef = useRef<QueuedMessage[]>([]);
   const snapshotJson = useValue(agentState$);
   const subscribed = useRef(false);
+  const rememberRunning = (next: RunningTool | null) => {
+    runningRef.current = next;
+    setRunningTool(next);
+  };
 
   useEffect(() => {
     if (subscribed.current) {
@@ -113,13 +121,26 @@ export const useChat = (): ChatModel => {
           setNote("");
           break;
         case "delta":
+          setBusy(true);
+          break;
         case "tool":
           setBusy(true);
+          if (runningRef.current) {
+            rememberRunning(null);
+          } else {
+            rememberRunning({
+              name: event.tool ?? "tool",
+              args: event.text ?? "",
+            });
+          }
           break;
         case "status": {
           const next = event.status ?? event.text;
           setStatus(next);
           setBusy(isActiveStatus(next));
+          if (next !== "Working") {
+            rememberRunning(null);
+          }
           if (next === "Idle" || next === "Interrupted" || next === "Error") {
             setNote("");
           }
@@ -130,10 +151,12 @@ export const useChat = (): ChatModel => {
           break;
         case "error":
           setBusy(false);
+          rememberRunning(null);
           break;
         case "turn":
           setBusy(false);
           setNote("");
+          rememberRunning(null);
           break;
         case "compact":
           break;
@@ -162,6 +185,7 @@ export const useChat = (): ChatModel => {
         setQueued([]);
         setLines([]);
         setStatus("Idle");
+        rememberRunning(null);
         setBusy(false);
         setPending(0);
         setNote("");
@@ -176,6 +200,7 @@ export const useChat = (): ChatModel => {
       nextIdRef.current = hydrated.nextId;
       setSession(snapshot.session);
       setStatus(snapshot.status);
+      rememberRunning(null);
       setBusy(snapshot.busy);
       setPending(snapshot.pendingInputs ?? 0);
       setContext(snapshot.context ?? null);
@@ -184,6 +209,9 @@ export const useChat = (): ChatModel => {
       return;
     }
     setStatus(snapshot.status);
+    if (snapshot.status !== "Working") {
+      rememberRunning(null);
+    }
     setBusy(snapshot.busy);
     setPending(snapshot.pendingInputs ?? 0);
     setContext(snapshot.context ?? null);
@@ -195,6 +223,7 @@ export const useChat = (): ChatModel => {
     lines,
     queued,
     status,
+    runningTool,
     busy,
     pending,
     note,

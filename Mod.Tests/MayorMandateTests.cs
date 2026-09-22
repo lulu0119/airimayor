@@ -34,12 +34,13 @@ namespace CitiesSkylines2Agent.Agent
             string note = mandate.LiveNote();
             Assert.Contains("fill residential demand", note);
             Assert.Contains("homelessness gone", note);
+            Assert.DoesNotContain("player message", note);
             Assert.DoesNotContain("review the whole city", note);
             Assert.DoesNotContain("wait_simulation", note);
         }
 
         [Fact]
-        public void Player_clear_returns_to_empty_note()
+        public void Clear_returns_to_empty_note()
         {
             var mandate = new MayorMandate();
             mandate.SetPlan(

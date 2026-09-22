@@ -1,5 +1,6 @@
 import type { AgentContextInfo } from "./chat-types";
 import { useChatText } from "./locale";
+import { phaseCopy, type ComposerPhase } from "./send-effect";
 import styles from "./chat.module.scss";
 
 const formatTokenCount = (value: number): string => {
@@ -28,13 +29,14 @@ const statusDotClass = (status: string, busy: boolean): string => {
 
 interface StatusBarProps {
   status: string;
+  phase: ComposerPhase;
   busy: boolean;
   pending: number;
   note: string;
   context: AgentContextInfo | null;
 }
 
-export const StatusBar = ({ status, busy, pending, note, context }: StatusBarProps) => {
+export const StatusBar = ({ status, phase, busy, pending, note, context }: StatusBarProps) => {
   const text = useChatText();
   // The wire protocol keeps the English enum names; only the display is localized.
   const statusName = (value: string): string => {
@@ -53,7 +55,10 @@ export const StatusBar = ({ status, busy, pending, note, context }: StatusBarPro
         return value;
     }
   };
-  const label = busy && note ? note : statusName(status);
+  const copy =
+    phase === "interrupt" || phase === "finish" || phase === "endWait" ? phaseCopy(phase) : null;
+  const effect = copy ? text(copy.id, copy.fallback) : null;
+  const label = busy && note ? note : effect ?? statusName(status);
   return (
     <div className={styles.statusBar}>
       <span className={`${styles.statusDot} ${statusDotClass(status, busy)}`} />

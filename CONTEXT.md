@@ -19,12 +19,12 @@ The city-building playbook baked into the system prompt (city building, utility 
 _Avoid_: engineering skills under `.agents/` or `~/.agents/`
 
 **Traffic governance**:
-The mayor's congestion loop over existing tools: wait plus fresh reads plus topology QA, `list_networks` ranked by congestion or traffic volume, existing road writes, then `wait_simulation` and re-measure.
+The mayor's congestion loop over existing tools: a time advance plus fresh reads plus topology QA, `list_networks` ranked by congestion or traffic volume, existing road writes, then `set_simulation` advance and re-measure.
 _Avoid_: a new traffic tool, adding lanes to every local street, treating degree-1 dead ends as automatic errors
 
 **Wait simulation**:
-The tool that advances in-game time, then restores the previous speed and pause. The player owns the clock. The model-facing result is wait mechanics only: hours/completed/targetReached/note. It carries no city snapshot; the model builds the snapshot itself from read tools (demand, notifications, city_services, budget) after every wait.
-_Avoid_: forced pause as the product runtime, polling wait results incorrectly, a nested overview/problems digest on the wait result, waitedMs, SimWait internals
+Reading and setting the simulation clock. `get_simulation` reads whether the city is paused and the current speed. `set_simulation` can advance in-game time and then restore the previous speed and pause, or pause the city immediately. The player owns the clock. An advance result is wait mechanics only: hours/completed/targetReached/note. It carries no city snapshot; the model builds the snapshot itself from read tools (demand, notifications, city_services, budget) after every advance.
+_Avoid_: forced pause as the product runtime, polling, a nested overview/problems digest on the advance result, waitedMs, SimWait internals
 
 **Context budget**:
 How many tokens the loop treats as the window. Always the player-set WindowTokens; the loop never parses the model name. The request shape follows the player-set API kind (Chat Completions or Responses).
@@ -35,8 +35,8 @@ Summarizing older turns when estimated tokens reach the compact threshold.
 _Avoid_: deleting the session, starting a new chat
 
 **Mayor mandate**:
-The loop-owned current city plan. Declared with `set_plan`; cleared by player messages, not by autonomous continuation.
-_Avoid_: a statutory plan, compact JSON as the live plan, gating the tool catalog, the mandate prompting wait_simulation
+The loop-owned current city plan. Declared with `set_plan`. Player messages and autonomous continuation leave it in place; only `set_plan` replaces it.
+_Avoid_: a statutory plan, compact JSON as the live plan, gating the tool catalog, the mandate prompting a time advance
 
 ### Construction
 

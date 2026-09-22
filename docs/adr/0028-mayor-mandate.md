@@ -2,7 +2,7 @@
 
 Status: accepted
 
-Playbook text and compaction `current_plan` did not stop reactive one-tool turns: autonomous continuation asked the model to review the whole city, and a 30-generation cap chopped a plan into fresh citywide reviews. The loop now holds a **mayor mandate**. The model declares it with `set_plan`; player messages clear it; autonomous continuation does not. City writes are not gated on it. Each model round pins one live note; that note is not an append-only history copy. The player sees it as chat chrome (snapshot + `plan` event), not a transcript line. `wait_simulation` stays player-clock playbook ([ADR-0029](0029-player-owned-clock.md)): wait when the next decision needs simulated time, not because the mandate entered a verifying phase.
+Playbook text and compaction `current_plan` did not stop reactive one-tool turns: autonomous continuation asked the model to review the whole city, and a 30-generation cap chopped a plan into fresh citywide reviews. The loop now holds a **mayor mandate**. The model declares it with `set_plan`; player messages leave it in place ([ADR-0030](0030-player-message-keeps-plan.md) replaces “player messages clear it”); autonomous continuation does not clear it either. City writes are not gated on it. Each model round pins one live note; that note is not an append-only history copy. The player sees it as chat chrome (snapshot + `plan` event), not a transcript line. `set_simulation` stays player-clock playbook ([ADR-0029](0029-player-owned-clock.md), [ADR-0031](0031-explicit-pause.md)): advance when the next decision needs simulated time, not because the mandate entered a verifying phase.
 
 This beat prompt-only continuation, treating compact JSON as the live plan, gating the tool catalog, a verifying wait FSM, a closed `kind` enum, and adding a congestion write tool. The per-turn generation cap is deleted: a turn ends when the model stops calling tools, a generation times out, the player steers or interrupts, or the city unloads.
 
@@ -16,4 +16,4 @@ This beat prompt-only continuation, treating compact JSON as the live plan, gati
 
 ## Consequences
 
-`set_plan` is loop-local, not a simulation route. Busy `Send` cancels the running turn so player text is not stuck behind an uncapped tool loop.
+`set_plan` is loop-local, not a simulation route. Busy `Send` no longer cancels an in-flight tool batch; see [ADR-0030](0030-player-message-keeps-plan.md).

@@ -12,8 +12,8 @@ using Unity.Mathematics;
 namespace CS2MCP
 {
     /// <summary>
-    /// Meta / time endpoints: short real-time simulation waits with state
-    /// restore, triggering saves (AI safety net), and map tile info.
+    /// Meta / time endpoints: read the clock, advance or pause it, trigger
+    /// saves, and read map tile info.
     /// </summary>
     public sealed partial class RequestHandlers
     {
@@ -37,31 +37,67 @@ namespace CS2MCP
             }
         }
 
-        private BridgeResponse SimWait(BridgeRequest request)
+        private BridgeResponse GetSimulation()
         {
             if (!TryGetCity(out _, out BridgeResponse error))
             {
                 return error;
             }
+            SimulationSystem sim = World.GetOrCreateSystemManaged<SimulationSystem>();
+            float speed = sim.selectedSpeed;
+            return BridgeResponse.Json(new
+            {
+                paused = speed <= 0f,
+                speed,
+            });
+        }
+
+        private BridgeResponse SetSimulation(BridgeRequest request)
+        {
+            if (!TryGetCity(out _, out BridgeResponse error))
+            {
+                return error;
+            }
+            if (!request.Query.TryGetValue("action", out string action) || string.IsNullOrWhiteSpace(action))
+            {
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "action is required: advance or pause");
+            }
+            if (string.Equals(action, "pause", StringComparison.Ordinal))
+            {
+                if (m_System.AutoPauseTargetFrame != 0)
+                {
+                    return BridgeResponse.Error(BridgeErrorKind.Conflict, "a timed simulation advance is already active; wait for it to finish first");
+                }
+                SimulationSystem sim = World.GetOrCreateSystemManaged<SimulationSystem>();
+                sim.selectedSpeed = 0f;
+                return BridgeResponse.Json(new
+                {
+                    paused = true,
+                    speed = 0f,
+                });
+            }
+            if (!string.Equals(action, "advance", StringComparison.Ordinal))
+            {
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "action must be advance or pause");
+            }
             if (m_System.AutoPauseTargetFrame != 0)
             {
-                return BridgeResponse.Error(BridgeErrorKind.Conflict, "a timed simulation wait is already active; wait for it to finish first");
+                return BridgeResponse.Error(BridgeErrorKind.Conflict, "a timed simulation advance is already active; wait for it to finish first");
             }
             if (!request.TryGetFloat("hours", out float hours))
             {
                 hours = 1f;
             }
-            hours = math.clamp(hours, 1f, 24f);
+            hours = math.clamp(hours, 1f, 8f);
 
-            SimulationSystem sim = World.GetOrCreateSystemManaged<SimulationSystem>();
-            float restoreSpeed = sim.selectedSpeed;
-            // One wait advances exactly the requested number of in-game hours.
-            // The run speed only controls how long that takes in real time;
-            // it does not change how much game time passes.
+            SimulationSystem simulation = World.GetOrCreateSystemManaged<SimulationSystem>();
+            float restoreSpeed = simulation.selectedSpeed;
+            // One advance covers exactly the requested in-game hours.
+            // The run speed only controls how long that takes in real time.
             const float speed = 8f;
-            uint targetFrame = sim.frameIndex +
+            uint targetFrame = simulation.frameIndex +
                 (uint)Math.Ceiling(hours * kFramesPerGameHour);
-            sim.selectedSpeed = speed;
+            simulation.selectedSpeed = speed;
             m_System.StartTimedRun(targetFrame, restoreSpeed, speed);
 
             return BridgeResponse.Json(new
@@ -70,9 +106,9 @@ namespace CS2MCP
                 hours,
                 speed,
                 restoreSpeed,
-                startFrame = sim.frameIndex,
+                startFrame = simulation.frameIndex,
                 targetFrame,
-                note = "simulation runs until exactly the requested in-game hours have passed (default 1 game hour), then the previous speed/pause state is restored",
+                note = "simulation runs until the requested in-game hours have passed (1-8, default 1), then the previous speed/pause state is restored",
             });
         }
 

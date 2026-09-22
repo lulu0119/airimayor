@@ -19,10 +19,13 @@ namespace CitiesSkylines2Agent.Agent
         private readonly Action<AgentUiEvent> m_Emit;
         private readonly Action<ChatMessage> m_AppendHistory;
         private readonly Action m_OnPlanChanged;
+        private readonly Func<CancellationToken, CancellationToken> m_BeginAdvance;
+        private readonly Action m_EndAdvance;
 
         public AgentToolExecutor(AgentToolSurface toolSurface, AgentClientFactory clientFactory,
             AgentObservability observability, MayorMandate mandate, Action<AgentUiEvent> emit,
-            Action<ChatMessage> appendHistory, Action onPlanChanged)
+            Action<ChatMessage> appendHistory, Action onPlanChanged,
+            Func<CancellationToken, CancellationToken> beginAdvance, Action endAdvance)
         {
             m_ToolSurface = toolSurface;
             m_ClientFactory = clientFactory;
@@ -31,6 +34,8 @@ namespace CitiesSkylines2Agent.Agent
             m_Emit = emit;
             m_AppendHistory = appendHistory;
             m_OnPlanChanged = onPlanChanged;
+            m_BeginAdvance = beginAdvance;
+            m_EndAdvance = endAdvance;
         }
 
         public int FunctionCount { get; private set; }
@@ -48,38 +53,33 @@ namespace CitiesSkylines2Agent.Agent
             // Completions pairing (assistant tool_calls must be followed by
             // consecutive tool results).
             var pendingImages = new List<KeyValuePair<string, string>>();
+            bool stopBatch = false;
             for (int index = 0; index < toolCalls.Count; index++)
             {
                 FunctionCallContent call = toolCalls[index];
                 string argumentsJson = SerializeArguments(call.Arguments);
+                bool advance = IsTimeAdvance(call.Name, argumentsJson);
+                CancellationToken callToken = advance ? m_BeginAdvance(cancellationToken) : cancellationToken;
                 Stopwatch timer = Stopwatch.StartNew();
                 m_Emit(new AgentUiEvent { Kind = "tool", Tool = call.Name ?? call.CallId, Text = argumentsJson });
                 ToolInvocationResult result;
                 try
                 {
-                    result = await InvokeAsync(call.Name, argumentsJson, cancellationToken);
+                    result = await InvokeAsync(call.Name, argumentsJson, callToken);
                 }
                 catch (OperationCanceledException)
                 {
                     timer.Stop();
-                    FunctionCount++;
-                    m_Observability.Function(call.Name, argumentsJson, "tool call interrupted", false, timer.ElapsedMilliseconds, 0, "interrupted");
-                    m_AppendHistory(new ChatMessage(ChatRole.Tool,
-                        new List<AIContent> { new FunctionResultContent(call.CallId, "tool call interrupted") }));
-                    // Poison guard: every remaining call in this batch must
-                    // still get a result, or the orphaned tool_calls break
-                    // Chat Completions pairing for the rest of the session.
-                    // No UI events for them (their start rows never emitted).
-                    for (int rest = index + 1; rest < toolCalls.Count; rest++)
-                    {
-                        FunctionCallContent skipped = toolCalls[rest];
-                        FunctionCount++;
-                        m_Observability.Function(skipped.Name, SerializeArguments(skipped.Arguments),
-                            "tool call interrupted", false, 0, 0, "interrupted");
-                        m_AppendHistory(new ChatMessage(ChatRole.Tool,
-                            new List<AIContent> { new FunctionResultContent(skipped.CallId, "tool call interrupted") }));
-                    }
+                    RecordInterrupted(call, argumentsJson, timer.ElapsedMilliseconds);
+                    PoisonRemaining(toolCalls, index + 1);
                     throw;
+                }
+                finally
+                {
+                    if (advance)
+                    {
+                        m_EndAdvance();
+                    }
                 }
                 timer.Stop();
                 FunctionCount++;
@@ -103,10 +103,58 @@ namespace CitiesSkylines2Agent.Agent
                 {
                     pendingImages.Add(new KeyValuePair<string, string>(call.Name, result.ImagePath));
                 }
+                if (advance && callToken.IsCancellationRequested)
+                {
+                    PoisonRemaining(toolCalls, index + 1);
+                    stopBatch = true;
+                    break;
+                }
             }
             foreach (KeyValuePair<string, string> pending in pendingImages)
             {
                 AppendToolImage(pending.Key, pending.Value);
+            }
+            if (stopBatch && cancellationToken.IsCancellationRequested)
+            {
+                throw new OperationCanceledException(cancellationToken);
+            }
+        }
+
+        private static bool IsTimeAdvance(string name, string argumentsJson)
+        {
+            if (!string.Equals(name, "set_simulation", StringComparison.Ordinal))
+            {
+                return false;
+            }
+            using (JsonDocument document = JsonDocument.Parse(argumentsJson))
+            {
+                JsonElement root = document.RootElement;
+                return root.ValueKind == JsonValueKind.Object &&
+                    root.TryGetProperty("action", out JsonElement action) &&
+                    action.ValueKind == JsonValueKind.String &&
+                    string.Equals(action.GetString(), "advance", StringComparison.Ordinal);
+            }
+        }
+
+        private void RecordInterrupted(FunctionCallContent call, string argumentsJson, long elapsedMilliseconds)
+        {
+            FunctionCount++;
+            m_Observability.Function(call.Name, argumentsJson, "tool call interrupted", false, elapsedMilliseconds, 0, "interrupted");
+            m_AppendHistory(new ChatMessage(ChatRole.Tool,
+                new List<AIContent> { new FunctionResultContent(call.CallId, "tool call interrupted") }));
+        }
+
+        /// <summary>
+        /// Every remaining call in this batch still gets a result, or the
+        /// orphaned tool_calls break Chat Completions pairing. No UI events:
+        /// their start rows were never emitted.
+        /// </summary>
+        private void PoisonRemaining(IReadOnlyList<FunctionCallContent> toolCalls, int start)
+        {
+            for (int rest = start; rest < toolCalls.Count; rest++)
+            {
+                FunctionCallContent skipped = toolCalls[rest];
+                RecordInterrupted(skipped, SerializeArguments(skipped.Arguments), 0);
             }
         }
 

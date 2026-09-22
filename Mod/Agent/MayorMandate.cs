@@ -5,8 +5,8 @@ using System.Text.Json.Nodes;
 namespace CitiesSkylines2Agent.Agent
 {
     /// <summary>
-    /// Loop-owned current city plan. The model declares it with set_plan;
-    /// player messages clear it; autonomous continuation does not.
+    /// Loop-owned current city plan. The model declares it with set_plan.
+    /// Player messages and autonomous continuation leave it in place.
     /// </summary>
     internal sealed class MayorMandate
     {

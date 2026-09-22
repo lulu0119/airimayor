@@ -34,7 +34,9 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0026-road-facts-category-first.md](./adr/0026-road-facts-category-first.md) | Native road facts; category first, width never promotes |
 | [0027-tool-surface-renaming.md](./adr/0027-tool-surface-renaming.md) | Verbs first, no shape suffixes, one finance write |
 | [0028-mayor-mandate.md](./adr/0028-mayor-mandate.md) | Loop-owned city plan; no write gating; no per-turn generation cap |
-| [0029-player-owned-clock.md](./adr/0029-player-owned-clock.md) | Player owns the clock; `wait_simulation` restores speed/pause; no snapshot on the wait result |
+| [0029-player-owned-clock.md](./adr/0029-player-owned-clock.md) | Player owns the clock; an advance restores speed/pause; no snapshot on the advance result |
+| [0030-player-message-keeps-plan.md](./adr/0030-player-message-keeps-plan.md) | Player messages keep the plan; a reply stops, a tool step finishes, an advance ends |
+| [0031-explicit-pause.md](./adr/0031-explicit-pause.md) | `get_simulation` reads the clock; `set_simulation` can advance or pause |
 
 ## Guide
 

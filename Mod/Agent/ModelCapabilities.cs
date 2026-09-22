@@ -5,17 +5,16 @@ namespace CitiesSkylines2Agent.Agent
     internal sealed class ModelCapabilities
     {
         public long ContextWindowTokens { get; set; }
-        public long MaxOutputTokens { get; set; }
         public bool SupportsVision { get; set; }
         public string Source { get; set; } = "";
 
-        /// <summary>Token count at which compaction is triggered (~82% of window).</summary>
-        public long CompactAtTokens => Math.Max(8_000, (long)(ContextWindowTokens * 0.82));
+        /// <summary>Tokens reserved so one reply fits in the window.</summary>
+        public long OutputReserveTokens => Math.Min(32_000, Math.Max(1, ContextWindowTokens - 8_000));
 
-        /// <summary>Tokens reserved for model output (capped at 64K, min 4K).</summary>
-        public long OutputReserveTokens => Math.Min(Math.Max(4_096, ContextWindowTokens / 10), 64_000);
+        /// <summary>Estimated input size at which compaction runs.</summary>
+        public long CompactAtTokens => ContextWindowTokens - OutputReserveTokens;
 
-        /// <summary>How many tokens worth of tail messages to keep verbatim during compaction.</summary>
-        public long TailBudgetTokens => Math.Min(16_384, Math.Max(4_096, CompactAtTokens / 16));
+        /// <summary>Recent tokens kept verbatim during compaction.</summary>
+        public long TailBudgetTokens => Math.Min(15_000, Math.Max(2_000, CompactAtTokens / 4));
     }
 }

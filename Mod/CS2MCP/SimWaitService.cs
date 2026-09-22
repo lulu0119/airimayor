@@ -42,9 +42,18 @@ namespace CS2MCP
             }
             catch (OperationCanceledException)
             {
-                // A steer or interrupt ends the wait early: restore the clock
-                // so the player never inherits the run speed, then report
-                // partial progress instead of a bare error.
+                // The player already took the clock: do not restore over it.
+                if (bridge.LastWaitOutcome == WaitOutcome.TakenOver)
+                {
+                    string takenOver = await TryGetJsonAsync(bridge, "/state");
+                    return SimWaitResult.Build(
+                        startJson,
+                        takenOver,
+                        false,
+                        SimWaitResult.TakenOverNote);
+                }
+                // A player message or stop ends the advance early: restore
+                // the clock so the player never inherits the run speed.
                 bridge.CancelTimedRun();
                 string state = await TryGetJsonAsync(bridge, "/state");
                 return SimWaitResult.Build(

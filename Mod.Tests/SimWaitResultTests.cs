@@ -55,7 +55,7 @@ namespace CS2MCP
         }
 
         [Theory]
-        [InlineData(false, true, "wait did not finish in time; retry wait_simulation once")]
+        [InlineData(false, true, "wait did not finish in time; retry set_simulation advance once")]
         [InlineData(true, false, "wait aborted: simulation did not advance (game paused or a modal overlay is open)")]
         [InlineData(true, true, "wait finished; simulation restored to its previous speed/pause state")]
         public void Uses_the_three_stable_notes(bool completed, bool reached, string note)
