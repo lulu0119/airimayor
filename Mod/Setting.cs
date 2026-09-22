@@ -47,8 +47,13 @@ namespace CitiesSkylines2Agent
         public string ApiKey { get; set; } = "";
 
         [SettingsUISection(kSection, kConnectionGroup)]
-        [SettingsUITextInput]
-        public string Model { get; set; } = "";
+        [SettingsUIDropdown(typeof(Setting), nameof(GetModelPresetItems))]
+        [SettingsUIValueVersion(typeof(Setting), nameof(ModelPresetVersion))]
+        public string ModelPreset
+        {
+            get => Model;
+            set { if (!string.IsNullOrEmpty(value)) { Model = value; } }
+        }
 
         [SettingsUISection(kSection, kConnectionGroup)]
         [SettingsUIButton]
@@ -58,13 +63,8 @@ namespace CitiesSkylines2Agent
         }
 
         [SettingsUISection(kSection, kConnectionGroup)]
-        [SettingsUIDropdown(typeof(Setting), nameof(GetModelPresetItems))]
-        [SettingsUIValueVersion(typeof(Setting), nameof(ModelPresetVersion))]
-        public string ModelPreset
-        {
-            get => Model;
-            set { if (!string.IsNullOrEmpty(value)) { Model = value; } }
-        }
+        [SettingsUITextInput]
+        public string Model { get; set; } = "";
 
         [SettingsUISection(kSection, kConnectionGroup)]
         public ApiKind Api { get; set; } = ApiKind.ChatCompletions;
