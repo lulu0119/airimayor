@@ -73,7 +73,9 @@ namespace CS2MCP
             int nodeA,
             int nodeB,
             int componentSize,
-            float distanceM)
+            float distanceM,
+            bool hasAnchor = false,
+            float2 anchor = default)
         {
             Class = topologyClass;
             EdgeA = edgeA;
@@ -82,6 +84,8 @@ namespace CS2MCP
             NodeB = nodeB;
             ComponentSize = componentSize;
             DistanceM = distanceM;
+            HasAnchor = hasAnchor;
+            Anchor = anchor;
         }
 
         public NetworkTopologyClass Class { get; }
@@ -91,6 +95,8 @@ namespace CS2MCP
         public int NodeB { get; }
         public int ComponentSize { get; }
         public float DistanceM { get; }
+        public bool HasAnchor { get; }
+        public float2 Anchor { get; }
     }
 
     internal readonly struct NetworkDeadEnd
@@ -343,6 +349,48 @@ namespace CS2MCP
                 default:
                     return "unknown";
             }
+        }
+
+        public static bool InsideQuery(
+            NetworkTopologyFinding finding,
+            IReadOnlyList<TypedNetworkEdge> edges,
+            float2 center,
+            float radius)
+        {
+            return TryRepairSite(finding, edges, out float2 site)
+                && math.distance(site, center) <= radius;
+        }
+
+        public static bool TryRepairSite(
+            NetworkTopologyFinding finding,
+            IReadOnlyList<TypedNetworkEdge> edges,
+            out float2 site)
+        {
+            if (finding.HasAnchor)
+            {
+                site = finding.Anchor;
+                return true;
+            }
+            return TryEdgeSite(edges, finding.EdgeA, out site);
+        }
+
+        public static bool TryEdgeSite(
+            IReadOnlyList<TypedNetworkEdge> edges,
+            int index,
+            out float2 site)
+        {
+            site = default;
+            if (index < 0 || index >= edges.Count)
+            {
+                return false;
+            }
+            float3[] points = edges[index].Points;
+            if (points == null || points.Length == 0)
+            {
+                return false;
+            }
+            site = points[points.Length / 2].xz;
+            return true;
         }
 
         public static int[] LabelComponents(
@@ -697,12 +745,24 @@ namespace CS2MCP
             }
         }
 
+        private readonly struct JunctionSite
+        {
+            public JunctionSite(float3 position, int edgeIndex)
+            {
+                Position = position;
+                EdgeIndex = edgeIndex;
+            }
+
+            public float3 Position { get; }
+            public int EdgeIndex { get; }
+        }
+
         private static void AddTooCloseJunctions(
             IReadOnlyList<TypedNetworkEdge> edges,
             Dictionary<int, int> degrees,
             List<NetworkTopologyFinding> findings)
         {
-            var junctions = new Dictionary<int, float3>();
+            var junctions = new Dictionary<int, JunctionSite>();
             for (int i = 0; i < edges.Count; i++)
             {
                 TypedNetworkEdge edge = edges[i];
@@ -714,19 +774,21 @@ namespace CS2MCP
                 }
                 if (DegreeOf(degrees, edge.StartNode) >= 3)
                 {
-                    junctions[edge.StartNode] = edge.Points[0];
+                    junctions.TryAdd(edge.StartNode, new JunctionSite(edge.Points[0], i));
                 }
                 if (DegreeOf(degrees, edge.EndNode) >= 3)
                 {
-                    junctions[edge.EndNode] = edge.Points[edge.Points.Length - 1];
+                    junctions.TryAdd(
+                        edge.EndNode,
+                        new JunctionSite(edge.Points[edge.Points.Length - 1], i));
                 }
             }
 
             var grid = new Dictionary<long, List<int>>();
-            foreach (KeyValuePair<int, float3> junction in junctions)
+            foreach (KeyValuePair<int, JunctionSite> junction in junctions)
             {
-                int cellX = (int)math.floor(junction.Value.x / CloseJunctionMeters);
-                int cellZ = (int)math.floor(junction.Value.z / CloseJunctionMeters);
+                int cellX = (int)math.floor(junction.Value.Position.x / CloseJunctionMeters);
+                int cellZ = (int)math.floor(junction.Value.Position.z / CloseJunctionMeters);
                 long key = CellKey(cellX, cellZ);
                 if (!grid.TryGetValue(key, out List<int> list))
                 {
@@ -738,7 +800,7 @@ namespace CS2MCP
 
             foreach (List<int> members in grid.Values)
             {
-                float3 origin = junctions[members[0]];
+                float3 origin = junctions[members[0]].Position;
                 int cellX = (int)math.floor(origin.x / CloseJunctionMeters);
                 int cellZ = (int)math.floor(origin.z / CloseJunctionMeters);
                 for (int dx = -1; dx <= 1; dx++)
@@ -759,19 +821,23 @@ namespace CS2MCP
                                 {
                                     continue;
                                 }
-                                float distance = math.distance(junctions[nodeA].xz, junctions[nodeB].xz);
+                                JunctionSite siteA = junctions[nodeA];
+                                JunctionSite siteB = junctions[nodeB];
+                                float distance = math.distance(siteA.Position.xz, siteB.Position.xz);
                                 if (distance >= CloseJunctionMeters)
                                 {
                                     continue;
                                 }
                                 findings.Add(new NetworkTopologyFinding(
                                     NetworkTopologyClass.TooCloseJunctions,
-                                    -1,
-                                    -1,
+                                    siteA.EdgeIndex,
+                                    siteB.EdgeIndex,
                                     nodeA,
                                     nodeB,
                                     0,
-                                    distance));
+                                    distance,
+                                    true,
+                                    (siteA.Position.xz + siteB.Position.xz) * 0.5f));
                             }
                         }
                     }
@@ -852,7 +918,9 @@ namespace CS2MCP
                 node,
                 -1,
                 0,
-                math.sqrt(best)));
+                math.sqrt(best),
+                true,
+                position.xz));
         }
 
         private static void AddUnnodedCrossings(

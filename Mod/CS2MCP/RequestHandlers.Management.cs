@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Game.City;
+using Game.Prefabs;
 using Game.Simulation;
 using Game.Tools;
 using Unity.Entities;
@@ -14,6 +15,26 @@ namespace CS2MCP
     /// </summary>
     public sealed partial class RequestHandlers
     {
+        private EntityQuery m_ServiceFeeParameterQuery;
+        private bool m_ServiceFeeParameterQueryCreated;
+
+        private EntityQuery ServiceFeeParameterQuery
+        {
+            get
+            {
+                if (!m_ServiceFeeParameterQueryCreated)
+                {
+                    m_ServiceFeeParameterQuery = EntityManager.CreateEntityQuery(new EntityQueryDesc
+                    {
+                        All = new[] { ComponentType.ReadOnly<ServiceFeeParameterData>() },
+                        Options = EntityQueryOptions.IncludeSystems,
+                    });
+                    m_ServiceFeeParameterQueryCreated = true;
+                }
+                return m_ServiceFeeParameterQuery;
+            }
+        }
+
         private BridgeResponse GetLoan()
         {
             if (!TryGetCity(out _, out BridgeResponse error))
@@ -66,6 +87,10 @@ namespace CS2MCP
             {
                 return error;
             }
+            if (!TryGetServiceFeeParameters(out ServiceFeeParameterData feeParameters, out BridgeResponse parameterError))
+            {
+                return parameterError;
+            }
             ServiceFeeSystem feeSystem = World.GetOrCreateSystemManaged<ServiceFeeSystem>();
             DynamicBuffer<ServiceFee> fees = EntityManager.GetBuffer<ServiceFee>(city, isReadOnly: true);
             var result = new Dictionary<string, object>();
@@ -77,12 +102,13 @@ namespace CS2MCP
                 }
                 if (ServiceFeeSystem.TryGetFee(resource, fees, out float fee))
                 {
-                    int3 limits = feeSystem.GetServiceFees(resource);
+                    FeeParameters slider = feeParameters.GetFeeParameters(resource);
                     result[resource.ToString()] = new
                     {
                         fee,
                         estimatedMonthlyIncome = feeSystem.GetServiceFeeIncomeEstimate(resource, fee),
-                        sliderRange = new { min = limits.x, max = limits.y, defaultValue = limits.z },
+                        adjustable = slider.m_Adjustable,
+                        sliderRange = new { min = 0f, max = slider.m_Max, defaultValue = slider.m_Default },
                     };
                 }
             }
@@ -91,6 +117,19 @@ namespace CS2MCP
                 note = "set with set_budget(kind=fee, name=<resource>, value=<float>); fees affect service income and citizen happiness",
                 fees = result,
             });
+        }
+
+        private bool TryGetServiceFeeParameters(out ServiceFeeParameterData feeParameters, out BridgeResponse error)
+        {
+            if (ServiceFeeParameterQuery.IsEmpty)
+            {
+                feeParameters = default;
+                error = BridgeResponse.Error(BridgeErrorKind.Unavailable, "city fee settings are not loaded");
+                return false;
+            }
+            feeParameters = ServiceFeeParameterQuery.GetSingleton<ServiceFeeParameterData>();
+            error = null;
+            return true;
         }
 
         private BridgeResponse SetFee(BridgeRequest request)
@@ -114,12 +153,19 @@ namespace CS2MCP
             {
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, $"resource '{resource}' has no adjustable fee in this city");
             }
-            ServiceFeeSystem feeSystem = World.GetOrCreateSystemManaged<ServiceFeeSystem>();
-            int3 limits = feeSystem.GetServiceFees(resource);
-            if (fee < limits.x || fee > limits.y)
+            if (!TryGetServiceFeeParameters(out ServiceFeeParameterData feeParameters, out BridgeResponse parameterError))
+            {
+                return parameterError;
+            }
+            FeeParameters slider = feeParameters.GetFeeParameters(resource);
+            if (!slider.m_Adjustable)
+            {
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, $"{resource} price cannot be changed");
+            }
+            if (fee < 0f || fee > slider.m_Max)
             {
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments,
-                    $"fee {fee} out of slider range [{limits.x}, {limits.y}] for {resource}");
+                    $"fee {fee} is outside [0, {slider.m_Max}] for {resource}");
             }
             ServiceFeeSystem.SetFee(resource, fees, fee);
             return BridgeResponse.Json(new
@@ -127,7 +173,7 @@ namespace CS2MCP
                 resource = resource.ToString(),
                 previousFee = previous,
                 newFee = fee,
-                sliderRange = new { min = limits.x, max = limits.y, defaultValue = limits.z },
+                sliderRange = new { min = 0f, max = slider.m_Max, defaultValue = slider.m_Default },
             });
         }
     }
