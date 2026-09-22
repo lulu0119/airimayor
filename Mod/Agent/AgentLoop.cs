@@ -30,7 +30,6 @@ namespace CitiesSkylines2Agent.Agent
         public string Text;
         public string Tool;
         public AgentStatus Status;
-        public bool Steered;
 
         /// <summary>UI-only image preview (data URI) for image tool results.</summary>
         public string Image;
@@ -60,10 +59,6 @@ namespace CitiesSkylines2Agent.Agent
                 obj["imageWidth"] = ImageWidth;
                 obj["imageHeight"] = ImageHeight;
             }
-            if (Steered)
-            {
-                obj["steered"] = true;
-            }
             return obj.ToJsonString();
         }
     }
@@ -71,18 +66,16 @@ namespace CitiesSkylines2Agent.Agent
     internal sealed class AgentInput
     {
         public string Text;
-        public bool Steered;
     }
 
     /// <summary>
     /// In-process agent runtime: IChatClient + hand-rolled function-calling
     /// loop. One user message runs one turn. Each model round pins the
-    /// mayor-mandate live note. When Continuous is on, a turn that used
-    /// tools opens another turn with no extra user or system message. A
-    /// turn ends when the model stops calling tools, a generation times
-    /// out, the player steers or interrupts, or the city unloads.
-    /// Player messages clear the mandate, cancel the running turn, and
-    /// preempt autonomy.
+    /// mayor-mandate live note. When Continuous is on, a turn that becomes
+    /// idle with no pending player text opens another turn. A turn ends
+    /// when the model stops calling tools, a generation times out, the
+    /// player steers or interrupts, or the city unloads. Player messages
+    /// leave the mandate in place.
     /// </summary>
     public sealed class AgentLoop : IDisposable
     {
@@ -150,8 +143,12 @@ or timeline notes. Keep each list item short and concrete.";
         private readonly MayorMandate m_Mandate = new MayorMandate();
 
         private readonly AgentClientFactory m_ClientFactory;
+        private readonly object m_CancelGate = new object();
         private Task m_LoopTask;
         private CancellationTokenSource m_TurnCts;
+        private CancellationTokenSource m_GenerationCts;
+        private CancellationTokenSource m_AdvanceCts;
+        private bool m_AdvanceActive;
         private CancellationTokenSource m_LoopCts = new CancellationTokenSource();
         private string m_SessionId;
         private string m_TurnId;
@@ -176,7 +173,9 @@ or timeline notes. Keep each list item short and concrete.";
                 m_Mandate,
                 Emit,
                 AppendHistoryMessage,
-                EmitPlan);
+                EmitPlan,
+                BeginAdvance,
+                EndAdvance);
         }
 
         public event Action<AgentUiEvent> UiEvent;
@@ -188,8 +187,9 @@ or timeline notes. Keep each list item short and concrete.";
         public bool IsBusy => Status == AgentStatus.Thinking || Status == AgentStatus.Working;
 
         /// <summary>
-        /// Clear the mandate and queue a player message. Cancels a running
-        /// turn so the text is not stuck behind an uncapped tool loop.
+        /// Queue a player message. A reply in progress stops. A tool batch
+        /// finishes first, except an in-game time advance, which stops and
+        /// restores the previous clock. The mandate stays.
         /// </summary>
         public void Send(string text)
         {
@@ -204,26 +204,20 @@ or timeline notes. Keep each list item short and concrete.";
             }
             string safe = text ?? "";
             bool busy = IsBusy;
+            AgentStatus status = Status;
+            m_Pending.Writer.TryWrite(new AgentInput { Text = safe });
             if (busy)
             {
-                m_TurnCts?.Cancel();
-            }
-            m_Mandate.Clear();
-            EmitPlan();
-            if (busy)
-            {
-                lock (m_Lock)
+                if (status == AgentStatus.Thinking)
                 {
-                    m_History.Add(new ChatMessage(ChatRole.User, safe));
+                    CancelGeneration();
                 }
-                m_Pending.Writer.TryWrite(new AgentInput { Text = safe, Steered = true });
-                Emit(new AgentUiEvent { Kind = "user", Text = safe, Steered = true });
+                else
+                {
+                    CancelAdvanceIfActive();
+                }
             }
-            else
-            {
-                m_Pending.Writer.TryWrite(new AgentInput { Text = safe });
-                Emit(new AgentUiEvent { Kind = "user", Text = safe });
-            }
+            Emit(new AgentUiEvent { Kind = "user", Text = safe });
             EnsureLoop();
         }
 
@@ -234,6 +228,8 @@ or timeline notes. Keep each list item short and concrete.";
                 return;
             }
             m_TurnCts?.Cancel();
+            CancelGeneration();
+            CancelAdvanceIfActive();
             Status = AgentStatus.Interrupted;
             Emit(new AgentUiEvent { Kind = "status", Status = AgentStatus.Interrupted, Text = "Current turn interrupted" });
         }
@@ -380,10 +376,9 @@ or timeline notes. Keep each list item short and concrete.";
                 while (!m_LoopCts.IsCancellationRequested &&
                     !m_TurnCts.IsCancellationRequested)
                 {
-                    bool hadTools = await RunTurnAsync(current);
+                    await RunTurnAsync(current);
                     bool wantAuto = Setting.StaticContinuous &&
                         !m_TimeoutOccurred &&
-                        hadTools &&
                         m_Pending.Reader.Count == 0 &&
                         !m_TurnCts.IsCancellationRequested &&
                         !m_LoopCts.IsCancellationRequested;
@@ -398,10 +393,9 @@ or timeline notes. Keep each list item short and concrete.";
 
         /// <summary>
         /// Runs one turn for a user input, or an autonomous follow-up turn
-        /// when input is null. Returns whether any tool ran, which decides
-        /// autonomous continuation.
+        /// when input is null.
         /// </summary>
-        private async Task<bool> RunTurnAsync(AgentInput input)
+        private async Task RunTurnAsync(AgentInput input)
         {
             bool autonomous = input == null;
             m_TurnId = Guid.NewGuid().ToString("N").Substring(0, 8);
@@ -420,29 +414,9 @@ or timeline notes. Keep each list item short and concrete.";
                 }
                 else if (!string.IsNullOrWhiteSpace(input.Text))
                 {
-                    if (input.Steered && !NeedsSteeredFollowUp(input.Text))
-                    {
-                        return false;
-                    }
                     lock (m_Lock)
                     {
-                        if (input.Steered)
-                        {
-                            // History already carries the steered message; a
-                            // duplicate enqueue must not append it twice.
-                            if (!HistoryEndsWithText(input.Text))
-                            {
-                                m_History.Add(new ChatMessage(
-                                    ChatRole.User,
-                                    input.Text));
-                            }
-                        }
-                        else
-                        {
-                            m_History.Add(new ChatMessage(
-                                ChatRole.User,
-                                input.Text));
-                        }
+                        m_History.Add(new ChatMessage(ChatRole.User, input.Text));
                     }
                     m_Observability.TurnStart(m_TurnId, input.Text);
                 }
@@ -453,12 +427,16 @@ or timeline notes. Keep each list item short and concrete.";
 
                 while (!m_TurnCts.IsCancellationRequested)
                 {
+                    if (m_Pending.Reader.Count > 0)
+                    {
+                        break;
+                    }
                     lock (m_Lock)
                     {
                         m_PromptAssembler.Apply(m_History, m_Mandate.LiveNote());
                     }
                     var round = await RunModelRoundAsync(m_TurnCts.Token);
-                    if (round.IsError)
+                    if (round.IsError || round.IsPlayerMessage)
                     {
                         break;
                     }
@@ -468,6 +446,10 @@ or timeline notes. Keep each list item short and concrete.";
                         await m_ToolExecutor.ExecuteAsync(round.ToolCalls, m_TurnCts.Token);
                         UpdateTokenEstimate();
                         await MaybeCompactAsync(m_TurnCts.Token);
+                        if (m_Pending.Reader.Count > 0)
+                        {
+                            break;
+                        }
                     }
                     else
                     {
@@ -499,51 +481,6 @@ or timeline notes. Keep each list item short and concrete.";
             Status = AgentStatus.Idle;
             Emit(new AgentUiEvent { Kind = "status", Status = AgentStatus.Idle });
             Emit(new AgentUiEvent { Kind = "turn", Text = m_TurnId });
-            return m_ToolExecutor.FunctionCount > 0;
-        }
-
-        private bool HistoryEndsWithText(string text)
-        {
-            for (int i = m_History.Count - 1; i >= 0; i--)
-            {
-                ChatMessage message = m_History[i];
-                if (message.Role != ChatRole.User)
-                {
-                    continue;
-                }
-                return (message.Text ?? "") == (text ?? "");
-            }
-            return false;
-        }
-
-        private bool NeedsSteeredFollowUp(string text)
-        {
-            lock (m_Lock)
-            {
-                int lastUser = -1;
-                for (int i = m_History.Count - 1; i >= 0; i--)
-                {
-                    if (m_History[i].Role == ChatRole.User &&
-                        (m_History[i].Text ?? "") == (text ?? ""))
-                    {
-                        lastUser = i;
-                        break;
-                    }
-                }
-                if (lastUser < 0)
-                {
-                    return true;
-                }
-                for (int i = lastUser + 1; i < m_History.Count; i++)
-                {
-                    if (m_History[i].Role == ChatRole.Assistant &&
-                        !string.IsNullOrWhiteSpace(m_History[i].Text))
-                    {
-                        return false;
-                    }
-                }
-                return true;
-            }
         }
 
         private void AppendHistoryMessage(ChatMessage message)
@@ -611,6 +548,10 @@ or timeline notes. Keep each list item short and concrete.";
             bool allowContextRetry = true)
         {
             await MaybeCompactAsync(cancellationToken);
+            if (m_Pending.Reader.Count > 0)
+            {
+                return ModelRound.PlayerMessage();
+            }
 
             IChatClient client = m_ClientFactory.GetClient();
             if (client == null)
@@ -635,12 +576,14 @@ or timeline notes. Keep each list item short and concrete.";
             var updates = new List<ChatResponseUpdate>();
             var pendingDelta = new StringBuilder();
             Stopwatch timer = Stopwatch.StartNew();
+            var generationCts = new CancellationTokenSource();
             try
             {
                 Status = AgentStatus.Thinking;
+                ArmGeneration(generationCts);
                 Emit(new AgentUiEvent { Kind = "status", Status = AgentStatus.Thinking });
                 using (CancellationTokenSource timeoutCts =
-                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, generationCts.Token))
                 {
                     timeoutCts.CancelAfter(AgentClientFactory.ModelRequestTimeout);
                     await foreach (ChatResponseUpdate update in client.GetStreamingResponseAsync(
@@ -695,6 +638,10 @@ or timeline notes. Keep each list item short and concrete.";
             }
             catch (OperationCanceledException)
             {
+                if (generationCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+                {
+                    return ModelRound.PlayerMessage();
+                }
                 if (!cancellationToken.IsCancellationRequested)
                 {
                     timer.Stop();
@@ -730,6 +677,10 @@ or timeline notes. Keep each list item short and concrete.";
                 string safeMessage = AgentObservability.RedactSecrets(e.Message);
                 Emit(new AgentUiEvent { Kind = "error", Text = "Model call failed: " + safeMessage });
                 return ModelRound.Error(safeMessage);
+            }
+            finally
+            {
+                DisarmGeneration(generationCts);
             }
         }
 
@@ -959,6 +910,64 @@ or timeline notes. Keep each list item short and concrete.";
             return names.Count == 0 ? null : string.Join(",", names);
         }
 
+        private void ArmGeneration(CancellationTokenSource generation)
+        {
+            lock (m_CancelGate)
+            {
+                m_GenerationCts = generation;
+            }
+        }
+
+        private void DisarmGeneration(CancellationTokenSource generation)
+        {
+            lock (m_CancelGate)
+            {
+                if (ReferenceEquals(m_GenerationCts, generation))
+                {
+                    m_GenerationCts = null;
+                }
+                generation.Dispose();
+            }
+        }
+
+        private void CancelGeneration()
+        {
+            lock (m_CancelGate)
+            {
+                m_GenerationCts?.Cancel();
+            }
+        }
+
+        private CancellationToken BeginAdvance(CancellationToken turn)
+        {
+            lock (m_CancelGate)
+            {
+                m_AdvanceCts?.Dispose();
+                m_AdvanceCts = CancellationTokenSource.CreateLinkedTokenSource(turn);
+                m_AdvanceActive = true;
+                return m_AdvanceCts.Token;
+            }
+        }
+
+        private void EndAdvance()
+        {
+            lock (m_CancelGate)
+            {
+                m_AdvanceActive = false;
+            }
+        }
+
+        private void CancelAdvanceIfActive()
+        {
+            lock (m_CancelGate)
+            {
+                if (m_AdvanceActive)
+                {
+                    m_AdvanceCts?.Cancel();
+                }
+            }
+        }
+
         private void EmitPlan()
         {
             Emit(new AgentUiEvent { Kind = "plan", Text = m_Mandate.ToUiJson() });
@@ -982,6 +991,13 @@ or timeline notes. Keep each list item short and concrete.";
             m_Disposed = true;
             m_LoopCts.Cancel();
             m_TurnCts?.Cancel();
+            CancelGeneration();
+            CancelAdvanceIfActive();
+            lock (m_CancelGate)
+            {
+                m_AdvanceCts?.Dispose();
+                m_AdvanceCts = null;
+            }
             m_Observability.Dispose();
             m_ClientFactory.Dispose();
             if (Instance == this)
@@ -996,10 +1012,16 @@ or timeline notes. Keep each list item short and concrete.";
             public List<FunctionCallContent> ToolCalls = new List<FunctionCallContent>();
             public UsageDetails Usage;
             public bool IsError;
+            public bool IsPlayerMessage;
 
             public static ModelRound Error(string message)
             {
                 return new ModelRound { IsError = true, Text = message };
+            }
+
+            public static ModelRound PlayerMessage()
+            {
+                return new ModelRound { IsPlayerMessage = true };
             }
         }
     }

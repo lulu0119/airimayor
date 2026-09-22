@@ -22,9 +22,9 @@ namespace CitiesSkylines2Agent.Agent
 
     /// <summary>
     /// Translates model tool calls into CS2MCP bridge requests and builds
-    /// catalog query strings. Writes are not gated on pause. wait_simulation
-    /// blocks the agent thread until the timed run finishes; the city-side
-    /// follow-up (wait mechanics only, no snapshot) lives in
+    /// catalog query strings. Writes are not gated on pause. set_simulation
+    /// advance blocks the agent thread until the timed run finishes; the
+    /// city-side follow-up (wait mechanics only, no snapshot) lives in
     /// CS2MCP.SimWaitService so the loop stays free of city knowledge.
     /// </summary>
     public static class AgentToolBridge
@@ -52,6 +52,9 @@ namespace CitiesSkylines2Agent.Agent
                 return Error($"invalid arguments for {tool.Name}: {AgentObservability.RedactSecrets(e.Message)}");
             }
 
+            bool advance = string.Equals(tool.Name, "set_simulation", StringComparison.Ordinal) &&
+                query.TryGetValue("action", out string action) &&
+                string.Equals(action, "advance", StringComparison.Ordinal);
             Task<CS2MCP.BridgeResponse> bridgeTask = bridge.InvokeAsync(tool.Route, query);
             Task completed = await Task.WhenAny(bridgeTask, Task.Delay(BridgeTimeoutMs, cancellationToken));
             CS2MCP.BridgeResponse response = completed == bridgeTask
@@ -59,6 +62,10 @@ namespace CitiesSkylines2Agent.Agent
                 : null;
             if (response == null)
             {
+                if (advance)
+                {
+                    bridge.CancelTimedRun();
+                }
                 cancellationToken.ThrowIfCancellationRequested();
                 return Error($"tool '{tool.Name}' did not complete within {BridgeTimeoutMs / 1000}s; " +
                              "the game may be busy, retry once or switch approach");
@@ -83,7 +90,7 @@ namespace CitiesSkylines2Agent.Agent
             }
 
             string text = Encoding.UTF8.GetString(response.Body ?? Array.Empty<byte>());
-            if (string.Equals(tool.Name, "wait_simulation", StringComparison.Ordinal))
+            if (advance)
             {
                 text = await CS2MCP.SimWaitService.WaitAsync(
                     bridge, text, cancellationToken);

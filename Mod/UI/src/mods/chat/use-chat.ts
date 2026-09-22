@@ -113,6 +113,8 @@ export const useChat = (): ChatModel => {
           setNote("");
           break;
         case "delta":
+          setBusy(true);
+          break;
         case "tool":
           setBusy(true);
           break;

@@ -122,36 +122,19 @@ namespace CS2MCP
             if (AutoPauseTargetFrame != 0)
             {
                 float currentSpeed = m_SimulationSystem.selectedSpeed;
-                if (currentSpeed > 0f && currentSpeed != m_WaitRunSpeed)
+                if (currentSpeed != m_WaitRunSpeed)
                 {
-                    // The player (or the game UI) changed the speed mid-wait:
-                    // they own the clock, so hand it over without restoring.
+                    // Focus-loss pause is indistinguishable from the player pausing.
                     AutoPauseTargetFrame = 0;
                     m_WaitRestoreSpeed = -1f;
                     LastWaitOutcome = WaitOutcome.TakenOver;
                     Mod.Log.Info("timed wait handed over: clock changed externally");
                 }
-                else
+                else if (m_SimulationSystem.frameIndex >= AutoPauseTargetFrame)
                 {
-                if (m_SimulationSystem.selectedSpeed <= 0f)
-                {
-                    // Force the run state every frame: the game's UI (pause on
-                    // load, focus-pause, speed selector) overrides selectedSpeed
-                    // otherwise and a paused wait never advances. BridgeSystem
-                    // is registered at UIUpdate after the game's TimeUISystem,
-                    // so this write survives until the next simulation phase.
-                    m_SimulationSystem.selectedSpeed = m_WaitRunSpeed;
-                }
-                if (m_SimulationSystem.frameIndex >= AutoPauseTargetFrame)
-                {
-                    if (m_WaitRestoreSpeed > 0f)
-                    {
-                        m_SimulationSystem.selectedSpeed = m_WaitRestoreSpeed;
-                    }
-                    else
-                    {
-                        m_SimulationSystem.selectedSpeed = 0f;
-                    }
+                    m_SimulationSystem.selectedSpeed = m_WaitRestoreSpeed > 0f
+                        ? m_WaitRestoreSpeed
+                        : 0f;
                     AutoPauseTargetFrame = 0;
                     m_WaitRestoreSpeed = -1f;
                     LastWaitOutcome = WaitOutcome.Finished;
@@ -160,9 +143,6 @@ namespace CS2MCP
                 else if ((DateTime.UtcNow - m_WaitStartedUtc).TotalSeconds > WaitNotAdvancingGraceSeconds &&
                          m_SimulationSystem.frameIndex <= m_WaitStartFrame + 10u)
                 {
-                    // The simulation still refuses to advance (e.g. a modal
-                    // pause barrier is open). Clear the wait with a diagnostic
-                    // instead of hanging the tool call forever.
                     m_SimulationSystem.selectedSpeed = m_WaitRestoreSpeed > 0f
                         ? m_WaitRestoreSpeed
                         : 0f;
@@ -171,7 +151,6 @@ namespace CS2MCP
                     LastWaitOutcome = WaitOutcome.Stalled;
                     Mod.Log.Warn("timed wait aborted: simulation did not advance for " +
                                  WaitNotAdvancingGraceSeconds + "s (modal pause barrier?)");
-                }
                 }
             }
             while (m_Pending.TryDequeue(out BridgeRequest request))

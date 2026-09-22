@@ -6,22 +6,22 @@ using System.Text.Json.Nodes;
 namespace CS2MCP
 {
     /// <summary>
-    /// Builds the model-facing wait_simulation result: wait mechanics only
+    /// Builds the model-facing time-advance result: wait mechanics only
     /// (hours/completed/targetReached/note). Deliberately no city snapshot;
     /// the model reads overview and problems through the read tools.
     /// </summary>
     internal static class SimWaitResult
     {
         private const string NoteTimeout =
-            "wait did not finish in time; retry wait_simulation once";
+            "wait did not finish in time; retry set_simulation advance once";
         private const string NoteAborted =
             "wait aborted: simulation did not advance (game paused or a modal overlay is open)";
         private const string NoteFinished =
             "wait finished; simulation restored to its previous speed/pause state";
         private const string NoteInterrupted =
-            "wait interrupted by a new message; simulation restored to its previous speed/pause state, partial progress kept";
+            "advance stopped early; previous speed or pause restored, partial progress kept";
         private const string NoteTakenOver =
-            "wait handed over: the clock was changed externally, simulation left as-is";
+            "advance stopped early; clock left as it is";
 
         public static string Build(
             string waitJson,

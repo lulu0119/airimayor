@@ -230,7 +230,7 @@ export const ChatPanel = ({ children }: { children?: ReactNode }) => {
                       </div>
                     ) : null}
                     <Composer
-                      sessionReady={chat.session !== ""}
+                      loading={chat.session === ""}
                       busy={chat.busy}
                       onSend={(text) => chat.send(text)}
                       onInterrupt={() => chat.interrupt()}

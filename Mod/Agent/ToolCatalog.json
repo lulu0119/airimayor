@@ -61,22 +61,43 @@
       "response": "json"
     },
     {
-      "name": "wait_simulation",
-      "description": "Run the simulation forward by in-game time: default 1 in-game hour (about 20-30 real seconds). Resumes if paused, then restores the previous speed/pause state. A new player message ends the wait early with partial progress and a restored clock. If the player changes the clock during the wait, this call stops and leaves the clock as the player set it. Returns hours/completed/targetReached/note. Read the snapshot yourself after waiting: get_demand for what to grow, list_notifications for citywide warning counts, get_services for electricity/water/sewage/garbage, get_budget for money. Use when the next decision is gated on simulated time (construction finished, residents moved in, flow or production changed); otherwise keep writing. Finish a related group of writes first, then one wait (1-2 hours) plus one round of re-reads. Do not wait after every step. Never poll.",
+      "name": "get_simulation",
+      "description": "Whether the city is paused, and the current speed. 0 is paused. A positive number is the game speed multiplier.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "route": "/sim/clock",
+      "query": [],
+      "response": "json"
+    },
+    {
+      "name": "set_simulation",
+      "description": "Advance the city by in-game time, or pause it. action=advance runs 1-8 in-game hours (default 1, about 20-30 real seconds per hour) at high speed, then restores the previous speed or pause. action=pause pauses immediately and returns; if the city is already paused it stays paused, and the player can resume. Advance returns hours/completed/targetReached/note. Read the city yourself afterward: get_demand, list_notifications, get_services, get_budget. Advance when the next decision needs simulated time; otherwise keep writing. Finish a related group of writes, then one advance (1-2 hours) and one round of re-reads. Do not advance after every step. Never poll.",
       "parameters": {
         "type": "object",
         "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["advance", "pause"],
+            "description": "advance runs in-game time then restores the previous speed or pause. pause pauses immediately."
+          },
           "hours": {
             "type": "number",
             "minimum": 1,
-            "maximum": 24,
-            "description": "In-game hours to advance (default 1)"
+            "maximum": 8,
+            "description": "In-game hours to advance when action is advance (default 1). Ignored for pause."
           }
         },
-        "required": []
+        "required": ["action"]
       },
-      "route": "/sim/wait",
+      "route": "/sim/clock/set",
       "query": [
+        {
+          "key": "action",
+          "arg": "action"
+        },
         {
           "key": "hours",
           "arg": "hours",

@@ -34,7 +34,7 @@ namespace CS2MCP
         private string LockStalenessWarning => m_System.SimulationHasTickedSinceLoad
             ? null
             : "simulation has not run since this save was loaded; 'locked' flags and ranges may be STALE " +
-              "(unlock processing is pending). Run the simulation briefly (wait_simulation) for accurate values.";
+              "(unlock processing is pending). Run the simulation briefly (set_simulation advance) for accurate values.";
 
         /// <summary>
         /// Locked is an IEnableableComponent: unlocking DISABLES it rather than
@@ -163,8 +163,10 @@ namespace CS2MCP
                     return MapImage(request);
                 case "/city/terrain":
                     return GetTerrain(request);
-                case "/sim/wait":
-                    return SimWait(request);
+                case "/sim/clock":
+                    return GetSimulation();
+                case "/sim/clock/set":
+                    return SetSimulation(request);
                 case "/game/save":
                     return SaveGame(request);
                 case "/city/tiles":
@@ -178,7 +180,7 @@ namespace CS2MCP
                         $"unknown endpoint: {request.Path}; available: /state /city/overview /city/demand " +
                         "/city/budget /city/budget/set /city/services /city/labor /city/statistics /city/taxes " +
                         "/city/policies /city/policies/set /city/service-budgets " +
-                        "/prefabs /build/place /build/network /build/zone /build/demolish /city/buildings /sim/wait /screenshot");
+                        "/prefabs /build/place /build/network /build/zone /build/demolish /city/buildings /sim/clock /sim/clock/set /screenshot");
             }
         }
 
@@ -269,7 +271,7 @@ namespace CS2MCP
             {
                 note = "buildingDemand uses the game's internal 0-255 scale; companyDemand counters can exceed 255; " +
                        "factors are raw signed contributions (positive pushes demand up, negative down). " +
-                       "Values only refresh while the simulation is running (use wait_simulation briefly for fresh numbers).",
+                       "Values only refresh while the simulation is running (use set_simulation advance briefly for fresh numbers).",
                 residential = new
                 {
                     householdDemand = residential.householdDemand,

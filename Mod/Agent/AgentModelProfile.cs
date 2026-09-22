@@ -33,7 +33,6 @@ namespace CitiesSkylines2Agent.Agent
             var caps = new ModelCapabilities
             {
                 ContextWindowTokens = context,
-                MaxOutputTokens = Math.Min(16_384, Math.Max(4_096, context / 10)),
                 SupportsVision = visionOn,
                 Source = string.IsNullOrEmpty(apiKindName) ? "player" : apiKindName,
             };

@@ -222,7 +222,7 @@ namespace CS2MCP
                     type = TypedNetworkMath.TopologyClassName(issue.Class),
                     edges = TopologyEdgeRefs(snapshot, issue.EdgeA, issue.EdgeB),
                     nodes = TopologyNodeRefs(issue.NodeA, issue.NodeB),
-                    at = FindingAnchor(snapshot, issue.EdgeA),
+                    at = FindingAnchor(snapshot, issue),
                     componentSize = issue.ComponentSize > 0 ? (int?)issue.ComponentSize : null,
                     distanceM = (float)Math.Round(issue.DistanceM, 1),
                 });
@@ -300,9 +300,12 @@ namespace CS2MCP
             var findings = new List<string>();
             foreach (NetworkTopologyFinding issue in issues)
             {
+                string site = TypedNetworkMath.TryRepairSite(issue, snapshot, out float2 position)
+                    ? $"at=({position.x:F1},{position.y:F1})"
+                    : "at=none";
                 findings.Add(
                     $"{TypedNetworkMath.TopologyClassName(issue.Class)} " +
-                    $"edgeA={issue.EdgeA} size={issue.ComponentSize}");
+                    $"edges={issue.EdgeA}/{issue.EdgeB} {site} distance={issue.DistanceM:F1}");
             }
             Mod.Log.Info(
                 "topology: kind=" + TypedNetworkMath.PrimaryKindName(filter) +
@@ -325,8 +328,7 @@ namespace CS2MCP
             var kept = new List<NetworkTopologyFinding>(computed.Count);
             foreach (NetworkTopologyFinding finding in computed)
             {
-                if (!TryFindingPosition(snapshot, finding.EdgeA, out float2 position)
-                    || math.distance(position, center) <= radius)
+                if (TypedNetworkMath.InsideQuery(finding, snapshot, center, radius))
                 {
                     kept.Add(finding);
                 }
@@ -590,33 +592,29 @@ namespace CS2MCP
 
         private static object FindingAnchor(
             IReadOnlyList<TypedNetworkEdge> snapshot,
-            int index)
+            NetworkTopologyFinding finding)
         {
-            if (!TryFindingPosition(snapshot, index, out float2 position))
+            if (!TypedNetworkMath.TryRepairSite(finding, snapshot, out float2 position))
             {
                 return null;
             }
-            return new { x = (float)Math.Round(position.x, 1), z = (float)Math.Round(position.y, 1) };
+            return RoundSite(position);
         }
 
-        private static bool TryFindingPosition(
+        private static object FindingAnchor(
             IReadOnlyList<TypedNetworkEdge> snapshot,
-            int index,
-            out float2 position)
+            int index)
         {
-            position = default;
-            if (index < 0 || index >= snapshot.Count)
+            if (!TypedNetworkMath.TryEdgeSite(snapshot, index, out float2 position))
             {
-                return false;
+                return null;
             }
-            float3[] points = snapshot[index].Points;
-            if (points == null || points.Length == 0)
-            {
-                return false;
-            }
-            float3 mid = points[points.Length / 2];
-            position = mid.xz;
-            return true;
+            return RoundSite(position);
+        }
+
+        private static object RoundSite(float2 position)
+        {
+            return new { x = (float)Math.Round(position.x, 1), z = (float)Math.Round(position.y, 1) };
         }
 
         private static object[] TopologyEdgeRefs(

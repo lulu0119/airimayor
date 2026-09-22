@@ -31,10 +31,16 @@ namespace CitiesSkylines2Agent.Agent
 
         public CompactionSlice CreateSlice(IReadOnlyList<ChatMessage> history, bool forceAggressive)
         {
-            long tailBudget = forceAggressive ? Math.Max(2048, m_Profile.TailBudgetTokens / 2) : m_Profile.TailBudgetTokens;
+            long tailBudget = TailBudget(m_Profile.TailBudgetTokens, forceAggressive);
             int keepStart = FindSafeKeepStartByTokens(history, tailBudget);
             if (keepStart <= 1 || keepStart >= history.Count) return null;
             return new CompactionSlice(history.Take(keepStart).ToList(), history.Skip(keepStart).ToList());
+        }
+
+        public static long TailBudget(long tail, bool forceAggressive)
+        {
+            if (!forceAggressive) return tail;
+            return Math.Min(tail, Math.Max(1, tail / 2));
         }
 
         public static int FindSafeKeepStart(IReadOnlyList<ChatMessage> history, int desiredKeepCount)

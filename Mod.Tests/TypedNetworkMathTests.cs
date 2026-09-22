@@ -139,6 +139,36 @@ namespace CS2MCP
         }
 
         [Fact]
+        public void Too_close_junctions_name_an_edge_at_each_junction_and_their_midpoint()
+        {
+            TypedNetworkEdge[] edges = TwoJunctions(Xz(31f, 0f), Xz(51f, 0f));
+
+            NetworkTopologyFinding finding = Assert.Single(
+                TypedNetworkMath.FindRoadIssues(edges),
+                f => f.Class == NetworkTopologyClass.TooCloseJunctions);
+
+            Assert.Equal(0, finding.EdgeA);
+            Assert.Equal(3, finding.EdgeB);
+            Assert.True(finding.HasAnchor);
+            Assert.Equal(41f, finding.Anchor.x, 3);
+            Assert.Equal(0f, finding.Anchor.y, 3);
+        }
+
+        [Fact]
+        public void Too_close_junctions_follow_the_midpoint_into_a_radius()
+        {
+            TypedNetworkEdge[] edges = TwoJunctions(Xz(1000f, 1000f), Xz(1018f, 1000f));
+            NetworkTopologyFinding finding = Assert.Single(
+                TypedNetworkMath.FindRoadIssues(edges),
+                f => f.Class == NetworkTopologyClass.TooCloseJunctions);
+
+            Assert.False(TypedNetworkMath.InsideQuery(
+                finding, edges, new float2(0f, 0f), 220f));
+            Assert.True(TypedNetworkMath.InsideQuery(
+                finding, edges, new float2(1009f, 1000f), 220f));
+        }
+
+        [Fact]
         public void Near_miss_includes_gaps_between_sixteen_and_thirty_two_meters()
         {
             TypedNetworkEdge[] edges =
@@ -147,9 +177,16 @@ namespace CS2MCP
                 Road(2, 20, 21, Xz(20f, 24f), Xz(20f, 44f)),
             };
 
+            List<NetworkTopologyFinding> findings = TypedNetworkMath.FindRoadIssues(edges);
+
             Assert.Contains(
-                TypedNetworkMath.FindRoadIssues(edges),
+                findings,
                 f => f.Class == NetworkTopologyClass.NearMiss && f.DistanceM > 16f);
+            Assert.Contains(
+                findings,
+                f => f.Class == NetworkTopologyClass.NearMiss
+                    && f.HasAnchor
+                    && math.distancesq(f.Anchor, new float2(20f, 24f)) < 0.01f);
         }
 
         [Fact]

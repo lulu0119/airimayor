@@ -676,7 +676,7 @@ namespace CS2MCP
                 ["rotation"] = m_PendingZoneRotationDegrees,
                 ["note"] = cellsChanged == 0
                     ? "no zonable cells found in shape - zone cells only exist along roads and must be unoccupied"
-                    : "zoned; buildings grow after wait_simulation",
+                    : "zoned; buildings grow after set_simulation advance",
             };
             CompletePending(BridgeResponse.Json(payload));
         }

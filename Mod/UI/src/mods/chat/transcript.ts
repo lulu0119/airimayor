@@ -1,7 +1,8 @@
 // Pure transcript reducer: the only place ChatLine[] is built.
 // No React, no bindings, no window globals — snapshots hydrate on session
-// switch, live wire events append. Tool start/done pairing relies on arrival
-// order: the executor emits start then done per call, sequentially.
+// switch, live wire events append. Tool start/done pairing uses the open
+// running row: the executor emits start then done per call, and a player
+// line may arrive between them.
 
 import type { AgentWireEvent, ChatLine, StateMessage, ToolRowState } from "./chat-types";
 
@@ -78,8 +79,7 @@ export function applyWireEvent(
       if (text.trim().length === 0) {
         return transcript;
       }
-      const settled = settleRunningTools(finalizeStreaming(transcript.lines), "done");
-      return push(transcript, settled, (id) => ({ id, kind: "user", text }));
+      return push(transcript, finalizeStreaming(transcript.lines), (id) => ({ id, kind: "user", text }));
     }
     case "delta": {
       if (text.length === 0) {
@@ -100,10 +100,21 @@ export function applyWireEvent(
     }
     case "tool": {
       const lines = [...transcript.lines];
-      const last = lines[lines.length - 1];
-      if (last && last.kind === "tool" && last.state === "running") {
-        lines[lines.length - 1] = {
-          ...last,
+      let openIndex = -1;
+      for (let index = lines.length - 1; index >= 0; index--) {
+        const line = lines[index];
+        if (line.kind === "tool" && line.state === "running") {
+          openIndex = index;
+          break;
+        }
+      }
+      if (openIndex >= 0) {
+        const open = lines[openIndex];
+        if (open.kind !== "tool") {
+          return transcript;
+        }
+        lines[openIndex] = {
+          ...open,
           result: text.length > 0 ? truncate(text) : null,
           image: event.image ? event.image : null,
           imageWidth: event.imageWidth && event.imageWidth > 0 ? event.imageWidth : null,

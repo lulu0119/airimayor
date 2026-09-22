@@ -6,19 +6,19 @@ import { useChatText } from "./locale";
 import styles from "./chat.module.scss";
 
 interface ComposerProps {
-  sessionReady: boolean;
+  loading: boolean;
   busy: boolean;
   onSend: (text: string) => void;
   onInterrupt: () => void;
 }
 
-export const Composer = ({ sessionReady, busy, onSend, onInterrupt }: ComposerProps) => {
+export const Composer = ({ loading, busy, onSend, onInterrupt }: ComposerProps) => {
   const [draft, setDraft] = useState("");
   const text = useChatText();
 
   const submit = () => {
     const trimmed = draft.trim();
-    if (trimmed.length === 0 || !sessionReady) {
+    if (trimmed.length === 0 || loading) {
       return;
     }
     onSend(trimmed);
@@ -32,11 +32,9 @@ export const Composer = ({ sessionReady, busy, onSend, onInterrupt }: ComposerPr
     }
   };
 
-  const placeholder = !sessionReady
+  const placeholder = loading
     ? text("Composer.Loading", "Loading city…")
-    : busy
-      ? text("Composer.Queued", "Type to queue…")
-      : text("Composer.Ready", "Message the mayor…");
+    : text("Composer.Ready", "Message the mayor…");
   const sendLabel = text("Composer.Send", "Send");
   const stopLabel = text("Composer.Stop", "Stop");
 
@@ -46,7 +44,7 @@ export const Composer = ({ sessionReady, busy, onSend, onInterrupt }: ComposerPr
         className={styles.composerInput}
         rows={3}
         value={draft}
-        disabled={!sessionReady}
+        disabled={loading}
         placeholder={placeholder}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={onKeyDown}
@@ -73,7 +71,7 @@ export const Composer = ({ sessionReady, busy, onSend, onInterrupt }: ComposerPr
           aria-label={sendLabel}
           className={`${styles.actionButton} ${styles.sendButton}`}
           onClick={submit}
-          disabled={!sessionReady || draft.trim().length === 0}
+          disabled={loading || draft.trim().length === 0}
         >
           <img
             className={styles.actionIcon}

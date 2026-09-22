@@ -50,7 +50,6 @@ namespace CitiesSkylines2Agent
                 { ChatLocale.Id("Title"), "城市代理" },
                 { ChatLocale.Id("Composer.Loading"), "正在加载城市…" },
                 { ChatLocale.Id("Composer.Ready"), "给市长留言…" },
-                { ChatLocale.Id("Composer.Queued"), "输入以排队…" },
                 { ChatLocale.Id("Composer.Send"), "发送" },
                 { ChatLocale.Id("Composer.Stop"), "停止" },
                 { ChatLocale.Id("Empty"), "让市长建造、分区或修复城市服务。" },

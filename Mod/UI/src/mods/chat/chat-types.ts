@@ -64,7 +64,6 @@ export interface AgentWireEvent {
   text: string;
   tool?: string;
   status?: string;
-  steered?: boolean;
   image?: string;
   imageWidth?: number;
   imageHeight?: number;
