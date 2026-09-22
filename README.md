@@ -1,10 +1,14 @@
-# Cities: Skylines 2 Agent
+# AIRI Mayor
 
-In-game AI mayor for Cities: Skylines II: a Gameface chat UI talks to a C# loop that builds on the simulation thread. Not listed on Paradox Mods yet; the intended install is the mod store plus an API key, with no external agent process.
+![AIRI Mayor](docs/images/banner.png)
+
+> Learn more at [Project AIRI](https://github.com/moeru-ai/airi) and the [live demo](https://airi.moeru.ai).
+
+**AIRI Mayor** plays **Cities: Skylines II**. A Gameface chat in the game talks to a C# loop that builds on the simulation thread. There is no external agent process. Not listed on Paradox Mods yet; the intended install is the mod store plus an API key.
 
 - Vocabulary: [CONTEXT.md](./CONTEXT.md)
 - Decisions: [docs/adr/](./docs/adr/)
-- Open work: [docs/open-work.md](./docs/open-work.md)
+- Open work: [docs/open-work.md](docs/open-work.md)
 - Agent rules: [AGENTS.md](./AGENTS.md)
 - Docs index: [docs/README.md](./docs/README.md)
 

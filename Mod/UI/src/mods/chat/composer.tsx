@@ -34,7 +34,7 @@ export const Composer = ({ loading, busy, onSend, onInterrupt }: ComposerProps) 
 
   const placeholder = loading
     ? text("Composer.Loading", "Loading city…")
-    : text("Composer.Ready", "Message the mayor…");
+    : text("Composer.Ready", "Message AIRI…");
   const sendLabel = text("Composer.Send", "Send");
   const stopLabel = text("Composer.Stop", "Stop");
 

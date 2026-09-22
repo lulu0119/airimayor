@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for agents working in **cities-skylines-2-agent**. Vocabulary: [CONTEXT.md](CONTEXT.md). Decisions: [docs/adr/](docs/adr/). Current open work: [docs/open-work.md](docs/open-work.md). How to write docs: [docs/AGENTS.md](docs/AGENTS.md).
+Guidance for agents working in **airimayor**. Vocabulary: [CONTEXT.md](CONTEXT.md). Decisions: [docs/adr/](docs/adr/). Current open work: [docs/open-work.md](docs/open-work.md). How to write docs: [docs/AGENTS.md](docs/AGENTS.md).
 
 ## Product shape
 

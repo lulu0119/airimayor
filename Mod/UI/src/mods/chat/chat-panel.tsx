@@ -198,7 +198,7 @@ export const ChatPanel = ({ children }: { children?: ReactNode }) => {
           onMouseDown={onDockMouseDown}
         >
           <Panel
-            header={text("Title", "City Agent")}
+            header={text("Title", "AIRI Mayor")}
             focusKey={FOCUS_AUTO}
             className={styles.panelColumn}
             onClose={() => setPanelOpen(false)}

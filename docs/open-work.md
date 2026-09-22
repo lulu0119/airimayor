@@ -6,6 +6,7 @@ Current inventory. Vocabulary: [CONTEXT.md](../CONTEXT.md). Decisions: [adr/](./
 
 Code still missing.
 
+- AIRI plugin
 - `map_image` hillshade
 - `map_image` POI icon set
 - Pedestrian/cycle-specific map classes

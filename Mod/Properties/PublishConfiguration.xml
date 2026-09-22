@@ -1,21 +1,58 @@
 ﻿<Publish>
 	<!--Id must be set in order to update existed mod. it is not required for publishing mod for the first time-->
 	<ModId Value="" />
-	<!--Name of the mod to display to players-->
-	<DisplayName Value="CitiesSkylines2Agent" />
-	<!--Short description of the mod-->
-	<ShortDescription Value="This is a short description" />
-	<!--Long description of the mod. Single line or multi line. Supports minimal markdown subset-->
+	<!--Name of the mod to display to players. Brand first, then the words people search.-->
+	<DisplayName Value="AIRI Mayor: In-Game AI Mayor" />
+	<!--Short description of the mod. Shown with the title; say what the player can do.-->
+	<ShortDescription Value="Talk to an in-game AI. It can zone, build roads, place services, and handle city problems. Add an API key in the mod settings. No other program required." />
+	<!--Long description of the mod. Single line or multi line. Supports minimal markdown subset. Body lines stay at column 0 or Paradox drops the formatting.-->
 	<!--LongDescription Value="This is a long description" /-->
 	<LongDescription>
-This is a long description
+Talk to AI in Cities: Skylines II. The AI reviews the city and carries out construction.
+
+## Features
+
+The AI can:
+
+* Review demand and problems, and handle sewage, water, electricity, garbage, and missing road access first
+* Zone along roads (residential, commercial, industrial, office)
+* Build roads and connect water, sewage, and electricity
+* Place public buildings such as schools, hospitals, fire stations, police stations, power plants, water facilities, and garbage facilities
+* Buy tiles, adjust taxes and service budgets, and add transit lines
+
+The player controls simulation speed. The AI can advance time for a while to observe construction results, then restore the previous speed. Demolition and Development Points are off by default and can be enabled in the mod settings.
+
+## Setup
+
+* Subscribe to and enable the mod
+* Enter the endpoint, API key, and model in the mod settings
+* After loading a city, use the chat at the bottom-right
+
+Bring your own model and API key. No other program is required.
+
+## Models
+
+DeepSeek V4.1 and Muse Spark 1.3 are the models tested so far. Please try the mod, and try other models as well.
+
+Report problems in the comments, or on GitHub:
+https://github.com/lulu0119/airimayor
+
+## Credits
+
+This mod includes the following under their open-source licenses:
+
+* CS2MCP (LancerComet, Apache-2.0) https://github.com/LancerComet/cities-skylines-2-mcp
+* Line Tool (algernon, Apache-2.0) https://github.com/algernon-A/LineTool-CS2
+* MingCute icons (Apache-2.0) https://github.com/Richard9394/MingCute
+
+The AIRI plugin is still in development.
 	</LongDescription>
 	<!--Thumbnail-->
-	<Thumbnail Value="Properties/Thumbnail.png" />
+	<Thumbnail Value="Properties/Thumbnail.jpg" />
 	<!--Screenshot, can be set multiple times-->
-	<Screenshot Value="" />
+	<Screenshot Value="Properties/Screenshot.jpg" />
 	<!--Tag, can be set multiple times-->
-	<Tag Value="" />
+	<Tag Value="Code Mod" />
 	<!--Link to the forum post where the mod can be discussed-->
 	<ForumLink Value="" />
 	<!--Version of the mod-->
@@ -31,7 +68,7 @@ This is a long description
 	<!--<ChangeLog>
 	</ChangeLog>-->
 	<!--External link, can be set multiple times. supported types are "discord", "github", "youtube", "twitch", "x", "paypal", "patreon", "buymeacoffee", "kofi", "crowdin", "gitlab", "gofundme"-->
-	<ExternalLink Type="" Url="" />
+	<ExternalLink Type="github" Url="https://github.com/lulu0119/airimayor" />
 	<!--Supported values Public, Private, Unlisted-->
 	<AccessLevel Value="Public" />
 </Publish>

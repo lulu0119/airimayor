@@ -44,7 +44,7 @@ export const MessageList = ({ lines, busy }: MessageListProps) => {
     <Scrollable vertical trackVisibility="scrollable" className={styles.messageList} ref={listRef}>
       {lines.length === 0 && !busy ? (
         <div className={styles.emptyHint}>
-          {text("Empty", "Ask the mayor to build, zone, or fix city services.")}
+          {text("Empty", "Ask AIRI to build, zone, or fix city services.")}
         </div>
       ) : null}
       {lines.map((line) => (
