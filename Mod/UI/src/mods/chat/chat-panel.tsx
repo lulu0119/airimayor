@@ -6,7 +6,6 @@ import { useChat } from "./use-chat";
 import { useChatText } from "./locale";
 import { MessageList } from "./message-list";
 import { PlanStrip } from "./plan-strip";
-import { composerPhase } from "./send-effect";
 import { StatusBar } from "./status-bar";
 import { Composer } from "./composer";
 import { setPanelOpen, usePanelOpen } from "./panel-visibility";
@@ -177,7 +176,6 @@ export const ChatPanel = ({ children }: { children?: ReactNode }) => {
     return <>{children}</>;
   }
 
-  const phase = composerPhase(chat.session !== "", chat.status, chat.runningTool);
   const frameStyle: CSSProperties | undefined = frame === null
     ? undefined
     : {
@@ -214,7 +212,7 @@ export const ChatPanel = ({ children }: { children?: ReactNode }) => {
                       </div>
                     ) : null}
                     <Composer
-                      phase={phase}
+                      loading={chat.session === ""}
                       busy={chat.busy}
                       onSend={(text) => chat.send(text)}
                       onInterrupt={() => chat.interrupt()}
@@ -224,7 +222,6 @@ export const ChatPanel = ({ children }: { children?: ReactNode }) => {
               >
                 <StatusBar
                   status={chat.status}
-                  phase={phase}
                   busy={chat.busy}
                   pending={chat.pending}
                   note={chat.note}
