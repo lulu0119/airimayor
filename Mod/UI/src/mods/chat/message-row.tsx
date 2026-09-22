@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import type { ChatLine, ToolRowState } from "./chat-types";
-import chevronDownIcon from "lucide-static/icons/chevron-down.svg";
+import { Icon } from "@iconify/react";
+import altArrowDownLinear from "@iconify-icons/solar/alt-arrow-down-linear";
 import { useChatText } from "./locale";
 import styles from "./chat.module.scss";
 
@@ -81,10 +82,11 @@ const ToolRow = ({ line }: { line: Extract<ChatLine, { kind: "tool" }> }) => {
         <span
           className={styles.toolChevron}
           style={{
-            maskImage: `url(${chevronDownIcon})`,
             transform: expanded ? "none" : "rotate(-90deg)",
           }}
-        />
+        >
+          <Icon icon={altArrowDownLinear} />
+        </span>
       </div>
       {expanded ? (
         <div className={styles.toolBody}>

@@ -350,11 +350,14 @@
   flex: 0 0 auto;
   width: 16rem;
   height: 16rem;
-  background-color: #9aa3b5;
-  mask-size: contain;
-  mask-position: 50% 50%;
-  mask-repeat: no-repeat;
+  color: #9aa3b5;
   transition: transform 0.15s;
+}
+
+.toolChevron svg,
+.actionIcon svg {
+  width: 100%;
+  height: 100%;
 }
 
 .toolBody {
@@ -463,11 +466,11 @@
 }
 
 .actionButton:hover .actionIcon {
-  background-color: #ffffff;
+  color: #ffffff;
 }
 
 .actionButton:active .actionIcon {
-  background-color: #9dc0f0;
+  color: #9dc0f0;
 }
 
 .sendButton:disabled {
@@ -476,332 +479,17 @@
 }
 
 .sendButton:disabled .actionIcon {
-  background-color: #8a93a6;
+  color: #8a93a6;
 }
 
 .stopButton:hover .actionIcon {
-  background-color: #ff8a8a;
+  color: #ff8a8a;
 }
 
 .actionIcon {
+  display: inline-flex;
   width: 20rem;
   height: 20rem;
-  background-color: #cfd6e4;
-  mask-size: contain;
-  mask-position: 50% 50%;
-  mask-repeat: no-repeat;
+  color: #cfd6e4;
 }
 
-.panelHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-
-.headerGearButton {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 3rem;
-  background-color: transparent;
-  border: none;
-  border-radius: 3rem;
-  cursor: pointer;
-}
-
-.headerGearButton:hover .headerGearIcon {
-  background-color: #ffffff;
-}
-
-.headerGearIcon {
-  width: 16rem;
-  height: 16rem;
-  background-color: #cfd6e4;
-  mask-size: contain;
-  mask-position: 50% 50%;
-  mask-repeat: no-repeat;
-}
-
-.gearButton:hover {
-  color: #ffffff;
-}
-
-.settingsDock {
-  position: absolute;
-  top: 120rem;
-  left: calc(50% - 230rem);
-  width: 460rem;
-  max-width: 90%;
-  display: flex;
-  flex-direction: column;
-  pointer-events: auto;
-}
-
-.settingsDock .panelColumn {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  background-color: rgba(16, 20, 28, 0.94);
-  backdrop-filter: blur(8px);
-  border-radius: 6rem;
-  overflow: hidden;
-}
-
-.settingsBody {
-  display: flex;
-  flex: 1 1 auto;
-  height: 100%;
-  min-height: 0;
-}
-
-.settingsNav {
-  flex: 0 0 auto;
-  width: 110rem;
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-  padding: 10rem 6rem 10rem 10rem;
-  background-color: rgba(10, 13, 18, 0.94);
-  border-right-width: 1rem;
-  border-right-style: solid;
-  border-right-color: rgba(70, 120, 200, 0.5);
-}
-
-.navButton {
-  padding: 8rem 10rem;
-  font-size: 13rem;
-  text-align: left;
-  color: #9aa3b5;
-  background-color: transparent;
-  border: none;
-  border-radius: 4rem;
-  cursor: pointer;
-}
-
-.navButton:hover {
-  color: #eef2f9;
-  background-color: rgba(255, 255, 255, 0.07);
-}
-
-.navActive {
-  color: #eef2f9;
-  background-color: rgba(75, 195, 241, 0.25);
-}
-
-.settingsContent {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: auto;
-  padding: 10rem;
-  display: flex;
-  flex-direction: column;
-  gap: 6rem;
-}
-
-.fieldGroup {
-  display: flex;
-  flex-direction: column;
-  gap: 6rem;
-  padding: 10rem;
-  background-color: rgba(255, 255, 255, 0.04);
-  border-width: 1rem;
-  border-style: solid;
-  border-color: rgba(255, 255, 255, 0.1);
-  border-radius: 5rem;
-}
-
-.groupTitle {
-  font-size: 12rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #7ea6e0;
-}
-
-.fieldLabel {
-  font-size: 11rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #9aa3b5;
-  margin-top: 4rem;
-}
-
-.fieldInput {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 7rem 10rem;
-  font-size: 13rem;
-  color: #f2f5fa;
-  background-color: rgba(255, 255, 255, 0.08);
-  border-width: 1rem;
-  border-radius: 4rem;
-  border-style: solid;
-  border-color: rgba(255, 255, 255, 0.22);
-}
-
-.fieldInput::placeholder {
-  color: #9aa3b5;
-  opacity: 0.8;
-}
-
-.fieldInput:focus {
-  background-color: rgba(255, 255, 255, 0.14);
-  border-top-color: #4bc3f1;
-  border-left-color: #4bc3f1;
-  border-bottom-color: #4bc3f1;
-  border-right-color: #4bc3f1;
-  outline: none;
-}
-
-.modelRow {
-  display: flex;
-  gap: 6rem;
-}
-
-.modelCombo {
-  position: relative;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.comboToggle {
-  position: absolute;
-  top: 0;
-  right: 0;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  padding: 0 10rem;
-  background-color: transparent;
-  border: none;
-  cursor: pointer;
-}
-
-.comboToggle:hover .fieldIcon {
-  background-color: #eef2f9;
-}
-
-.keyRow {
-  display: flex;
-  gap: 6rem;
-}
-
-.keyRow .fieldInput {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.iconButton {
-  flex: 0 0 auto;
-  align-self: center;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6rem;
-  background-color: transparent;
-  border: none;
-  border-radius: 3rem;
-  cursor: pointer;
-}
-
-.iconButton:hover .fieldIcon {
-  background-color: #ffffff;
-}
-
-.fieldIcon {
-  width: 16rem;
-  height: 16rem;
-  background-color: #9aa3b5;
-  mask-size: contain;
-  mask-position: 50% 50%;
-  mask-repeat: no-repeat;
-  transition: transform 0.15s;
-}
-
-.fieldIconDim {
-  opacity: 0.45;
-}
-
-.fieldIconFlip {
-  transform: rotate(180deg);
-}
-
-.comboMenu {
-  position: absolute;
-  top: calc(100% + 4rem);
-  left: 0;
-  right: 0;
-  z-index: 20;
-  margin: 0;
-  padding: 4rem;
-  list-style: none;
-  max-height: 200rem;
-  overflow-y: auto;
-  background-color: #1a2230;
-  border-width: 1rem;
-  border-style: solid;
-  border-color: rgba(255, 255, 255, 0.22);
-  border-radius: 4rem;
-}
-
-.comboItem {
-  padding: 7rem 9rem;
-  border-radius: 3rem;
-  font-size: 12rem;
-  color: #eef2f9;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.comboItem:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-.comboActive {
-  background-color: rgba(75, 195, 241, 0.25);
-}
-
-.smallButton {
-  flex: 0 0 auto;
-  align-self: flex-start;
-  padding: 7rem 12rem;
-  font-size: 12rem;
-  color: #eef2f9;
-  background-color: rgba(75, 195, 241, 0.25);
-  border-width: 1rem;
-  border-style: solid;
-  border-color: rgba(75, 195, 241, 0.6);
-  border-radius: 4rem;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.smallButton:hover {
-  background-color: rgba(75, 195, 241, 0.4);
-}
-
-.smallButton:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.fieldError {
-  font-size: 12rem;
-  color: #ff8a8a;
-  word-break: break-word;
-}
-
-.fieldHint {
-  font-size: 12rem;
-  color: #9aa3b5;
-}
-
-.settingsActions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 4rem;
-}

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import type { KeyboardEvent } from "react";
-import sendIcon from "images/send.svg";
-import stopIcon from "images/stop.svg";
+import { Icon } from "@iconify/react";
+import plainLinear from "@iconify-icons/solar/plain-linear";
+import stopCircleLinear from "@iconify-icons/solar/stop-circle-linear";
 import { useChatText } from "./locale";
 import styles from "./chat.module.scss";
 
@@ -58,11 +59,9 @@ export const Composer = ({ loading, busy, onSend, onInterrupt }: ComposerProps) 
             className={`${styles.actionButton} ${styles.stopButton}`}
             onClick={onInterrupt}
           >
-            <img
-              className={styles.actionIcon}
-              style={{ maskImage: `url(${stopIcon})` }}
-              alt=""
-            />
+            <span className={styles.actionIcon}>
+              <Icon icon={stopCircleLinear} />
+            </span>
           </button>
         ) : null}
         <button
@@ -73,11 +72,9 @@ export const Composer = ({ loading, busy, onSend, onInterrupt }: ComposerProps) 
           onClick={submit}
           disabled={loading || draft.trim().length === 0}
         >
-          <img
-            className={styles.actionIcon}
-            style={{ maskImage: `url(${sendIcon})` }}
-            alt=""
-          />
+          <span className={styles.actionIcon}>
+            <Icon icon={plainLinear} />
+          </span>
         </button>
       </div>
     </div>

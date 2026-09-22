@@ -13,15 +13,3 @@ export const sendChatMessage = (text: string): void => {
 export const interruptTurn = (): void => {
   trigger(mod.id, "interrupt");
 };
-
-export const getSettings = (): void => {
-  trigger(mod.id, "getSettings");
-};
-
-export const saveSettings = (json: string): void => {
-  trigger(mod.id, "saveSettings", json);
-};
-
-export const fetchModels = (): void => {
-  trigger(mod.id, "fetchModels");
-};

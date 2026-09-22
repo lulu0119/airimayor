@@ -1,10 +1,6 @@
-using System;
 using System.Collections.Concurrent;
-using System.Linq;
 using System.Text;
-using System.Text.Json.Nodes;
 using System.Threading;
-using System.Threading.Tasks;
 using Colossal.Serialization.Entities;
 using Colossal.UI.Binding;
 using Game;
@@ -56,13 +52,6 @@ namespace CitiesSkylines2Agent.Agent
                 OnSend,
                 ValueReaders.Create<string>()));
             AddBinding(new TriggerBinding(Group, "interrupt", OnInterrupt));
-            AddBinding(new TriggerBinding(Group, "getSettings", OnGetSettings));
-            AddBinding(new TriggerBinding<string>(
-                Group,
-                "saveSettings",
-                OnSaveSettings,
-                ValueReaders.Create<string>()));
-            AddBinding(new TriggerBinding(Group, "fetchModels", OnFetchModels));
 
             PushState();
         }
@@ -121,95 +110,6 @@ namespace CitiesSkylines2Agent.Agent
                 return;
             }
             AgentLoop.Instance?.Interrupt();
-        }
-
-        private void OnGetSettings()
-        {
-            if (!IsInLoadedCity())
-            {
-                return;
-            }
-            OnAgentEvent(new AgentUiEvent { Kind = "settings", Text = RenderSettingsJson() });
-        }
-
-        private void OnSaveSettings(string json)
-        {
-            if (!IsInLoadedCity() || string.IsNullOrWhiteSpace(json))
-            {
-                return;
-            }
-            try
-            {
-                JsonNode node = JsonNode.Parse(json);
-                Setting setting = Setting.Instance;
-                if (setting == null)
-                {
-                    return;
-                }
-                string endpoint = (string)node["endpoint"];
-                string apiKey = (string)node["apiKey"];
-                string model = (string)node["model"];
-                if (endpoint != null)
-                {
-                    setting.Endpoint = endpoint.Trim();
-                }
-                if (apiKey != null)
-                {
-                    setting.ApiKey = apiKey.Trim();
-                }
-                if (model != null)
-                {
-                    setting.Model = model.Trim();
-                }
-                setting.ApplyAndSave();
-                AgentLoop.Instance?.RefreshConfig();
-                OnAgentEvent(new AgentUiEvent { Kind = "settings", Text = RenderSettingsJson() });
-            }
-            catch (Exception e)
-            {
-                CS2MCP.Mod.Log.Info("save-settings rejected: " + e.Message);
-            }
-        }
-
-        private void OnFetchModels()
-        {
-            if (!IsInLoadedCity())
-            {
-                return;
-            }
-            string endpoint = Setting.StaticEndpoint;
-            string apiKey = Setting.StaticApiKey;
-            Task.Run(async () =>
-            {
-                ModelCatalog.FetchResult result = await ModelCatalog.FetchAsync(endpoint, apiKey);
-                if (result.Models.Count > 0)
-                {
-                    Setting setting = Setting.Instance;
-                    if (setting != null &&
-                        (string.IsNullOrEmpty(setting.Model) || !result.Models.Contains(setting.Model)))
-                    {
-                        setting.Model = result.Models[0];
-                        setting.ApplyAndSave();
-                        AgentLoop.Instance?.RefreshConfig();
-                    }
-                }
-                var payload = new JsonObject
-                {
-                    ["models"] = new JsonArray(result.Models.Select(id => (JsonNode)id).ToArray()),
-                    ["error"] = result.Error ?? "",
-                };
-                OnAgentEvent(new AgentUiEvent { Kind = "models", Text = payload.ToJsonString() });
-            });
-        }
-
-        private static string RenderSettingsJson()
-        {
-            return new JsonObject
-            {
-                ["endpoint"] = Setting.StaticEndpoint,
-                ["apiKey"] = Setting.StaticApiKey,
-                ["model"] = Setting.StaticModel,
-            }.ToJsonString();
         }
 
         private void Subscribe(AgentLoop loop)

@@ -1,9 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using CitiesSkylines2Agent.Agent;
 using Colossal;
 using Colossal.IO.AssetDatabase;
 using Game.Modding;
 using Game.Settings;
+using Game.UI.Widgets;
 
 namespace CitiesSkylines2Agent
 {
@@ -45,6 +49,22 @@ namespace CitiesSkylines2Agent
         [SettingsUISection(kSection, kConnectionGroup)]
         [SettingsUITextInput]
         public string Model { get; set; } = "";
+
+        [SettingsUISection(kSection, kConnectionGroup)]
+        [SettingsUIButton]
+        public bool FetchModels
+        {
+            set { if (value) { StartFetchModels(); } }
+        }
+
+        [SettingsUISection(kSection, kConnectionGroup)]
+        [SettingsUIDropdown(typeof(Setting), nameof(GetModelPresetItems))]
+        [SettingsUIValueVersion(typeof(Setting), nameof(ModelPresetVersion))]
+        public string ModelPreset
+        {
+            get => Model;
+            set { if (!string.IsNullOrEmpty(value)) { Model = value; } }
+        }
 
         [SettingsUISection(kSection, kConnectionGroup)]
         public ApiKind Api { get; set; } = ApiKind.ChatCompletions;
@@ -96,6 +116,63 @@ namespace CitiesSkylines2Agent
         public static string StaticApiKey => Instance?.ApiKey ?? "";
         public static long StaticWindowTokens => Instance?.WindowTokens ?? 200_000;
 
+        // ---- Fetched model presets (Options dropdown) --------
+
+        private static readonly object s_ModelPresetLock = new object();
+        private static List<string> s_ModelPresets = new List<string>();
+
+        public int ModelPresetVersion { get; set; }
+
+        public static DropdownItem<string>[] GetModelPresetItems()
+        {
+            lock (s_ModelPresetLock)
+            {
+                IEnumerable<string> items = s_ModelPresets;
+                string current = Instance?.Model;
+                if (!items.Any() && !string.IsNullOrEmpty(current))
+                {
+                    items = new[] { current };
+                }
+                else if (!string.IsNullOrEmpty(current) && !items.Contains(current))
+                {
+                    items = new[] { current }.Concat(items);
+                }
+                return items
+                    .Select(id => new DropdownItem<string> { value = id, displayName = id })
+                    .ToArray();
+            }
+        }
+
+        private void StartFetchModels()
+        {
+            string endpoint = Endpoint;
+            string apiKey = ApiKey;
+            Task.Run(async () =>
+            {
+                ModelCatalog.FetchResult result = await ModelCatalog.FetchAsync(endpoint, apiKey);
+                if (result.Models.Count == 0)
+                {
+                    CS2MCP.Mod.Log.Info("fetch-models: " + result.Error);
+                    return;
+                }
+                lock (s_ModelPresetLock)
+                {
+                    s_ModelPresets = result.Models;
+                }
+                Setting instance = Instance;
+                if (instance != null)
+                {
+                    if (string.IsNullOrEmpty(instance.Model) || !result.Models.Contains(instance.Model))
+                    {
+                        instance.Model = result.Models[0];
+                    }
+                    instance.ModelPresetVersion++;
+                    instance.ApplyAndSave();
+                }
+                CS2MCP.Mod.Log.Info($"fetch-models: loaded {result.Models.Count} models.");
+            });
+        }
+
         public override void SetDefaults()
         {
             Endpoint = "https://api.openai.com/v1";
@@ -138,6 +215,10 @@ namespace CitiesSkylines2Agent
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.ApiKey)), "Stored in settings only." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Model)), "Model" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.Model)), "e.g. gpt-5.6-sol, deepseek-v4-flash." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.FetchModels)), "Fetch models" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.FetchModels)), "Load the model list from the endpoint; selects the first model when the current one is empty or missing." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ModelPreset)), "Model preset" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.ModelPreset)), "Pick a fetched model; writes into Model. Manual input stays in Model." },
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AutoStart)), "Auto-start" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.AutoStart)), "Start a turn on city load." },
@@ -186,19 +267,6 @@ namespace CitiesSkylines2Agent
                 { ChatLocale.Id("Status.Queued"), "queued" },
                 { ChatLocale.Id("Status.Vision"), "vision" },
                 { ChatLocale.Id("Plan.None"), "No active plan" },
-                { ChatLocale.Id("Settings.Title"), "Settings" },
-                { ChatLocale.Id("Settings.Connection.Title"), "Connection" },
-                { ChatLocale.Id("Settings.Connection.Endpoint"), "Endpoint" },
-                { ChatLocale.Id("Settings.Connection.ApiKey"), "API key" },
-                { ChatLocale.Id("Settings.Connection.ShowKey"), "Show" },
-                { ChatLocale.Id("Settings.Connection.HideKey"), "Hide" },
-                { ChatLocale.Id("Settings.Model.Title"), "Model" },
-                { ChatLocale.Id("Settings.Model.Name"), "Model" },
-                { ChatLocale.Id("Settings.Model.Hint"), "Fetch models, pick one, or type a name" },
-                { ChatLocale.Id("Settings.Model.Fetch"), "Fetch" },
-                { ChatLocale.Id("Settings.Model.Fetching"), "Fetching…" },
-                { ChatLocale.Id("Settings.Model.Loaded"), "{{count}} models loaded" },
-                { ChatLocale.Id("Settings.Actions.Save"), "Save" },
             };
         }
 

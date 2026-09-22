@@ -2,14 +2,13 @@ import type { ReactNode } from "react";
 import { useRef, useState } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import { FOCUS_AUTO, Panel, Portal } from "cs2/ui";
-import gearIcon from "lucide-static/icons/settings.svg";
 import { useChat } from "./use-chat";
 import { useChatText } from "./locale";
 import { MessageList } from "./message-list";
 import { PlanStrip } from "./plan-strip";
 import { StatusBar } from "./status-bar";
 import { Composer } from "./composer";
-import { setPanelOpen, smartToggleSettings, usePanelOpen } from "./panel-visibility";
+import { setPanelOpen, usePanelOpen } from "./panel-visibility";
 import {
   clampPanelFrame,
   movePanelFrame,
@@ -199,24 +198,7 @@ export const ChatPanel = ({ children }: { children?: ReactNode }) => {
           onMouseDown={onDockMouseDown}
         >
           <Panel
-            header={
-              <div className={styles.panelHeader}>
-                <span>{text("Title", "City Agent")}</span>
-                <button
-                  type="button"
-                  className={styles.headerGearButton}
-                  title={text("Settings.Title", "Settings")}
-                  aria-label={text("Settings.Title", "Settings")}
-                  onClick={() => smartToggleSettings()}
-                >
-                  <img
-                    className={styles.headerGearIcon}
-                    style={{ maskImage: `url(${gearIcon})` }}
-                    alt=""
-                  />
-                </button>
-              </div>
-            }
+            header={text("Title", "City Agent")}
             focusKey={FOCUS_AUTO}
             className={styles.panelColumn}
             onClose={() => setPanelOpen(false)}
