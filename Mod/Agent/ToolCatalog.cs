@@ -25,6 +25,7 @@ namespace CitiesSkylines2Agent.Agent
         public string Route;
         public List<ToolQuerySpec> Query = new List<ToolQuerySpec>();
         public string Response = "json"; // "json" | "text" | "png"
+        public bool Body;
     }
 
     /// <summary>
@@ -155,6 +156,7 @@ namespace CitiesSkylines2Agent.Agent
                         Description = GetStringOrEmpty(toolElement, "description"),
                         Route = toolElement.GetProperty("route").GetString(),
                         Response = GetStringOrDefault(toolElement, "response", "json"),
+                        Body = toolElement.TryGetProperty("body", out JsonElement body) && body.GetBoolean(),
                     };
                     if (toolElement.TryGetProperty("parameters", out JsonElement parameters))
                     {

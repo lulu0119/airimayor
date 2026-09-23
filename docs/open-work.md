@@ -6,6 +6,9 @@ Current inventory. Vocabulary: [CONTEXT.md](../CONTEXT.md). Decisions: [adr/](./
 
 Code still missing.
 
+- Road blueprints ([0032](adr/0032-road-sketch-blueprints.md)): shared site snapshots; sketch graph and constrained horizontal/vertical solving; direction-guided local streets; plan/inspect tools and map/profile previews; revisioned, interruptible, idempotent blueprint execution; replacement of the model-facing single-road write. Native course acceptance is the prerequisite gate.
+- Existing road-isolation discrepancy: `Road_without_outside_connection_is_an_isolated_component` fails because the largest component is exempted even without an outside connection. Resolve the implementation/test/domain contract before using this classification for blueprint connectivity acceptance.
+
 - AIRI plugin
 - `map_image` hillshade
 - `map_image` POI icon set
@@ -13,6 +16,8 @@ Code still missing.
 - Zoning-cell landuse fills (volume)
 
 ## Awaiting live acceptance
+
+- Resolved native road courses and application tracking: `debug_network_course` is development-only and uses native validation. On a new city verify an S-curve, explicit node and edge-split connections, an unconnected elevated crossing, a ramp, a bridge and a tunnel; verify returned applied entities and actual curves after construction. Follow [the native course gate](guide/2026-09-23-native-road-course-acceptance.md). Do not mark blueprint generation or execution implemented from this gate alone.
 
 Code exists; a previous save is not the final gate. Close the game before DLL redeploy. Mac cannot `dotnet build` without `CSII_TOOLPATH`; Windows compile is a gate before live acceptance.
 

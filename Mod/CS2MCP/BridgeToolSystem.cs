@@ -24,13 +24,13 @@ using Transform = Game.Objects.Transform;
 namespace CS2MCP
 {
     /// <summary>
-    /// Headless placement tool. Activated programmatically for exactly three
-    /// tool-update frames per operation:
+    /// Headless placement tool. Activated programmatically for native tool updates:
     ///   1. CreateDefinitions — build definition entities (ported LineTool job),
     ///      applyMode=Clear lets the game generate preview Temp entities.
     ///   2. Apply — if validation passed (GetAllowApply), applyMode=Apply commits
     ///      the Temp entities to permanent ones; otherwise reject.
-    ///   3. Finish — restore the previously active tool.
+    ///   3. ObserveNetworkApply — roads wait for the native application result.
+    ///   4. Finish — restore the previously active tool.
     /// </summary>
     public sealed partial class BridgeToolSystem : ObjectToolBaseSystem
     {
@@ -39,6 +39,7 @@ namespace CS2MCP
             Idle,
             CreateDefinitions,
             Apply,
+            ObserveNetworkApply,
             Finish,
         }
 
@@ -118,7 +119,8 @@ namespace CS2MCP
             }
             CompletePending(BridgeResponse.Error(BridgeErrorKind.Timeout,
                 "build operation aborted: it did not finish within the bridge watchdog window; " +
-                "stage=" + m_Stage));
+                "stage=" + m_Stage + (m_Stage == Stage.ObserveNetworkApply
+                    ? "; construction may have been applied; inspect the site before building again" : string.Empty)));
             applyMode = ApplyMode.None;
             Deactivate();
         }
@@ -131,6 +133,12 @@ namespace CS2MCP
             m_TempRouteQuery = GetEntityQuery(
                 ComponentType.ReadOnly<Route>(),
                 ComponentType.ReadOnly<Temp>());
+            m_TempNetworkQuery = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[] { ComponentType.ReadOnly<Game.Net.Edge>(), ComponentType.ReadOnly<Curve>(),
+                    ComponentType.ReadOnly<PrefabRef>(), ComponentType.ReadOnly<Temp>() },
+                None = new[] { ComponentType.ReadOnly<Owner>(), ComponentType.ReadOnly<Deleted>() },
+            });
         }
 
         public override PrefabBase GetPrefab()
@@ -221,6 +229,7 @@ namespace CS2MCP
                 return false;
             }
             m_PendingKind = OperationKind.Net;
+            m_CompiledRoadCourse = null;
             m_PendingPrefabEntity = prefabEntity;
             m_PendingPrefab = prefab;
             m_PendingPosition = start;
@@ -447,6 +456,16 @@ namespace CS2MCP
                                 CreatePlacementDefinitions();
                                 break;
                             case OperationKind.Net:
+                                if (m_CompiledRoadCourse != null
+                                    && (!TryValidateCourseConnection(EntityManager,
+                                            m_CompiledRoadCourse.Start, m_CompiledRoadCourse.Path.A, out string connectionError)
+                                        || !TryValidateCourseConnection(EntityManager,
+                                            m_CompiledRoadCourse.End, m_CompiledRoadCourse.Path.D, out connectionError)))
+                                {
+                                    CompletePending(BridgeResponse.Error(BridgeErrorKind.Conflict, connectionError));
+                                    m_Stage = Stage.Finish;
+                                    break;
+                                }
                                 if (m_AutoConnectQueued && !TryRefreshAutoConnectTarget())
                                 {
                                     CompletePending(BuildAutoConnectFailedResponse(
@@ -495,6 +514,20 @@ namespace CS2MCP
                         }
                         if (GetAllowApply())
                         {
+                            if (m_PendingKind == OperationKind.Net && !m_AutoConnectQueued)
+                            {
+                                if (!CaptureNetworkApplyTargets())
+                                {
+                                    applyMode = ApplyMode.Clear;
+                                    CompletePending(BridgeResponse.Error(BridgeErrorKind.Conflict,
+                                        "no road construction result was prepared; nothing was applied"));
+                                    m_Stage = Stage.Finish;
+                                    break;
+                                }
+                                applyMode = ApplyMode.Apply;
+                                m_Stage = Stage.ObserveNetworkApply;
+                                break;
+                            }
                             applyMode = ApplyMode.Apply;
                             if (m_AutoConnectQueued && m_PendingKind == OperationKind.Net)
                             {
@@ -547,6 +580,10 @@ namespace CS2MCP
                         {
                             m_Stage = Stage.Finish;
                         }
+                        break;
+
+                    case Stage.ObserveNetworkApply:
+                        ObserveNetworkApply();
                         break;
 
                     case Stage.Finish:
@@ -1057,6 +1094,8 @@ namespace CS2MCP
             m_PendingOperationalResource = null;
             m_PendingRoadMode = null;
             m_PendingRoadPath = default;
+            m_CompiledRoadCourse = null;
+            m_NetworkApplyTargets.Clear();
             m_AutoConnectQueued = false;
             m_AutoConnectPrefabEntity = Entity.Null;
             m_AutoConnectPrefab = null;
@@ -1216,9 +1255,8 @@ namespace CS2MCP
         }
 
         /// <summary>
-        /// Creates a standalone straight-road course definition from the pending
-        /// start to end position, terrain-following (mirrors the standalone-net
-        /// branch of the game's net definition flow).
+        /// Creates a native course. Compiled roads already contain their final
+        /// world-space height; only legacy single segments need terrain adjustment.
         /// </summary>
         private void CreateRoadDefinitions()
         {
@@ -1257,7 +1295,7 @@ namespace CS2MCP
 
             float e1 = m_PendingElevations.x;
             float e2 = m_PendingElevations.y;
-            if (e1 != 0f || e2 != 0f)
+            if (m_CompiledRoadCourse == null && (e1 != 0f || e2 != 0f))
             {
                 // Lift the terrain-following curve by linearly interpolated
                 // elevation; the pipeline turns nonzero course elevations into
@@ -1283,6 +1321,13 @@ namespace CS2MCP
             course.m_EndPosition.m_ParentMesh = -1;
             course.m_EndPosition.m_Elevation = e2;
             course.m_EndPosition.m_Flags = CoursePosFlags.IsLast | CoursePosFlags.FreeHeight;
+            if (m_CompiledRoadCourse != null)
+            {
+                ResolveCourseConnection(m_CompiledRoadCourse.Start,
+                    out course.m_StartPosition.m_Entity, out course.m_StartPosition.m_SplitPosition);
+                ResolveCourseConnection(m_CompiledRoadCourse.End,
+                    out course.m_EndPosition.m_Entity, out course.m_EndPosition.m_SplitPosition);
+            }
             if (m_AutoConnectQueued)
             {
                 Game.Net.Edge targetEdge =

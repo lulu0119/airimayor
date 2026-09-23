@@ -931,6 +931,44 @@
       "response": "json"
     },
     {
+      "name": "debug_network_course",
+      "description": "Development acceptance only: construct one exact cubic road course through ordinary placement checks. points are four Bezier control points [x,y,z] in absolute world meters, not points the road passes through. Optional start/end bind an existing road node or edge; edge split is its Bezier parameter in 0..1. Endpoint positions must match the connection. Returns the actual applied roads and their connections. Never repeat an unverified result without inspecting the site.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "prefab": { "type": "string", "description": "Exact unlocked road prefab name" },
+          "mode": { "type": "string", "enum": ["ground", "grade-separated"] },
+          "points": {
+            "type": "array", "minItems": 4, "maxItems": 4,
+            "items": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" } }
+          },
+          "start": {
+            "type": "object", "additionalProperties": false,
+            "properties": {
+              "index": { "type": "integer", "minimum": 0 },
+              "version": { "type": "integer", "minimum": 0 },
+              "split": { "type": "number", "minimum": 0, "maximum": 1 }
+            },
+            "required": ["index", "version"]
+          },
+          "end": {
+            "type": "object", "additionalProperties": false,
+            "properties": {
+              "index": { "type": "integer", "minimum": 0 },
+              "version": { "type": "integer", "minimum": 0 },
+              "split": { "type": "number", "minimum": 0, "maximum": 1 }
+            },
+            "required": ["index", "version"]
+          }
+        },
+        "required": ["prefab", "mode", "points"]
+      },
+      "route": "/debug/network-course",
+      "body": true,
+      "response": "json"
+    },
+    {
       "name": "build_network",
       "description": "Build a road or utility-network segment between two world coordinates. Use SHORT segments (50-250m) on OWNED map tiles and connect roads near EXISTING road nodes. Small streets may join a highway where native validation allows, but prefer a ramp/collector/arterial path for highway access and verify flowPercent stays at 70 or above via list_networks. For ROAD prefabs, omitting mode selects ground: the route is sampled at roughly 4m or finer intervals for water and local grade, rejecting detected water crossings or grades above 10% (or a stricter prefab limit) instead of silently becoming a bridge or tunnel. Use mode=grade-separated only for an intentional bridge, elevated road or tunnel; provide both e1 and e2, with at least one nonzero. Do not pass mode for pipes, cables or other non-road networks. Pipes and Ground Cables remain UNDERGROUND by default (auto -10m buried), so omit e1/e2 to accept that burial. If the call fails, change the route or use shorter segments; do NOT repeat the same coordinates.",
       "parameters": {

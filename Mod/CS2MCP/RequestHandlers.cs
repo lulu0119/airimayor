@@ -119,6 +119,8 @@ namespace CS2MCP
                     return Zone(request);
                 case "/debug/zone-blocks":
                     return DebugZoneBlocks(request);
+                case "/debug/network-course":
+                    return DebugNetworkCourse(request);
                 case "/build/demolish":
                     return Demolish(request);
                 case "/city/buildings":

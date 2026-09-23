@@ -55,7 +55,8 @@ namespace CitiesSkylines2Agent.Agent
             bool advance = string.Equals(tool.Name, "set_simulation", StringComparison.Ordinal) &&
                 query.TryGetValue("action", out string action) &&
                 string.Equals(action, "advance", StringComparison.Ordinal);
-            Task<CS2MCP.BridgeResponse> bridgeTask = bridge.InvokeAsync(tool.Route, query);
+            Task<CS2MCP.BridgeResponse> bridgeTask = bridge.InvokeAsync(tool.Route, query,
+                tool.Body ? argumentsJson : null);
             Task completed = await Task.WhenAny(bridgeTask, Task.Delay(BridgeTimeoutMs, cancellationToken));
             CS2MCP.BridgeResponse response = completed == bridgeTask
                 ? await bridgeTask

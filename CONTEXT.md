@@ -40,6 +40,22 @@ _Avoid_: a statutory plan, compact JSON as the live plan, gating the tool catalo
 
 ### Construction
 
+**Road sketch**:
+The intended road hierarchy, connections, approximate routes and constraints for a site.
+_Avoid_: a sequence of construction calls, Bezier control points as through-points
+
+**Road blueprint**:
+A resolved, versioned road layout with curves, heights and explicit connections, reviewed before construction.
+_Avoid_: a picture alone, a guarantee of native placement approval, the live city
+
+**Site snapshot**:
+The observed roads, terrain, water, land and obstacles relevant to one planning area at a particular time.
+_Avoid_: diagnostic map files as current city authority
+
+**Construction record**:
+The completed, unfinished and unverified work for a particular blueprint revision, including actual constructed roads.
+_Avoid_: assuming an apply request means construction succeeded
+
 **Prefab**:
 An exact named game asset. The Agent picks one before placing or building.
 _Avoid_: service `role` as a `place_building` argument
@@ -115,5 +131,5 @@ A durable setting that shows or hides a write tool (demolition, spending Develop
 _Avoid_: per-call `force`, a confirmation modal after the setting is already on
 
 **Development tools**:
-Default-off diagnostics (`replace_road_type`, `debug_zone_blocks`, `save_game`). Not a permission bypass.
+Default-off diagnostics (`replace_road_type`, `debug_zone_blocks`, `debug_network_course`, `save_game`). Not a permission bypass.
 _Avoid_: anarchy mode, debug as always-on

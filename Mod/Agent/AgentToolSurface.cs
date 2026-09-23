@@ -13,7 +13,7 @@ namespace CitiesSkylines2Agent.Agent
         private static readonly HashSet<string> s_DevelopmentTools =
             new HashSet<string>(StringComparer.Ordinal)
             {
-                "replace_road_type", "debug_zone_blocks", "save_game",
+                "replace_road_type", "debug_zone_blocks", "debug_network_course", "save_game",
             };
 
         private static readonly HashSet<string> s_VisionTools =

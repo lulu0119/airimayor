@@ -37,8 +37,11 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0029-player-owned-clock.md](./adr/0029-player-owned-clock.md) | Player owns the clock; an advance restores speed/pause; no snapshot on the advance result |
 | [0030-player-message-keeps-plan.md](./adr/0030-player-message-keeps-plan.md) | Player messages keep the plan; a reply stops, a tool step finishes, an advance ends |
 | [0031-explicit-pause.md](./adr/0031-explicit-pause.md) | `get_simulation` reads the clock; `set_simulation` can advance or pause |
+| [0032-road-sketch-blueprints.md](./adr/0032-road-sketch-blueprints.md) | Sketch topology, resolved curves, shared preview/execution geometry and native apply identities |
 
 ## Guide
+
+- [Native road course acceptance](guide/2026-09-23-native-road-course-acceptance.md): prerequisite game gate for road blueprints.
 
 | Doc | Topic |
 | --- | --- |

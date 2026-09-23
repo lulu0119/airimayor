@@ -840,6 +840,31 @@ namespace CS2MCP
             }
 
             var flags = new List<string>();
+            if (EntityManager.HasComponent<Game.Net.Node>(entity))
+            {
+                float3 position = EntityManager.GetComponentData<Game.Net.Node>(entity).m_Position;
+                TerrainHeightData heights = World.GetOrCreateSystemManaged<TerrainSystem>().GetHeightData();
+                result["position"] = new { x = position.x, y = position.y, z = position.z };
+                result["terrainHeight"] = TerrainUtils.SampleHeight(ref heights, position);
+            }
+            if (EntityManager.HasComponent<Game.Net.Edge>(entity)
+                && EntityManager.HasComponent<Game.Net.Curve>(entity))
+            {
+                Game.Net.Edge edge = EntityManager.GetComponentData<Game.Net.Edge>(entity);
+                Colossal.Mathematics.Bezier4x3 curve = EntityManager.GetComponentData<Game.Net.Curve>(entity).m_Bezier;
+                result["network"] = new
+                {
+                    start = new { index = edge.m_Start.Index, version = edge.m_Start.Version },
+                    end = new { index = edge.m_End.Index, version = edge.m_End.Version },
+                    points = new[]
+                    {
+                        new[] { curve.a.x, curve.a.y, curve.a.z },
+                        new[] { curve.b.x, curve.b.y, curve.b.z },
+                        new[] { curve.c.x, curve.c.y, curve.c.z },
+                        new[] { curve.d.x, curve.d.y, curve.d.z },
+                    },
+                };
+            }
             if (EntityManager.HasComponent<Game.Buildings.Building>(entity)) flags.Add("building");
             if (EntityManager.HasComponent<Game.Net.Edge>(entity)) flags.Add("roadSegment");
             if (EntityManager.HasComponent<Game.Buildings.Abandoned>(entity)) flags.Add("abandoned");

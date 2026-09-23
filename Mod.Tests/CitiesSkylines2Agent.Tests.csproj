@@ -23,6 +23,7 @@
     <ItemGroup>
     <Compile Include="..\Mod\CS2MCP\MapStrokeJoin.cs" Link="Production\MapStrokeJoin.cs" />
     <Compile Include="..\Mod\CS2MCP\NetworkBuildArguments.cs" Link="Production\NetworkBuildArguments.cs" />
+    <Compile Include="..\Mod\CS2MCP\CompiledRoadCourse.cs" Link="Production\CompiledRoadCourse.cs" />
     <Compile Include="..\Mod\CS2MCP\OperationalAreaPlanningMath.cs" Link="Production\OperationalAreaPlanningMath.cs" />
     <Compile Include="..\Mod\CS2MCP\PlacementObstaclePolicy.cs" Link="Production\PlacementObstaclePolicy.cs" />
     <Compile Include="..\Mod\CS2MCP\PlacementSearchMath.cs" Link="Production\PlacementSearchMath.cs" />
