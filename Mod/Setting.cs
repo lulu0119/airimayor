@@ -204,7 +204,7 @@ namespace CitiesSkylines2Agent
         {
             return new Dictionary<string, string>
             {
-                { m_Setting.GetSettingsLocaleID(), "Cities Skylines 2 Agent" },
+                { m_Setting.GetSettingsLocaleID(), "AIRI Mayor" },
                 { m_Setting.GetOptionTabLocaleID(Setting.kSection), "Main" },
                 { m_Setting.GetOptionGroupLocaleID(Setting.kConnectionGroup), "Connection" },
                 { m_Setting.GetOptionGroupLocaleID(Setting.kAgentGroup), "Agent" },
@@ -242,15 +242,15 @@ namespace CitiesSkylines2Agent
                 { m_Setting.GetEnumValueLocaleID(ApiKind.ChatCompletions), "Chat Completions" },
                 { m_Setting.GetEnumValueLocaleID(ApiKind.Responses), "Responses" },
 
-                { ChatLocale.Id("Title"), "City Agent" },
+                { ChatLocale.Id("Title"), "AIRI Mayor" },
                 { ChatLocale.Id("Composer.Loading"), "Loading city…" },
-                { ChatLocale.Id("Composer.Ready"), "Message the mayor…" },
+                { ChatLocale.Id("Composer.Ready"), "Message AIRI…" },
                 { ChatLocale.Id("Composer.Send"), "Send" },
                 { ChatLocale.Id("Composer.Stop"), "Stop" },
-                { ChatLocale.Id("Empty"), "Ask the mayor to build, zone, or fix city services." },
+                { ChatLocale.Id("Empty"), "Ask AIRI to build, zone, or fix city services." },
                 { ChatLocale.Id("Thinking"), "Thinking" },
                 { ChatLocale.Id("Role.You"), "You" },
-                { ChatLocale.Id("Role.Mayor"), "Mayor" },
+                { ChatLocale.Id("Role.Mayor"), "AIRI" },
                 { ChatLocale.Id("Role.Error"), "Error" },
                 { ChatLocale.Id("Tool.Running"), "Running" },
                 { ChatLocale.Id("Tool.Done"), "Done" },

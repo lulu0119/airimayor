@@ -122,7 +122,7 @@ export const MessageRow = ({ line }: { line: ChatLine }) => {
       ? text("Role.You", "You")
       : line.kind === "error"
         ? text("Role.Error", "Error")
-        : text("Role.Mayor", "Mayor");
+        : text("Role.Mayor", "AIRI");
   return (
     <div className={`${styles.messageRow} ${roleClass(line.kind)}`}>
       <span className={styles.roleLabel}>{roleName}</span>

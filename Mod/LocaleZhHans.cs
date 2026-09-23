@@ -13,7 +13,7 @@ namespace CitiesSkylines2Agent
         {
             return new Dictionary<string, string>
             {
-                { m_Setting.GetSettingsLocaleID(), "Cities Skylines 2 Agent" },
+                { m_Setting.GetSettingsLocaleID(), "AIRI Mayor" },
                 { m_Setting.GetOptionTabLocaleID(Setting.kSection), "主要" },
                 { m_Setting.GetOptionGroupLocaleID(Setting.kConnectionGroup), "连接" },
                 { m_Setting.GetOptionGroupLocaleID(Setting.kAgentGroup), "代理" },
@@ -51,15 +51,15 @@ namespace CitiesSkylines2Agent
                 { m_Setting.GetEnumValueLocaleID(ApiKind.ChatCompletions), "Chat Completions" },
                 { m_Setting.GetEnumValueLocaleID(ApiKind.Responses), "Responses" },
 
-                { ChatLocale.Id("Title"), "城市代理" },
+                { ChatLocale.Id("Title"), "AIRI Mayor" },
                 { ChatLocale.Id("Composer.Loading"), "正在加载城市…" },
-                { ChatLocale.Id("Composer.Ready"), "给市长留言…" },
+                { ChatLocale.Id("Composer.Ready"), "给 AIRI 留言…" },
                 { ChatLocale.Id("Composer.Send"), "发送" },
                 { ChatLocale.Id("Composer.Stop"), "停止" },
-                { ChatLocale.Id("Empty"), "让市长建造、分区或修复城市服务。" },
+                { ChatLocale.Id("Empty"), "让 AIRI 建造、分区或修复城市服务。" },
                 { ChatLocale.Id("Thinking"), "思考中" },
                 { ChatLocale.Id("Role.You"), "你" },
-                { ChatLocale.Id("Role.Mayor"), "市长" },
+                { ChatLocale.Id("Role.Mayor"), "AIRI" },
                 { ChatLocale.Id("Role.Error"), "错误" },
                 { ChatLocale.Id("Tool.Running"), "运行中" },
                 { ChatLocale.Id("Tool.Done"), "完成" },

@@ -10,7 +10,7 @@ export const AgentIconButton = () => {
   const open = usePanelOpen();
   const text = useChatText();
   return (
-    <Tooltip tooltip={text("Title", "City Agent")}>
+    <Tooltip tooltip={text("Title", "AIRI Mayor")}>
       <Button
         variant="floating"
         className={open ? styles.iconSelected : styles.iconToggle}

@@ -772,13 +772,11 @@ namespace CS2MCP
                 {
                     continue;
                 }
-                if (DegreeOf(degrees, edge.StartNode) >= 3
-                    && !junctions.ContainsKey(edge.StartNode))
+                if (DegreeOf(degrees, edge.StartNode) >= 3 && !junctions.ContainsKey(edge.StartNode))
                 {
                     junctions.Add(edge.StartNode, new JunctionSite(edge.Points[0], i));
                 }
-                if (DegreeOf(degrees, edge.EndNode) >= 3
-                    && !junctions.ContainsKey(edge.EndNode))
+                if (DegreeOf(degrees, edge.EndNode) >= 3 && !junctions.ContainsKey(edge.EndNode))
                 {
                     junctions.Add(
                         edge.EndNode,

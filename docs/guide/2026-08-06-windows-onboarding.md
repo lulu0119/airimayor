@@ -1,7 +1,7 @@
 # Windows onboarding (guide)
 
 **Date:** 2026-08-06  
-**Repo:** `cities-skylines-2-agent` (GitHub：lulu0119/cities-skylines-2-agent)
+**Repo:** `airimayor` (GitHub：lulu0119/airimayor)
 
 ## Goal
 

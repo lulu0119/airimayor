@@ -1,4 +1,4 @@
-# Cities: Skylines 2 Agent
+# AIRI Mayor
 
 The in-game AI mayor: a Gameface chat UI talks to a C# loop that enqueues construction and city tools onto the simulation thread. Players install the mod and paste an API key; there is no external agent process.
 
