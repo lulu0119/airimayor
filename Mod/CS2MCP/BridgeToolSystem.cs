@@ -47,6 +47,7 @@ namespace CS2MCP
         {
             Object,
             Net,
+            Blueprint,
             Demolish,
             Upgrade,
             ReplaceNet,
@@ -117,10 +118,19 @@ namespace CS2MCP
             {
                 return;
             }
-            CompletePending(BridgeResponse.Error(BridgeErrorKind.Timeout,
-                "build operation aborted: it did not finish within the bridge watchdog window; " +
-                "stage=" + m_Stage + (m_Stage == Stage.ObserveNetworkApply
-                    ? "; construction may have been applied; inspect the site before building again" : string.Empty)));
+            if (m_PendingKind == OperationKind.Blueprint && m_BlueprintRun != null)
+            {
+                NetworkBlueprintStore.MarkInterrupted(m_BlueprintRun);
+                CompletePending(BlueprintRunResponse("interrupted",
+                    "the watchdog stopped the run; resume the same revision to continue unfinished roads"));
+            }
+            else
+            {
+                CompletePending(BridgeResponse.Error(BridgeErrorKind.Timeout,
+                    "build operation aborted: it did not finish within the bridge watchdog window; " +
+                    "stage=" + m_Stage + (m_Stage == Stage.ObserveNetworkApply
+                        ? "; construction may have been applied; inspect the site before building again" : string.Empty)));
+            }
             applyMode = ApplyMode.None;
             Deactivate();
         }
@@ -456,6 +466,7 @@ namespace CS2MCP
                                 CreatePlacementDefinitions();
                                 break;
                             case OperationKind.Net:
+                            case OperationKind.Blueprint:
                                 if (m_CompiledRoadCourse != null
                                     && (!TryValidateCourseConnection(EntityManager,
                                             m_CompiledRoadCourse.Start, m_CompiledRoadCourse.Path.A, out string connectionError)
@@ -514,7 +525,8 @@ namespace CS2MCP
                         }
                         if (GetAllowApply())
                         {
-                            if (m_PendingKind == OperationKind.Net && !m_AutoConnectQueued)
+                            if ((m_PendingKind == OperationKind.Net || m_PendingKind == OperationKind.Blueprint)
+                                && !m_AutoConnectQueued)
                             {
                                 if (!CaptureNetworkApplyTargets())
                                 {
@@ -583,7 +595,14 @@ namespace CS2MCP
                         break;
 
                     case Stage.ObserveNetworkApply:
-                        ObserveNetworkApply();
+                        if (m_PendingKind == OperationKind.Blueprint)
+                        {
+                            ObserveBlueprintStep();
+                        }
+                        else
+                        {
+                            ObserveNetworkApply();
+                        }
                         break;
 
                     case Stage.Finish:
@@ -1105,6 +1124,7 @@ namespace CS2MCP
             m_AutoConnectTargetSplit = 0f;
             m_PlacedBuildingName = null;
             m_PendingTransitStops = null;
+            ClearBlueprintRun();
             if (m_ToolSystem.activeTool == this)
             {
                 m_ToolSystem.activeTool = m_PreviousTool != null ? m_PreviousTool : m_DefaultToolSystem;

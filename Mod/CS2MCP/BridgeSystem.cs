@@ -123,11 +123,19 @@ namespace CS2MCP
                 !m_AsyncRequest.CompletionTask.IsCompleted &&
                 (DateTime.UtcNow - m_AsyncStartedUtc).TotalSeconds > AsyncOperationTimeoutSeconds)
             {
-                Mod.Log.Warn("aborting stuck bridge tool operation after " +
-                             AsyncOperationTimeoutSeconds + "s");
                 BridgeToolSystem tool = World.GetOrCreateSystemManaged<BridgeToolSystem>();
-                tool.AbortStuckOperation();
-                m_AsyncRequest = null;
+                double heartbeatAge;
+                if (tool.BlueprintRunActive(out heartbeatAge) && heartbeatAge < AsyncOperationTimeoutSeconds)
+                {
+                    m_AsyncStartedUtc = DateTime.UtcNow;
+                }
+                else
+                {
+                    Mod.Log.Warn("aborting stuck bridge tool operation after " +
+                                 AsyncOperationTimeoutSeconds + "s");
+                    tool.AbortStuckOperation();
+                    m_AsyncRequest = null;
+                }
             }
             if (AutoPauseTargetFrame != 0)
             {

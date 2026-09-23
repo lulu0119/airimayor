@@ -1237,14 +1237,18 @@ namespace CS2MCP
 
         private BridgeResponse BuildNetwork(BridgeRequest request)
         {
-            if (!TryGetCity(out _, out BridgeResponse error))
+            if (!TryGetCity(out Entity city, out BridgeResponse error))
             {
                 return error;
             }
 
+            if (request.Query.TryGetValue("blueprint", out string blueprintId) && !string.IsNullOrEmpty(blueprintId))
+            {
+                return BuildBlueprint(request, city, blueprintId);
+            }
             if (!request.Query.TryGetValue("prefab", out string prefabName) || string.IsNullOrEmpty(prefabName))
             {
-                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "provide ?prefab=<name from /prefabs?category=road>");
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "provide ?prefab=<utility network from /prefabs?category=net> with endpoints, or ?blueprint=<id from plan_network> for a reviewed road layout");
             }
             if (!request.TryGetFloat("x1", out float x1) || !request.TryGetFloat("z1", out float z1)
                 || !request.TryGetFloat("x2", out float x2) || !request.TryGetFloat("z2", out float z2))
@@ -1264,17 +1268,21 @@ namespace CS2MCP
 
             if (!TryFindPrefabByName(NetPrefabQuery, prefabName, out Entity prefabEntity, out PrefabBase prefab))
             {
-                return BridgeResponse.Error(BridgeErrorKind.NotFound, $"unknown network prefab '{prefabName}'; search via /prefabs?category=road|net&query=...");
+                return BridgeResponse.Error(BridgeErrorKind.NotFound, $"unknown network prefab '{prefabName}'; search via /prefabs?category=net&query=...");
             }
             if (IsLocked(prefabEntity))
             {
                 return BridgeResponse.Error(BridgeErrorKind.Conflict, $"prefab '{prefab.name}' is locked (milestone not reached)");
             }
 
-            bool isRoad = EntityManager.HasComponent<RoadData>(prefabEntity);
+            if (EntityManager.HasComponent<RoadData>(prefabEntity))
+            {
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments,
+                    "roads are planned as whole layouts: describe the site with plan_network, review the revision, then build it with ?blueprint=<id>");
+            }
             if (!NetworkBuildArguments.TryParse(
                     request.Query,
-                    isRoad,
+                    false,
                     out NetworkBuildArguments arguments,
                     out string argumentError))
             {
@@ -1282,7 +1290,6 @@ namespace CS2MCP
                     BridgeErrorKind.InvalidArguments,
                     argumentError);
             }
-            RoadBuildMode? roadMode = arguments.RoadMode;
 
             TerrainSystem terrain = World.GetOrCreateSystemManaged<TerrainSystem>();
             TerrainHeightData heightData = terrain.GetHeightData();
@@ -1312,82 +1319,6 @@ namespace CS2MCP
             }
             var elevations = new float2(e1, e2);
 
-            RoadPath roadPath = default;
-            if (isRoad)
-            {
-                RoadPath requestedPath = hasMid
-                    ? RoadPath.WithControlPoint(start, mid, end)
-                    : RoadPath.Straight(start, end);
-                Game.Net.Curve rawCurve = new Game.Net.Curve
-                {
-                    m_Bezier = new Bezier4x3(
-                        requestedPath.A,
-                        requestedPath.B,
-                        requestedPath.C,
-                        requestedPath.D),
-                };
-                Bezier4x3 adjusted = Game.Net.NetUtils.AdjustPosition(
-                    rawCurve,
-                    fixedStart: false,
-                    linearMiddle: false,
-                    fixedEnd: false,
-                    ref heightData).m_Bezier;
-                roadPath = new RoadPath(adjusted.a, adjusted.b, adjusted.c, adjusted.d);
-            }
-
-            if (roadMode == RoadBuildMode.Ground)
-            {
-                if (!EntityManager.HasComponent<NetGeometryData>(prefabEntity)
-                    || !EntityManager.HasComponent<PlaceableNetData>(prefabEntity))
-                {
-                    return BridgeResponse.Error(
-                        BridgeErrorKind.Conflict,
-                        $"road prefab '{prefab.name}' lacks the native geometry or placement data required for ground-path validation");
-                }
-
-                PlaceableNetData placeable = EntityManager.GetComponentData<PlaceableNetData>(prefabEntity);
-                if ((placeable.m_PlacementFlags & Game.Net.PlacementFlags.OnGround) == 0)
-                {
-                    return BridgeResponse.Error(
-                        BridgeErrorKind.InvalidArguments,
-                        $"road prefab '{prefab.name}' does not support mode=ground; use mode=grade-separated with both e1/e2 if appropriate");
-                }
-
-                WaterSystem water = World.GetOrCreateSystemManaged<WaterSystem>();
-                WaterSurfaceData<SurfaceWater> waterData =
-                    water.GetSurfaceData(out JobHandle waterDependencies);
-                waterDependencies.Complete();
-                NetGeometryData geometry = EntityManager.GetComponentData<NetGeometryData>(prefabEntity);
-                RoadGroundPreflightResult preflight = RoadGroundPreflight.Evaluate(
-                    roadPath,
-                    geometry.m_DefaultWidth * 0.5f,
-                    geometry.m_MaxSlopeSteepness,
-                    geometry.m_DefaultHeightRange.min,
-                    new RoadSurfaceSampler(heightData, waterData));
-                if (!preflight.Allowed)
-                {
-                    if (preflight.Block == RoadGroundBlock.Water)
-                    {
-                        return BridgeResponse.Error(
-                            BridgeErrorKind.Conflict,
-                            $"mode=ground route crosses water near ({preflight.Position.x:F1}, {preflight.Position.z:F1}) " +
-                            $"(depth {preflight.WaterDepth:F2}m); choose a dry route, or explicitly use mode=grade-separated with both e1/e2 for an intentional crossing");
-                    }
-                    if (preflight.Block == RoadGroundBlock.InvalidPath)
-                    {
-                        return BridgeResponse.Error(
-                            BridgeErrorKind.InvalidArguments,
-                            "mode=ground route is too long or non-finite to validate; move cx/cz closer to the endpoints or split the road into shorter segments");
-                    }
-                    return BridgeResponse.Error(
-                        BridgeErrorKind.Conflict,
-                        $"mode=ground route is too steep near ({preflight.Position.x:F1}, {preflight.Position.z:F1}): " +
-                        $"observed {preflight.Grade * 100f:F1}%, allowed {preflight.MaximumGrade * 100f:F1}% " +
-                        "(10% product ceiling or a stricter prefab limit); " +
-                        "choose a gentler route, or explicitly use mode=grade-separated with both e1/e2");
-                }
-            }
-
             BridgeToolSystem tool = World.GetOrCreateSystemManaged<BridgeToolSystem>();
             if (!tool.TryQueueRoad(
                     prefabEntity,
@@ -1397,13 +1328,105 @@ namespace CS2MCP
                     mid,
                     hasMid,
                     elevations,
-                    roadMode,
-                    roadPath,
+                    null,
+                    default,
                     request))
             {
                 return BridgeResponse.Error(BridgeErrorKind.Conflict, "another build operation is in progress, retry shortly");
             }
             return null;
+        }
+
+        private BridgeResponse BuildBlueprint(BridgeRequest request, Entity city, string blueprintId)
+        {
+            if (request.Query.ContainsKey("x1") || request.Query.ContainsKey("z1")
+                || request.Query.ContainsKey("x2") || request.Query.ContainsKey("z2")
+                || request.Query.ContainsKey("prefab"))
+            {
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments,
+                    "a blueprint run takes only ?blueprint=<id>&version=<n>; coordinates and prefab belong to utility builds");
+            }
+            int version = request.TryGetInt("version", out int rawVersion) ? rawVersion : 0;
+            BlueprintRecord record = NetworkBlueprintStore.Get(blueprintId, version);
+            if (record == null)
+            {
+                return BridgeResponse.Error(BridgeErrorKind.NotFound, "unknown blueprint revision; plan the sketch again");
+            }
+            if (record.Status != "ready")
+            {
+                return BridgeResponse.Error(BridgeErrorKind.Conflict,
+                    "revision " + record.Version + " is " + record.Status + "; resolve its diagnostics with inspect_network_plan and plan a new revision");
+            }
+            BridgeResponse stale = CheckBlueprintFresh(city, record);
+            if (stale != null)
+            {
+                return stale;
+            }
+            BlueprintRunRecord run = NetworkBlueprintStore.GetOrCreateRun(record);
+            if (run.Status == BlueprintRunStatus.Completed)
+            {
+                return BlueprintRunSummary(record, run, "completed",
+                    "this revision is already built; the same roads are returned without rebuilding");
+            }
+            var prefabs = new Dictionary<string, BridgeToolSystem.BlueprintPrefabEntry>(StringComparer.Ordinal);
+            foreach (ResolvedCourse course in record.Courses)
+            {
+                if (prefabs.ContainsKey(course.Prefab))
+                {
+                    continue;
+                }
+                if (!TryFindPrefabByName(NetPrefabQuery, course.Prefab, out Entity prefabEntity, out PrefabBase prefab)
+                    || !EntityManager.HasComponent<RoadData>(prefabEntity))
+                {
+                    return BridgeResponse.Error(BridgeErrorKind.Conflict,
+                        "road prefab '" + course.Prefab + "' is unavailable; revise the sketch");
+                }
+                if (IsLocked(prefabEntity))
+                {
+                    return BridgeResponse.Error(BridgeErrorKind.Conflict,
+                        "road prefab '" + course.Prefab + "' is locked (milestone not reached)");
+                }
+                prefabs[course.Prefab] = new BridgeToolSystem.BlueprintPrefabEntry { Entity = prefabEntity, Base = prefab };
+            }
+            BridgeToolSystem tool = World.GetOrCreateSystemManaged<BridgeToolSystem>();
+            if (!tool.TryQueueBlueprint(record, run, prefabs, request))
+            {
+                return BridgeResponse.Error(BridgeErrorKind.Conflict, "another build operation is in progress, retry shortly");
+            }
+            return null;
+        }
+
+        private static BridgeResponse BlueprintRunSummary(
+            BlueprintRecord record, BlueprintRunRecord run, string status, string note)
+        {
+            var steps = new List<object>();
+            int done = 0;
+            foreach (BlueprintStepRecord step in run.Steps)
+            {
+                if (step.State == BlueprintStepState.Done)
+                {
+                    done++;
+                }
+                steps.Add(new
+                {
+                    course = step.CourseId,
+                    state = step.State.ToString().ToLowerInvariant(),
+                    applied = step.AppliedIndex >= 0
+                        ? new { index = step.AppliedIndex, version = step.AppliedVersion }
+                        : null,
+                });
+            }
+            return BridgeResponse.Json(new
+            {
+                blueprint = record.Id,
+                version = record.Version,
+                run = run.RunId,
+                status,
+                done,
+                total = run.Steps.Count,
+                steps,
+                note,
+            });
         }
 
         private static readonly Dictionary<string, (Game.Prefabs.CompositionFlags.General general, Game.Prefabs.CompositionFlags.Side side)> kUpgradeNames =
