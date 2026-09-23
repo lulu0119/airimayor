@@ -57,7 +57,17 @@ namespace CitiesSkylines2Agent.Agent
                 string.Equals(action, "advance", StringComparison.Ordinal);
             Task<CS2MCP.BridgeResponse> bridgeTask = bridge.InvokeAsync(tool.Route, query,
                 tool.Body ? argumentsJson : null);
-            Task completed = await Task.WhenAny(bridgeTask, Task.Delay(BridgeTimeoutMs, cancellationToken));
+            int timeoutMs = tool.TimeoutMs > 0 ? tool.TimeoutMs : BridgeTimeoutMs;
+            Task completed;
+            try
+            {
+                completed = await Task.WhenAny(bridgeTask, Task.Delay(timeoutMs, cancellationToken));
+            }
+            catch (OperationCanceledException)
+            {
+                bridge.RequestBlueprintInterrupt();
+                throw;
+            }
             CS2MCP.BridgeResponse response = completed == bridgeTask
                 ? await bridgeTask
                 : null;
@@ -67,8 +77,9 @@ namespace CitiesSkylines2Agent.Agent
                 {
                     bridge.CancelTimedRun();
                 }
+                bridge.RequestBlueprintInterrupt();
                 cancellationToken.ThrowIfCancellationRequested();
-                return Error($"tool '{tool.Name}' did not complete within {BridgeTimeoutMs / 1000}s; " +
+                return Error($"tool '{tool.Name}' did not complete within {timeoutMs / 1000}s; " +
                              "the game may be busy, retry once or switch approach");
             }
             if (!response.Success)

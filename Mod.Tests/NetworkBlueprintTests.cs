@@ -280,10 +280,11 @@ namespace CS2MCP
         {
             NetworkBlueprintStore.ClearForTests();
             BlueprintPlanResult plan = PlanCurved();
-            BlueprintRecord created = NetworkBlueprintStore.Create("hash1", "site1", plan);
+            NetworkSketch sketch = Sketch();
+            BlueprintRecord created = NetworkBlueprintStore.Create("hash1", "site1", sketch, plan);
 
             Assert.Equal(1, created.Version);
-            BlueprintRecord revised = NetworkBlueprintStore.Revise(created.Id, "hash2", "site1", plan);
+            BlueprintRecord revised = NetworkBlueprintStore.Revise(created.Id, "hash2", "site1", sketch, plan);
             Assert.Equal(2, revised.Version);
             Assert.Equal(revised, NetworkBlueprintStore.Get(created.Id, 0));
 
@@ -302,8 +303,7 @@ namespace CS2MCP
             Assert.Equal(BlueprintRunStatus.Completed, run.Status);
             Assert.Null(NetworkBlueprintStore.NextReadyStep(revised, run));
             Assert.Same(run, NetworkBlueprintStore.GetOrCreateRun(revised));
-            Assert.True(NetworkBlueprintStore.IsCurrent(revised, "site1"));
-            Assert.False(NetworkBlueprintStore.IsCurrent(revised, "site2"));
+            Assert.Equal("site1", revised.SiteFingerprint);
         }
 
         private static BlueprintPlanResult PlanCurved()

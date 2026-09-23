@@ -18,6 +18,12 @@ namespace CS2MCP
         Blocked,
     }
 
+    internal sealed class BlueprintAnchorIdentity
+    {
+        public int Index;
+        public int Version;
+    }
+
     internal sealed class BlueprintRecord
     {
         public string Id;
@@ -25,6 +31,12 @@ namespace CS2MCP
         public string SketchHash;
         public string SiteFingerprint;
         public string Status;
+        public float AreaMinX;
+        public float AreaMinZ;
+        public float AreaMaxX;
+        public float AreaMaxZ;
+        public readonly List<BlueprintAnchorIdentity> ExistingAnchors = new List<BlueprintAnchorIdentity>();
+        public readonly List<string> PrefabNames = new List<string>();
         public readonly List<ResolvedCourse> Courses = new List<ResolvedCourse>();
         public readonly List<BlueprintDiagnostic> Diagnostics = new List<BlueprintDiagnostic>();
         public readonly List<string> BuildOrder = new List<string>();
@@ -64,6 +76,7 @@ namespace CS2MCP
             new Dictionary<string, List<BlueprintRecord>>(StringComparer.Ordinal);
         private static readonly Dictionary<string, BlueprintRunRecord> s_Runs =
             new Dictionary<string, BlueprintRunRecord>(StringComparer.Ordinal);
+        private static readonly object s_RunGate = new object();
         private static int s_NextId = 1;
 
         public static void ClearForTests()
@@ -94,6 +107,7 @@ namespace CS2MCP
         public static BlueprintRecord Create(
             string sketchHash,
             string siteFingerprint,
+            NetworkSketch sketch,
             BlueprintPlanResult result)
         {
             string id = "bp" + s_NextId++;
@@ -106,7 +120,12 @@ namespace CS2MCP
                 Status = result.Status.ToString().ToLowerInvariant(),
                 RoadCount = result.RoadCount,
                 TotalLength = result.TotalLength,
+                AreaMinX = sketch.AreaMinX,
+                AreaMinZ = sketch.AreaMinZ,
+                AreaMaxX = sketch.AreaMaxX,
+                AreaMaxZ = sketch.AreaMaxZ,
             };
+            CollectSketchRefs(sketch, record);
             record.Courses.AddRange(result.Courses);
             record.Diagnostics.AddRange(result.Diagnostics);
             record.BuildOrder.AddRange(result.BuildOrder);
@@ -119,12 +138,13 @@ namespace CS2MCP
             string blueprintId,
             string sketchHash,
             string siteFingerprint,
+            NetworkSketch sketch,
             BlueprintPlanResult result)
         {
             List<BlueprintRecord> versions;
             if (string.IsNullOrEmpty(blueprintId) || !s_Blueprints.TryGetValue(blueprintId, out versions))
             {
-                return Create(sketchHash, siteFingerprint, result);
+                return Create(sketchHash, siteFingerprint, sketch, result);
             }
             var record = new BlueprintRecord
             {
@@ -135,12 +155,48 @@ namespace CS2MCP
                 Status = result.Status.ToString().ToLowerInvariant(),
                 RoadCount = result.RoadCount,
                 TotalLength = result.TotalLength,
+                AreaMinX = sketch.AreaMinX,
+                AreaMinZ = sketch.AreaMinZ,
+                AreaMaxX = sketch.AreaMaxX,
+                AreaMaxZ = sketch.AreaMaxZ,
             };
+            CollectSketchRefs(sketch, record);
             record.Courses.AddRange(result.Courses);
             record.Diagnostics.AddRange(result.Diagnostics);
             record.BuildOrder.AddRange(result.BuildOrder);
             versions.Add(record);
             return record;
+        }
+
+        private static void CollectSketchRefs(NetworkSketch sketch, BlueprintRecord record)
+        {
+            if (sketch == null)
+            {
+                return;
+            }
+            foreach (SketchAnchor anchor in sketch.Anchors)
+            {
+                if (anchor.Kind == SketchAnchorKind.ExistingNode || anchor.Kind == SketchAnchorKind.ExistingEdge)
+                {
+                    record.ExistingAnchors.Add(new BlueprintAnchorIdentity
+                    {
+                        Index = anchor.EntityIndex,
+                        Version = anchor.EntityVersion,
+                    });
+                }
+            }
+            var prefabs = new HashSet<string>(StringComparer.Ordinal);
+            foreach (SketchRoad road in sketch.Roads)
+            {
+                prefabs.Add(road.Prefab);
+            }
+            foreach (SketchDistrict district in sketch.Districts)
+            {
+                prefabs.Add(district.StreetPrefab);
+            }
+            var ordered = new List<string>(prefabs);
+            ordered.Sort(StringComparer.Ordinal);
+            record.PrefabNames.AddRange(ordered);
         }
 
         public static BlueprintRecord Get(string blueprintId, int version)
@@ -164,33 +220,31 @@ namespace CS2MCP
             return null;
         }
 
-        public static bool IsCurrent(BlueprintRecord record, string siteFingerprint)
-        {
-            return record != null && string.Equals(record.SiteFingerprint, siteFingerprint ?? string.Empty, StringComparison.Ordinal);
-        }
-
         public static BlueprintRunRecord GetOrCreateRun(BlueprintRecord record)
         {
-            foreach (BlueprintRunRecord run in s_Runs.Values)
+            lock (s_RunGate)
             {
-                if (run.BlueprintId == record.Id && run.Version == record.Version)
+                foreach (BlueprintRunRecord run in s_Runs.Values)
                 {
-                    return run;
+                    if (run.BlueprintId == record.Id && run.Version == record.Version)
+                    {
+                        return run;
+                    }
                 }
+                var created = new BlueprintRunRecord
+                {
+                    RunId = "run" + s_NextId++,
+                    BlueprintId = record.Id,
+                    Version = record.Version,
+                    Status = BlueprintRunStatus.Building,
+                };
+                foreach (string courseId in record.BuildOrder)
+                {
+                    created.Steps.Add(new BlueprintStepRecord { CourseId = courseId });
+                }
+                s_Runs[created.RunId] = created;
+                return created;
             }
-            var created = new BlueprintRunRecord
-            {
-                RunId = "run" + s_NextId++,
-                BlueprintId = record.Id,
-                Version = record.Version,
-                Status = BlueprintRunStatus.Building,
-            };
-            foreach (string courseId in record.BuildOrder)
-            {
-                created.Steps.Add(new BlueprintStepRecord { CourseId = courseId });
-            }
-            s_Runs[created.RunId] = created;
-            return created;
         }
 
         public static BlueprintRunRecord GetRun(string runId)
@@ -255,7 +309,7 @@ namespace CS2MCP
         {
             foreach (BlueprintStepRecord step in run.Steps)
             {
-                if (step.CourseId == courseId)
+                if (step.CourseId == courseId && step.State == BlueprintStepState.Pending)
                 {
                     step.State = BlueprintStepState.Blocked;
                     step.Note = note;
@@ -272,11 +326,14 @@ namespace CS2MCP
 
         public static void RequestInterruptAll()
         {
-            foreach (BlueprintRunRecord run in s_Runs.Values)
+            lock (s_RunGate)
             {
-                if (run.Status == BlueprintRunStatus.Building)
+                foreach (BlueprintRunRecord run in s_Runs.Values)
                 {
-                    run.InterruptRequested = true;
+                    if (run.Status == BlueprintRunStatus.Building)
+                    {
+                        run.InterruptRequested = true;
+                    }
                 }
             }
         }

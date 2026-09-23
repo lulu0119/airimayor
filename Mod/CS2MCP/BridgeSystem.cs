@@ -81,6 +81,16 @@ namespace CS2MCP
             Mod.Log.Info("timed wait cancelled, simulation state restored");
         }
 
+        /// <summary>
+        /// Safe from any thread. A cancelled or timed-out model turn stops a
+        /// road-layout run after its current native step; the same revision
+        /// resumes later instead of rebuilding. Never touches the clock.
+        /// </summary>
+        public void RequestBlueprintInterrupt()
+        {
+            CS2MCP.NetworkBlueprintStore.RequestInterruptAll();
+        }
+
         [Preserve]
         protected override void OnCreate()
         {

@@ -176,7 +176,7 @@
     },
     {
       "name": "map_image",
-      "description": "Undistorted top-down PNG city map in OSM Carto style (roads, rail, buildings by function, parks, water). Names stay in map_text. Omit bounds for a citywide planning overview (road layout, expansion direction, district structure); pass x+z+radius or xMin/zMin/xMax/zMax for a zoomed extent (troubleshooting a site). Returns the image directly.",
+      "description": "Undistorted top-down PNG city map in OSM Carto style (roads, rail, buildings by function, parks, water). Names stay in map_text. Omit bounds for a citywide planning overview (road layout, expansion direction, district structure); pass x+z+radius or xMin/zMin/xMax/zMax for a zoomed extent (troubleshooting a site). Pass blueprint+version to overlay a reviewed road layout in its plan extent; view=profile draws its height section instead. Returns the image directly.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -217,6 +217,20 @@
             "minimum": -7168,
             "maximum": 7168,
             "description": "Bounds max Z"
+          },
+          "blueprint": {
+            "type": "string",
+            "description": "Road layout id from plan_network to overlay on this map"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Blueprint revision to show (default latest)"
+          },
+          "view": {
+            "type": "string",
+            "enum": ["plan", "profile"],
+            "description": "plan overlays the layout on the map; profile draws its height section with terrain and clearance"
           }
         },
         "required": []
@@ -250,6 +264,18 @@
         {
           "key": "zMax",
           "arg": "zMax"
+        },
+        {
+          "key": "blueprint",
+          "arg": "blueprint"
+        },
+        {
+          "key": "version",
+          "arg": "version"
+        },
+        {
+          "key": "view",
+          "arg": "view"
         }
       ],
       "response": "png"
@@ -969,58 +995,169 @@
       "response": "json"
     },
     {
+      "name": "plan_network",
+      "description": "Design a whole road layout for one site: collectors, ramps, bridges, tunnels and local streets in a single reviewed revision. Describe road hierarchy, connections, rough routes and keep-out areas; the planner resolves curves, heights, junctions and build order. Returns a blueprint id with version, constraint diagnostics and the review extent. Nothing is built. Review it on map_image (blueprint+version, plan and profile views) and inspect_network_plan, revise the sketch when diagnostics ask, then build that revision once with build_network. Pass blueprint to revise an earlier revision.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "blueprint": {
+            "type": "string",
+            "description": "Earlier blueprint id to revise (omit for a new layout)"
+          },
+          "area": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "xMin": { "type": "number" },
+              "zMin": { "type": "number" },
+              "xMax": { "type": "number" },
+              "zMax": { "type": "number" }
+            },
+            "required": ["xMin", "zMin", "xMax", "zMax"]
+          },
+          "anchors": {
+            "type": "array",
+            "description": "Named connection points: {id, node:{index,version}} on an existing junction, {id, edge:{index,version}, split:0..1} on an existing road, {id, point:{x,z}} on open land, or {id, road:\"<sketch road>\", split:0..1} on a planned road",
+            "items": { "type": "object" }
+          },
+          "roads": {
+            "type": "array",
+            "description": "Each road: id, exact prefab, from/to anchor ids, optional via guide points [{x,z}], through points the road must pass, corridor half width (default 40), mode ground (default) or grade-separated with e1/e2 heights in meters relative to terrain, clearance for crossings (default 6), structures allowances (ground, bridge, elevated, tunnel), maxGrade ratio and minCurveRadius. Shared anchors join roads; a crossing without a shared anchor needs a crossings entry.",
+            "items": { "type": "object" }
+          },
+          "crossings": {
+            "type": "array",
+            "description": "Each crossing: a, b road ids, kind at-grade (needs a shared junction), over or under with upper naming the road that passes over",
+            "items": { "type": "object" }
+          },
+          "districts": {
+            "type": "array",
+            "description": "Local-street areas: id, rect, exact streetPrefab, field grid (angle degrees), radial/circular (center) or mixed, spacing 24-400m, maxStreets, minExits skeleton connections, allowDeadEnds (default false), connectTo skeleton road ids (default all named skeleton roads; name collectors, not highways)",
+            "items": { "type": "object" }
+          },
+          "blocked": {
+            "type": "array",
+            "description": "Keep-out rects [{xMin,zMin,xMax,zMax}] the layout must avoid",
+            "items": { "type": "object" }
+          }
+        },
+        "required": ["area"]
+      },
+      "route": "/plan/network",
+      "body": true,
+      "response": "json"
+    },
+    {
+      "name": "inspect_network_plan",
+      "description": "Read a planned road layout: its revision status, resolved roads with lengths and connections, constraint diagnostics, and the build run when given. Ask for geometry=true for full road points of one course or road, or run=<id> for per-step build progress with applied roads.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "blueprint": {
+            "type": "string",
+            "description": "Blueprint id from plan_network"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Revision to read (default latest)"
+          },
+          "course": {
+            "type": "string",
+            "description": "One course or road id to focus (default all, at most 64 listed)"
+          },
+          "geometry": {
+            "type": "boolean",
+            "description": "Include full road points (default false)"
+          },
+          "run": {
+            "type": "string",
+            "description": "Build run id to report step progress"
+          }
+        },
+        "required": ["blueprint"]
+      },
+      "route": "/plan/network/inspect",
+      "query": [
+        {
+          "key": "blueprint",
+          "arg": "blueprint"
+        },
+        {
+          "key": "version",
+          "arg": "version"
+        },
+        {
+          "key": "course",
+          "arg": "course"
+        },
+        {
+          "key": "geometry",
+          "arg": "geometry",
+          "boolMode": "trueOnly"
+        },
+        {
+          "key": "run",
+          "arg": "run"
+        }
+      ],
+      "response": "json"
+    },
+    {
       "name": "build_network",
-      "description": "Build a road or utility-network segment between two world coordinates. Use SHORT segments (50-250m) on OWNED map tiles and connect roads near EXISTING road nodes. Small streets may join a highway where native validation allows, but prefer a ramp/collector/arterial path for highway access and verify flowPercent stays at 70 or above via list_networks. For ROAD prefabs, omitting mode selects ground: the route is sampled at roughly 4m or finer intervals for water and local grade, rejecting detected water crossings or grades above 10% (or a stricter prefab limit) instead of silently becoming a bridge or tunnel. Use mode=grade-separated only for an intentional bridge, elevated road or tunnel; provide both e1 and e2, with at least one nonzero. Do not pass mode for pipes, cables or other non-road networks. Pipes and Ground Cables remain UNDERGROUND by default (auto -10m buried), so omit e1/e2 to accept that burial. If the call fails, change the route or use shorter segments; do NOT repeat the same coordinates.",
+      "description": "Build linear networks. ROADS are built from a reviewed layout revision: call plan_network first, review it on map_image and inspect_network_plan, then pass its blueprint+version here once; the run builds every road in dependency order and reports applied roads per step. Repeating the same blueprint+version resumes an interrupted run instead of rebuilding. UTILITY networks (pipes, cables, power lines) still build directly with prefab+x1/z1+x2/z2 and take no mode; pipes and ground cables stay buried by default (omit e1/e2). If a road run stops, read its diagnostics or inspect the site instead of repeating blindly.",
       "parameters": {
         "type": "object",
         "properties": {
           "prefab": {
             "type": "string",
-            "description": "Exact prefab name from list_prefabs (category road or net)"
+            "description": "Exact utility-network prefab name from list_prefabs (category net: pipes, cables, power lines). Roads build from plan_network blueprints instead."
           },
           "x1": {
             "type": "number",
-            "description": "Start X (meters)"
+            "description": "Utility start X (meters)"
           },
           "z1": {
             "type": "number",
-            "description": "Start Z (meters)"
+            "description": "Utility start Z (meters)"
           },
           "x2": {
             "type": "number",
-            "description": "End X (meters)"
+            "description": "Utility end X (meters)"
           },
           "z2": {
             "type": "number",
-            "description": "End Z (meters)"
+            "description": "Utility end Z (meters)"
           },
           "cx": {
             "type": "number",
-            "description": "Curve control point X. Provide together with cz to build a curve through that point; omit both for a straight segment."
+            "description": "Utility curve control point X. Provide together with cz; omit both for a straight segment."
           },
           "cz": {
             "type": "number",
-            "description": "Curve control point Z. Provide together with cx to build a curve through that point; omit both for a straight segment."
-          },
-          "mode": {
-            "type": "string",
-            "enum": [
-              "ground",
-              "grade-separated"
-            ],
-            "description": "Road prefabs only. Omit to select ground, which samples at roughly 4m or finer intervals and rejects detected water crossings or local grades above 10% (or a stricter prefab limit). Use grade-separated only for an intentional bridge/elevated/tunnel segment; provide both e1 and e2, with at least one nonzero. Never pass mode for utility-network prefabs."
+            "description": "Utility curve control point Z. Provide together with cx; omit both for a straight segment."
           },
           "e1": {
             "type": "number",
             "minimum": -30,
             "maximum": 60,
-            "description": "Elevation at start in meters relative to terrain (-30..60). Required together with e2 for a grade-separated road, where at least one endpoint must be nonzero; positive values are elevated and negative values are underground. Not an entity id. Omit for a ground road or automatic utility burial."
+            "description": "Utility burial depth at start in meters relative to terrain (-30..60). Not an entity id. Omit to accept automatic burial (pipes and ground cables default to -10m)."
           },
           "e2": {
             "type": "number",
             "minimum": -30,
             "maximum": 60,
-            "description": "Elevation at end in meters relative to terrain (-30..60). Required together with e1 for a grade-separated road, where at least one endpoint must be nonzero. Not an entity id. Omit for a ground road or automatic utility burial."
+            "description": "Utility burial depth at end in meters relative to terrain (-30..60). Not an entity id. Omit to accept automatic burial."
+          },
+          "blueprint": {
+            "type": "string",
+            "description": "Reviewed road layout id from plan_network (road prefabs only; required for roads)"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Blueprint revision to build (default latest)"
           }
         },
         "required": [
@@ -1032,6 +1169,7 @@
         ]
       },
       "route": "/build/network",
+      "timeoutMs": 600000,
       "query": [
         {
           "key": "prefab",
@@ -1062,16 +1200,20 @@
           "arg": "cz"
         },
         {
-          "key": "mode",
-          "arg": "mode"
-        },
-        {
           "key": "e1",
           "arg": "e1"
         },
         {
           "key": "e2",
           "arg": "e2"
+        },
+        {
+          "key": "blueprint",
+          "arg": "blueprint"
+        },
+        {
+          "key": "version",
+          "arg": "version"
         }
       ],
       "response": "json"

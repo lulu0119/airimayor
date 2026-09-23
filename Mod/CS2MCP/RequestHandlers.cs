@@ -121,6 +121,10 @@ namespace CS2MCP
                     return DebugZoneBlocks(request);
                 case "/debug/network-course":
                     return DebugNetworkCourse(request);
+                case "/plan/network":
+                    return PlanNetwork(request);
+                case "/plan/network/inspect":
+                    return InspectNetworkPlan(request);
                 case "/build/demolish":
                     return Demolish(request);
                 case "/city/buildings":

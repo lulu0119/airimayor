@@ -26,6 +26,7 @@ namespace CitiesSkylines2Agent.Agent
         public List<ToolQuerySpec> Query = new List<ToolQuerySpec>();
         public string Response = "json"; // "json" | "text" | "png"
         public bool Body;
+        public int TimeoutMs = 90_000;
     }
 
     /// <summary>
@@ -157,6 +158,7 @@ namespace CitiesSkylines2Agent.Agent
                         Route = toolElement.GetProperty("route").GetString(),
                         Response = GetStringOrDefault(toolElement, "response", "json"),
                         Body = toolElement.TryGetProperty("body", out JsonElement body) && body.GetBoolean(),
+                        TimeoutMs = GetTimeoutMs(toolElement),
                     };
                     if (toolElement.TryGetProperty("parameters", out JsonElement parameters))
                     {
@@ -214,6 +216,19 @@ namespace CitiesSkylines2Agent.Agent
                 return value.GetString();
             }
             return null;
+        }
+
+        private static int GetTimeoutMs(JsonElement element)
+        {
+            if (element.TryGetProperty("timeoutMs", out JsonElement value)
+                && value.ValueKind == JsonValueKind.Number
+                && value.TryGetInt32(out int timeout)
+                && timeout >= 10_000
+                && timeout <= 900_000)
+            {
+                return timeout;
+            }
+            return 90_000;
         }
     }
 }
