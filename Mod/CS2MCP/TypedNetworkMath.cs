@@ -438,8 +438,7 @@ namespace CS2MCP
                 {
                     return false;
                 }
-                int size = ComponentSize(labels, componentId);
-                return size > 0 && size != LargestComponentSize(edges, kind, labels);
+                return ComponentSize(labels, componentId) > 0;
             }
 
             var nodes = new HashSet<int>();
@@ -546,36 +545,6 @@ namespace CS2MCP
                 }
             }
             return size;
-        }
-
-        public static int LargestComponentSize(
-            IReadOnlyList<TypedNetworkEdge> edges,
-            TypedNetworkKinds kind,
-            int[] labels)
-        {
-            if (edges == null || labels == null)
-            {
-                return 0;
-            }
-            var sizes = new Dictionary<int, int>();
-            for (int i = 0; i < edges.Count; i++)
-            {
-                if (labels[i] < 0 || (edges[i].Kinds & kind) == 0)
-                {
-                    continue;
-                }
-                sizes.TryGetValue(labels[i], out int size);
-                sizes[labels[i]] = size + 1;
-            }
-            int largest = 0;
-            foreach (int size in sizes.Values)
-            {
-                if (size > largest)
-                {
-                    largest = size;
-                }
-            }
-            return largest;
         }
 
         public static bool ComponentHasOutside(
