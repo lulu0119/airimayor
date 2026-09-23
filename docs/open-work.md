@@ -6,9 +6,6 @@ Current inventory. Vocabulary: [CONTEXT.md](../CONTEXT.md). Decisions: [adr/](./
 
 Code still missing.
 
-- Road blueprints ([0032](adr/0032-road-sketch-blueprints.md)): shared site snapshots; sketch graph and constrained horizontal/vertical solving; direction-guided local streets; plan/inspect tools and map/profile previews; revisioned, interruptible, idempotent blueprint execution; replacement of the model-facing single-road write. Native course acceptance is the prerequisite gate.
-- Existing road-isolation discrepancy: `Road_without_outside_connection_is_an_isolated_component` fails because the largest component is exempted even without an outside connection. Resolve the implementation/test/domain contract before using this classification for blueprint connectivity acceptance.
-
 - AIRI plugin
 - `map_image` hillshade
 - `map_image` POI icon set
@@ -17,6 +14,7 @@ Code still missing.
 
 ## Awaiting live acceptance
 
+- Road blueprints ([0032](adr/0032-road-sketch-blueprints.md), [0033](adr/0033-blueprint-build-runs.md)): `plan_network` sketch solving, `inspect_network_plan` reads, `map_image` plan/profile previews, and dependency-ordered `build_network` runs with interrupt, resume and expiry are code-complete with pure-data tests. On a new city verify one district layout end to end (sketch, diagnostics, plan and profile review, one revision, full run, applied roads), direction-guided streets in bending, radial and mixed fields, a grade-separated interchange with ramps and an over/under crossing, a blocked or interrupted run resumed from the same revision, and an expired revision rejected after a site change. Do not mark traffic improvement from geometry checks alone.
 - Resolved native road courses and application tracking: `debug_network_course` is development-only and uses native validation. On a new city verify an S-curve, explicit node and edge-split connections, an unconnected elevated crossing, a ramp, a bridge and a tunnel; verify returned applied entities and actual curves after construction. Follow [the native course gate](guide/2026-09-23-native-road-course-acceptance.md). Do not mark blueprint generation or execution implemented from this gate alone.
 
 Code exists; a previous save is not the final gate. Close the game before DLL redeploy. Mac cannot `dotnet build` without `CSII_TOOLPATH`; Windows compile is a gate before live acceptance.

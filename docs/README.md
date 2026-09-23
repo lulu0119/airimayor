@@ -38,6 +38,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0030-player-message-keeps-plan.md](./adr/0030-player-message-keeps-plan.md) | Player messages keep the plan; a reply stops, a tool step finishes, an advance ends |
 | [0031-explicit-pause.md](./adr/0031-explicit-pause.md) | `get_simulation` reads the clock; `set_simulation` can advance or pause |
 | [0032-road-sketch-blueprints.md](./adr/0032-road-sketch-blueprints.md) | Sketch topology, resolved curves, shared preview/execution geometry and native apply identities |
+| [0033-blueprint-build-runs.md](./adr/0033-blueprint-build-runs.md) | One revision builds in dependent steps with interrupt, resume and drift stops; no rollback |
 
 ## Guide
 
