@@ -31,6 +31,26 @@ namespace CS2MCP
                 return cityError;
             }
 
+            request.Query.TryGetValue("view", out string previewView);
+            if (!string.IsNullOrEmpty(previewView) && previewView != "plan" && previewView != "profile")
+            {
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "view must be plan or profile");
+            }
+            bool profileView = string.Equals(previewView, "profile", StringComparison.Ordinal);
+            BlueprintRecord previewBlueprint = null;
+            if (request.Query.ContainsKey("blueprint") || profileView)
+            {
+                if (!TryGetPreviewBlueprint(request, out previewBlueprint, out BridgeResponse blueprintError))
+                {
+                    return blueprintError ?? BridgeResponse.Error(
+                        BridgeErrorKind.InvalidArguments, "provide ?blueprint=<id from plan_network>");
+                }
+                if (profileView)
+                {
+                    return RenderBlueprintProfile(previewBlueprint);
+                }
+            }
+
             bool hasBounds = request.Query.ContainsKey("x") || request.Query.ContainsKey("z")
                 || request.Query.ContainsKey("radius") || request.Query.ContainsKey("xMin")
                 || request.Query.ContainsKey("zMin") || request.Query.ContainsKey("xMax")
@@ -65,6 +85,10 @@ namespace CS2MCP
             MapFrame frame = hasBounds
                 ? MapFrame.FromBounds(xMin, zMin, xMax, zMax)
                 : MapFrame.FromData(strokes, fills) ?? MapFrame.World();
+            if (previewBlueprint != null && !hasBounds)
+            {
+                frame = BlueprintFrame(previewBlueprint) ?? frame;
+            }
             MapScale mapScale = ScaleOf(frame, kMapWidth);
             Mod.Log.Info($"map_image: {strokes.Count} strokes, {fills.Count} footprints, {mapScale}" +
                 (hasBounds ? $" (extent {xMin},{zMin} to {xMax},{zMax})" : " (citywide)") +
@@ -74,6 +98,10 @@ namespace CS2MCP
             try
             {
                 texture = Rasterize(strokes, fills, frame, mapScale, BuildWaterSampler());
+                if (previewBlueprint != null)
+                {
+                    DrawBlueprintOverlay(texture, previewBlueprint, frame);
+                }
                 byte[] png = ImageConversion.EncodeToPNG(texture);
                 if (png == null || png.Length == 0)
                 {

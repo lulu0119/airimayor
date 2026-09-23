@@ -184,6 +184,7 @@ namespace CS2MCP
         public BlueprintAnchorRef End;
         public string DistrictId;
         public float Length;
+        public float WidthM;
     }
 
     internal sealed class SolvedSketchRoad
@@ -675,6 +676,7 @@ namespace CS2MCP
                     E1 = lifted.A.y - sampler.TerrainHeight(lifted.A.x, lifted.A.z),
                     E2 = lifted.D.y - sampler.TerrainHeight(lifted.D.x, lifted.D.z),
                     Length = length,
+                    WidthM = road.HalfWidth * 2f,
                 };
                 if (i == 0)
                 {
@@ -1095,52 +1097,6 @@ namespace CS2MCP
             if (math.lengthsq(tangent) < 0.0001f)
             {
                 return new float2(1f, 0f);
-            }
-            return math.normalize(tangent);
-        }
-
-        private static float2 PointAtDistance(List<float2> waypoints, float distance)
-        {
-            float walked = 0f;
-            for (int i = 0; i + 1 < waypoints.Count; i++)
-            {
-                float step = math.distance(waypoints[i], waypoints[i + 1]);
-                if (walked + step >= distance)
-                {
-                    float t = step > 0.0001f ? (distance - walked) / step : 0f;
-                    return math.lerp(waypoints[i], waypoints[i + 1], math.clamp(t, 0f, 1f));
-                }
-                walked += step;
-            }
-            return waypoints[waypoints.Count - 1];
-        }
-
-        private static float2 TangentAtDistance(
-            Dictionary<string, SketchAnchor> anchors, SketchRoad road, List<float2> waypoints, float distance, bool isStart)
-        {
-            SketchAnchor anchor = null;
-            string anchorId = isStart ? road.From : road.To;
-            float total = 0f;
-            for (int i = 0; i + 1 < waypoints.Count; i++)
-            {
-                total += math.distance(waypoints[i], waypoints[i + 1]);
-            }
-            bool atEndpoint = isStart ? distance <= 0.01f : distance >= total - 0.01f;
-            if (atEndpoint && anchors.TryGetValue(anchorId, out anchor) && anchor.HasTangent)
-            {
-                float2 explicitTangent = math.normalize(new float2(anchor.TangentX, anchor.TangentZ));
-                if (math.all(math.isfinite(explicitTangent)) && math.lengthsq(explicitTangent) > 0.5f)
-                {
-                    return math.normalize(explicitTangent);
-                }
-            }
-            float ahead = isStart ? math.min(distance + 16f, total) : math.max(distance - 16f, 0f);
-            float2 here = PointAtDistance(waypoints, distance);
-            float2 other = PointAtDistance(waypoints, ahead);
-            float2 tangent = isStart ? other - here : here - other;
-            if (math.lengthsq(tangent) < 0.0001f)
-            {
-                tangent = waypoints[waypoints.Count - 1] - waypoints[0];
             }
             return math.normalize(tangent);
         }

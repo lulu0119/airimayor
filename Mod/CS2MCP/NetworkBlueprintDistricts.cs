@@ -161,6 +161,7 @@ namespace CS2MCP
                         E2 = 0f,
                         DistrictId = district.Id,
                         Length = NetworkBlueprintPlanner.CourseLength(lifted),
+                        WidthM = district.StreetHalfWidth * 2f,
                     };
                     if (chunk == 0)
                     {
