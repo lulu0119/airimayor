@@ -78,35 +78,36 @@
   height: 14rem;
 }
 
-.iconToggle {
-  // RoadBuilder parity: vanilla accent tones (probed live, #4bc3f1 family).
-  background-color: #4bc3f1;
-  transition: background-color 0.15s;
+.iconClosed,
+.iconOpen,
+.iconClosed:hover,
+.iconOpen:hover,
+.iconClosed:active,
+.iconOpen:active {
+  position: relative;
+  overflow: hidden;
+  padding: 0;
 }
 
-.iconToggle:hover {
-  background-color: #63cdf3;
+.iconClosed,
+.iconClosed:hover {
+  background-color: #dd5e8e;
 }
 
-.iconToggle:active {
-  background-color: #2f9fd0;
+.iconOpen,
+.iconOpen:hover {
+  background-color: #e37ba2;
 }
 
-.iconSelected {
-  background-color: #ffffff;
-}
-
-.iconSelected .iconImage {
-  background-color: #4bc3f1;
+.iconClosed:active,
+.iconOpen:active {
+  background-color: #faf9fb;
 }
 
 .iconImage {
+  display: block;
   width: 100%;
   height: 100%;
-  background-color: #ffffff;
-  mask-size: contain;
-  mask-position: 50% 50%;
-  mask-repeat: no-repeat;
 }
 
 .dock .panelColumn {

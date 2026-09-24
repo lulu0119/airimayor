@@ -1,8 +1,8 @@
 import { useState } from "react";
 import type { KeyboardEvent } from "react";
 import { Icon } from "@iconify/react";
-import plainLinear from "@iconify-icons/solar/plain-linear";
-import stopCircleLinear from "@iconify-icons/solar/stop-circle-linear";
+import plainBoldDuotone from "@iconify-icons/solar/plain-bold-duotone";
+import stopCircleBoldDuotone from "@iconify-icons/solar/stop-circle-bold-duotone";
 import { useChatText } from "./locale";
 import styles from "./chat.module.scss";
 
@@ -60,7 +60,7 @@ export const Composer = ({ loading, busy, onSend, onInterrupt }: ComposerProps) 
             onClick={onInterrupt}
           >
             <span className={styles.actionIcon}>
-              <Icon icon={stopCircleLinear} />
+              <Icon icon={stopCircleBoldDuotone} />
             </span>
           </button>
         ) : null}
@@ -73,7 +73,7 @@ export const Composer = ({ loading, busy, onSend, onInterrupt }: ComposerProps) 
           disabled={loading || draft.trim().length === 0}
         >
           <span className={styles.actionIcon}>
-            <Icon icon={plainLinear} />
+            <Icon icon={plainBoldDuotone} />
           </span>
         </button>
       </div>

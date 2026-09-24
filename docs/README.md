@@ -44,7 +44,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | Doc | Topic |
 | --- | --- |
 | [2026-08-06-windows-onboarding.md](./guide/2026-08-06-windows-onboarding.md) | Windows setup, build/load `Mod/` |
-| [ui-icons.md](./guide/ui-icons.md) | UI icon rule (MingCute only) + mask mechanism |
+| [ui-icons.md](./guide/ui-icons.md) | Launcher illustration on the game's floating button |
 
 ## Research
 

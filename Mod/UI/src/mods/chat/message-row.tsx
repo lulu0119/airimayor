@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import type { ChatLine, ToolRowState } from "./chat-types";
 import { Icon } from "@iconify/react";
-import altArrowDownLinear from "@iconify-icons/solar/alt-arrow-down-linear";
+import altArrowDownBoldDuotone from "@iconify-icons/solar/alt-arrow-down-bold-duotone";
 import { useChatText } from "./locale";
 import { jpegPixelSize } from "./jpeg-size";
 import styles from "./chat.module.scss";
@@ -75,7 +75,7 @@ const ToolRow = ({ line }: { line: Extract<ChatLine, { kind: "tool" }> }) => {
             transform: expanded ? "none" : "rotate(-90deg)",
           }}
         >
-          <Icon icon={altArrowDownLinear} />
+          <Icon icon={altArrowDownBoldDuotone} />
         </span>
       </div>
       {expanded ? (
