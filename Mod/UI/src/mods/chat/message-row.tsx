@@ -3,6 +3,7 @@ import type { ChatLine, ToolRowState } from "./chat-types";
 import { Icon } from "@iconify/react";
 import altArrowDownLinear from "@iconify-icons/solar/alt-arrow-down-linear";
 import { useChatText } from "./locale";
+import { jpegPixelSize } from "./jpeg-size";
 import styles from "./chat.module.scss";
 
 const toolDotClass = (state: ToolRowState): string => {
@@ -30,30 +31,19 @@ const roleClass = (kind: ChatLine["kind"]): string => {
 };
 
 // Gameface img exposes no natural size and ignores object-fit, so CSS alone
-// cannot keep the aspect. The agent loop therefore sends the source pixel
-// size on the wire; pin an explicit height from the laid-out width. Width is
-// rem-scaled by the engine, the wire ratio is unitless, so every image tool
-// renders at its source aspect on any resolution.
-const ToolImage = ({
-  src,
-  alt,
-  sourceWidth,
-  sourceHeight,
-}: {
-  src: string;
-  alt: string;
-  sourceWidth: number | null;
-  sourceHeight: number | null;
-}) => {
+// cannot keep the aspect. The preview JPEG carries its pixel size in the
+// file header; pin an explicit height from the laid-out width.
+const ToolImage = ({ src, alt }: { src: string; alt: string }) => {
   const ref = useRef<HTMLImageElement>(null);
   const fit = () => {
     const img = ref.current;
     if (!img) {
       return;
     }
+    const size = jpegPixelSize(src);
     const laidWidth = img.clientWidth;
-    if (sourceWidth && sourceHeight && sourceWidth > 0 && sourceHeight > 0 && laidWidth > 0) {
-      img.style.height = `${Math.round((laidWidth * sourceHeight) / sourceWidth)}px`;
+    if (size && laidWidth > 0) {
+      img.style.height = `${Math.round((laidWidth * size.height) / size.width)}px`;
     }
   };
   return (
@@ -98,12 +88,7 @@ const ToolRow = ({ line }: { line: Extract<ChatLine, { kind: "tool" }> }) => {
           ) : null}
           <div className={styles.toolSectionLabel}>{text("Tool.Result", "Result")}</div>
           {line.image ? (
-            <ToolImage
-              src={line.image}
-              alt={line.name}
-              sourceWidth={line.imageWidth}
-              sourceHeight={line.imageHeight}
-            />
+            <ToolImage src={line.image} alt={line.name} />
           ) : null}
           <pre className={styles.toolPre}>{line.result ?? text("Tool.NoResult", "No result yet.")}</pre>
         </div>

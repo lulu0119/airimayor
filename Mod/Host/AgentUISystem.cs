@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text;
 using System.Threading;
+using AgentRuntime;
 using Colossal.Serialization.Entities;
 using Colossal.UI.Binding;
 using Game;
@@ -8,7 +9,7 @@ using Game.SceneFlow;
 using Game.UI;
 using UnityEngine.Scripting;
 
-namespace CitiesSkylines2Agent.Agent
+namespace CitiesSkylines2Agent.Host
 {
     /// <summary>
     /// Bridges the agent loop to Gameface: publishes agent state and a live
@@ -21,13 +22,13 @@ namespace CitiesSkylines2Agent.Agent
         private const string Group = "CitiesSkylines2Agent";
         private const int MaxEventsPerUpdate = 32;
 
-        private readonly ConcurrentQueue<AgentUiEvent> m_Events =
-            new ConcurrentQueue<AgentUiEvent>();
+        private readonly ConcurrentQueue<SessionUpdate> m_Events =
+            new ConcurrentQueue<SessionUpdate>();
         private ValueBinding<string> m_StateBinding;
         private EventBinding<string> m_EventBinding;
         private int m_StateDirty;
-        private AgentLoop m_SubscribedLoop;
-        private AgentUiEvent m_DeferredEvent;
+        private AgentRuntime.AgentRuntime m_Session;
+        private SessionUpdate m_DeferredEvent;
         private bool m_AutoStartSent;
 
         [Preserve]
@@ -66,8 +67,8 @@ namespace CitiesSkylines2Agent.Agent
                 return;
             }
 
-            Unsubscribe();
-            Subscribe(AgentLoop.StartCitySession());
+            CloseSession();
+            OpenSession();
             while (m_Events.TryDequeue(out _)) { }
             m_DeferredEvent = null;
             m_AutoStartSent = false;
@@ -77,8 +78,7 @@ namespace CitiesSkylines2Agent.Agent
 
         private void LeaveGameSession()
         {
-            Unsubscribe();
-            AgentLoop.LeaveCitySession();
+            CloseSession();
             while (m_Events.TryDequeue(out _)) { }
             m_DeferredEvent = null;
             m_AutoStartSent = false;
@@ -100,7 +100,7 @@ namespace CitiesSkylines2Agent.Agent
             {
                 return;
             }
-            AgentLoop.Instance?.Send(text);
+            m_Session?.Prompt(text);
         }
 
         private void OnInterrupt()
@@ -109,31 +109,52 @@ namespace CitiesSkylines2Agent.Agent
             {
                 return;
             }
-            AgentLoop.Instance?.Interrupt();
+            m_Session?.Cancel();
         }
 
-        private void Subscribe(AgentLoop loop)
+        private void OpenSession()
         {
-            if (ReferenceEquals(m_SubscribedLoop, loop))
+            m_Session = AgentSessionHost.Current = new AgentRuntime.AgentRuntime(
+                new Cs2AgentTools(),
+                AgentSystemPrompt.Text,
+                ReadModel,
+                ModPaths.LogsDirectory,
+                message => Mod.log.Warn(message));
+            m_Session.Updated += OnAgentEvent;
+        }
+
+        private static ModelSettings ReadModel()
+        {
+            return new ModelSettings
+            {
+                Endpoint = Setting.StaticEndpoint,
+                ApiKey = Setting.StaticApiKey,
+                Model = Setting.StaticModel,
+                WindowTokens = Setting.StaticWindowTokens,
+                Vision = Setting.StaticVisionToolMode == VisionToolMode.On,
+                ContinueWhenIdle = Setting.StaticContinuous,
+                Wire = Setting.StaticApiKind == ApiKind.Responses
+                    ? ModelWire.Responses
+                    : ModelWire.ChatCompletions,
+            };
+        }
+
+        private void CloseSession()
+        {
+            if (m_Session == null)
             {
                 return;
             }
-            Unsubscribe();
-            m_SubscribedLoop = loop;
-            m_SubscribedLoop.UiEvent += OnAgentEvent;
-        }
-
-        private void Unsubscribe()
-        {
-            if (m_SubscribedLoop == null)
+            m_Session.Updated -= OnAgentEvent;
+            if (ReferenceEquals(AgentSessionHost.Current, m_Session))
             {
-                return;
+                AgentSessionHost.Current = null;
             }
-            m_SubscribedLoop.UiEvent -= OnAgentEvent;
-            m_SubscribedLoop = null;
+            m_Session.Dispose();
+            m_Session = null;
         }
 
-        private void OnAgentEvent(AgentUiEvent agentEvent)
+        private void OnAgentEvent(SessionUpdate agentEvent)
         {
             if (agentEvent == null)
             {
@@ -146,7 +167,7 @@ namespace CitiesSkylines2Agent.Agent
             }
         }
 
-        private static bool NeedsStateSnapshot(AgentUiEvent agentEvent)
+        private static bool NeedsStateSnapshot(SessionUpdate agentEvent)
         {
             if (agentEvent.Kind == "user" ||
                 agentEvent.Kind == "error" ||
@@ -173,7 +194,7 @@ namespace CitiesSkylines2Agent.Agent
             base.OnUpdate();
             TryAutoStart();
             int processed = 0;
-            while (processed < MaxEventsPerUpdate && TryDequeueForUi(out AgentUiEvent agentEvent))
+            while (processed < MaxEventsPerUpdate && TryDequeueForUi(out SessionUpdate agentEvent))
             {
                 m_EventBinding.Trigger(agentEvent.ToJsonString());
                 processed++;
@@ -196,16 +217,15 @@ namespace CitiesSkylines2Agent.Agent
             {
                 return;
             }
-            AgentLoop loop = AgentLoop.Instance;
-            if (loop == null)
+            if (m_Session == null)
             {
                 return;
             }
             m_AutoStartSent = true;
-            loop.Send(Setting.StaticStartupPrompt);
+            m_Session.Prompt(Setting.StaticStartupPrompt);
         }
 
-        private bool TryDequeueForUi(out AgentUiEvent agentEvent)
+        private bool TryDequeueForUi(out SessionUpdate agentEvent)
         {
             if (m_DeferredEvent != null)
             {
@@ -223,7 +243,7 @@ namespace CitiesSkylines2Agent.Agent
             }
 
             var text = new StringBuilder(agentEvent.Text ?? "");
-            while (m_Events.TryDequeue(out AgentUiEvent next))
+            while (m_Events.TryDequeue(out SessionUpdate next))
             {
                 if (next.Kind != "delta")
                 {
@@ -233,7 +253,7 @@ namespace CitiesSkylines2Agent.Agent
                 text.Append(next.Text ?? "");
             }
 
-            agentEvent = new AgentUiEvent
+            agentEvent = new SessionUpdate
             {
                 Kind = "delta",
                 Text = text.ToString(),
@@ -243,8 +263,7 @@ namespace CitiesSkylines2Agent.Agent
 
         private void PushState()
         {
-            AgentLoop loop = AgentLoop.Instance;
-            string json = loop == null ? "{}" : loop.RenderChatStateJson();
+            string json = m_Session == null ? "{}" : m_Session.ChatStateJson();
             if (m_StateBinding.value != json)
             {
                 m_StateBinding.Update(json);
@@ -254,7 +273,7 @@ namespace CitiesSkylines2Agent.Agent
         [Preserve]
         protected override void OnDestroy()
         {
-            Unsubscribe();
+            CloseSession();
             base.OnDestroy();
         }
     }

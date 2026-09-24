@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AgentRuntime;
 using Microsoft.Extensions.AI;
 using Xunit;
 
@@ -18,15 +19,15 @@ namespace CitiesSkylines2Agent.Agent
                 new ChatMessage(ChatRole.User, "grow"),
             };
 
-            assembler.Apply(history, MayorMandate.HistoryNotePrefix + "goal=a");
+            assembler.Apply(history, SessionPlan.HistoryNotePrefix + "goal=a");
             Assert.Equal(3, history.Count);
             Assert.Equal(Prompt, history[0].Text);
-            Assert.StartsWith(MayorMandate.HistoryNotePrefix, history[1].Text);
+            Assert.StartsWith(SessionPlan.HistoryNotePrefix, history[1].Text);
             Assert.Equal("grow", history[2].Text);
 
-            assembler.Apply(history, MayorMandate.HistoryNotePrefix + "goal=b");
+            assembler.Apply(history, SessionPlan.HistoryNotePrefix + "goal=b");
             Assert.Equal(3, history.Count);
-            Assert.Equal(MayorMandate.HistoryNotePrefix + "goal=b", history[1].Text);
+            Assert.Equal(SessionPlan.HistoryNotePrefix + "goal=b", history[1].Text);
         }
 
         [Fact]
@@ -37,13 +38,13 @@ namespace CitiesSkylines2Agent.Agent
             assembler.Rebuild(history, "{\"session_state\":\"mayor loop\"}", new List<ChatMessage>
             {
                 new ChatMessage(ChatRole.User, "keep going"),
-                new ChatMessage(ChatRole.System, MayorMandate.HistoryNotePrefix + "stale"),
+                new ChatMessage(ChatRole.System, SessionPlan.HistoryNotePrefix + "stale"),
             });
-            assembler.Apply(history, MayorMandate.HistoryNotePrefix + "goal=fresh");
+            assembler.Apply(history, SessionPlan.HistoryNotePrefix + "goal=fresh");
 
             Assert.Equal(Prompt, history[0].Text);
             Assert.Equal(SummaryPrefix + "{\"session_state\":\"mayor loop\"}", history[1].Text);
-            Assert.Equal(MayorMandate.HistoryNotePrefix + "goal=fresh", history[2].Text);
+            Assert.Equal(SessionPlan.HistoryNotePrefix + "goal=fresh", history[2].Text);
             Assert.Equal("keep going", history[3].Text);
             Assert.Equal(4, history.Count);
         }

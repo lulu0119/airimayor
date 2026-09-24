@@ -6,7 +6,7 @@ using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 
-namespace CitiesSkylines2Agent.Agent
+namespace CitiesSkylines2Agent.Host
 {
     /// <summary>
     /// Fetches the model list from an OpenAI-compatible <c>/models</c>

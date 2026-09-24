@@ -37,6 +37,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0029-player-owned-clock.md](./adr/0029-player-owned-clock.md) | Player owns the clock; an advance restores speed/pause; no snapshot on the advance result |
 | [0030-player-message-keeps-plan.md](./adr/0030-player-message-keeps-plan.md) | Player messages keep the plan; a reply stops, a tool step finishes, an advance ends |
 | [0031-explicit-pause.md](./adr/0031-explicit-pause.md) | `get_simulation` reads the clock; `set_simulation` can advance or pause |
+| [0032-agent-runtime-tool-port.md](./adr/0032-agent-runtime-tool-port.md) | In-process loop is `AgentRuntime`; city tools are a port. Later, Gameface drives an external runtime over ACP and city tools over MCP |
 
 ## Guide
 

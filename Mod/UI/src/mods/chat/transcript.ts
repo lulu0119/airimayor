@@ -49,8 +49,6 @@ export function hydrateTranscript(messages: StateMessage[]): Transcript {
         args: "",
         result: text.length > 0 ? text : null,
         image: null,
-        imageWidth: null,
-        imageHeight: null,
         state: "done",
       });
       return;
@@ -117,8 +115,6 @@ export function applyWireEvent(
           ...open,
           result: text.length > 0 ? truncate(text) : null,
           image: event.image ? event.image : null,
-          imageWidth: event.imageWidth && event.imageWidth > 0 ? event.imageWidth : null,
-          imageHeight: event.imageHeight && event.imageHeight > 0 ? event.imageHeight : null,
           state: event.status === "Error" ? "error" : "done",
         };
         return { ...transcript, lines };
@@ -130,8 +126,6 @@ export function applyWireEvent(
         args: truncate(text),
         result: null,
         image: null,
-        imageWidth: null,
-        imageHeight: null,
         state: "running",
       }));
     }

@@ -3,10 +3,10 @@ using System.ClientModel.Primitives;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace CitiesSkylines2Agent.Agent
+namespace AgentRuntime
 {
     /// <summary>
-    /// Adds a stable per-city-session id and the agent's own user agent to
+    /// Adds a stable per-session id and the agent's own user agent to
     /// every model request. OpenCode Go rejects requests without
     /// <c>x-opencode-session</c>; the header is set globally so the provider
     /// does not matter.

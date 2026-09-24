@@ -6,7 +6,7 @@ using System.Text.Json;
 using Microsoft.Extensions.AI;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
-namespace CitiesSkylines2Agent.Agent
+namespace AgentRuntime
 {
     internal sealed class AgentContextBudget
     {

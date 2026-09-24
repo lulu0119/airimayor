@@ -23,6 +23,14 @@ if (-not (Test-Path -LiteralPath $mainDll)) {
 # (ExecutableAsset.GetModAssets calls Assembly.Location on every loaded
 # assembly and Mono throws for dynamic ones). Keep the folder lean: merge
 # all managed dependencies into the single mod dll.
+# Project-reference outputs are copied to the deploy folder by DeployWIP like
+# any other dependency. The game's mod manager scans every dll in the mod
+# folder during registration, so they must be merged too: a loose dll is
+# picked up as its own mod candidate and aborts InitializeMods.
+$projectRefs = @(
+    'AgentRuntime.dll'
+)
+
 $managedRefs = @(
     'System.Buffers.dll', 'System.Memory.dll', 'System.Numerics.Vectors.dll',
     'System.Runtime.CompilerServices.Unsafe.dll', 'System.Threading.Tasks.Extensions.dll',
@@ -43,7 +51,7 @@ $managedRefs = @(
 )
 
 $inputs = @($mainDll)
-foreach ($name in $managedRefs) {
+foreach ($name in ($projectRefs + $managedRefs)) {
     $path = Join-Path $DeployDir $name
     if (Test-Path -LiteralPath $path) {
         $inputs += $path
@@ -71,7 +79,12 @@ if ($inputs.Count -eq 1) {
     exit 0
 }
 
-$merged = Join-Path $env:TEMP ("CitiesSkylines2Agent-merged-" + [Guid]::NewGuid().ToString('N') + '.dll')
+# ILRepack names the output assembly after the /out file name, so the temp
+# output must keep the real file name; a guid file name would leak into the
+# shipped assembly identity.
+$mergeDir = Join-Path $env:TEMP ("CitiesSkylines2Agent-merge-" + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $mergeDir | Out-Null
+$merged = Join-Path $mergeDir 'CitiesSkylines2Agent.dll'
 
 $env:PATH = 'C:\Program Files\dotnet;' + $env:PATH
 $args = @(
@@ -88,19 +101,21 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Copy-Item -LiteralPath $merged -Destination $mainDll -Force
-Remove-Item -LiteralPath $merged -Force
+Remove-Item -LiteralPath $mergeDir -Recurse -Force
 
 # The merged dll embeds everything; drop the now-redundant dependency dlls and
-# the stale pdb so the mod folder stays as small as possible.
-foreach ($name in $managedRefs) {
+# the stale pdbs so the mod folder stays as small as possible.
+foreach ($name in ($projectRefs + $managedRefs)) {
     $path = Join-Path $DeployDir $name
     if (Test-Path -LiteralPath $path) {
         Remove-Item -LiteralPath $path -Force
     }
 }
-$pdb = Join-Path $DeployDir 'CitiesSkylines2Agent.pdb'
-if (Test-Path -LiteralPath $pdb) {
-    Remove-Item -LiteralPath $pdb -Force
+foreach ($name in @('CitiesSkylines2Agent.pdb', 'AgentRuntime.pdb')) {
+    $pdb = Join-Path $DeployDir $name
+    if (Test-Path -LiteralPath $pdb) {
+        Remove-Item -LiteralPath $pdb -Force
+    }
 }
 
 Write-Output "Merged dependencies into $mainDll"

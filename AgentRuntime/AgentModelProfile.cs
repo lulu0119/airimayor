@@ -1,11 +1,9 @@
 using System;
 
-namespace CitiesSkylines2Agent.Agent
+namespace AgentRuntime
 {
     /// <summary>
-    /// Resolved model capabilities from the player settings only. The loop
-    /// never parses the model name: the request shape comes from ApiKind and
-    /// the token window comes from WindowTokens.
+    /// Window and vision taken from the player settings. The model name is never parsed.
     /// </summary>
     internal sealed class AgentModelProfile
     {

@@ -1,41 +1,35 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.AI;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
-namespace CitiesSkylines2Agent.Agent
+namespace AgentRuntime
 {
     internal sealed class AgentToolExecutor
     {
         private readonly AgentToolSurface m_ToolSurface;
         private readonly AgentClientFactory m_ClientFactory;
         private readonly AgentObservability m_Observability;
-        private readonly MayorMandate m_Mandate;
-        private readonly Action<AgentUiEvent> m_Emit;
+        private readonly SessionPlan m_Plan;
+        private readonly Action<SessionUpdate> m_Emit;
         private readonly Action<ChatMessage> m_AppendHistory;
         private readonly Action m_OnPlanChanged;
-        private readonly Func<CancellationToken, CancellationToken> m_BeginAdvance;
-        private readonly Action m_EndAdvance;
 
         public AgentToolExecutor(AgentToolSurface toolSurface, AgentClientFactory clientFactory,
-            AgentObservability observability, MayorMandate mandate, Action<AgentUiEvent> emit,
-            Action<ChatMessage> appendHistory, Action onPlanChanged,
-            Func<CancellationToken, CancellationToken> beginAdvance, Action endAdvance)
+            AgentObservability observability, SessionPlan plan, Action<SessionUpdate> emit,
+            Action<ChatMessage> appendHistory, Action onPlanChanged)
         {
             m_ToolSurface = toolSurface;
             m_ClientFactory = clientFactory;
             m_Observability = observability;
-            m_Mandate = mandate;
+            m_Plan = plan;
             m_Emit = emit;
             m_AppendHistory = appendHistory;
             m_OnPlanChanged = onPlanChanged;
-            m_BeginAdvance = beginAdvance;
-            m_EndAdvance = endAdvance;
         }
 
         public int FunctionCount { get; private set; }
@@ -47,25 +41,22 @@ namespace CitiesSkylines2Agent.Agent
 
         public async Task ExecuteAsync(IReadOnlyList<FunctionCallContent> toolCalls, CancellationToken cancellationToken)
         {
-            m_Emit(new AgentUiEvent { Kind = "status", Status = AgentStatus.Working });
+            m_Emit(new SessionUpdate { Kind = "status", Status = AgentStatus.Working });
             // Image previews ride after every tool result of this generation:
             // interleaving them between tool messages breaks the Chat
             // Completions pairing (assistant tool_calls must be followed by
             // consecutive tool results).
-            var pendingImages = new List<KeyValuePair<string, string>>();
-            bool stopBatch = false;
+            var pendingImages = new List<AgentToolResult>();
             for (int index = 0; index < toolCalls.Count; index++)
             {
                 FunctionCallContent call = toolCalls[index];
                 string argumentsJson = SerializeArguments(call.Arguments);
-                bool advance = IsTimeAdvance(call.Name, argumentsJson);
-                CancellationToken callToken = advance ? m_BeginAdvance(cancellationToken) : cancellationToken;
                 Stopwatch timer = Stopwatch.StartNew();
-                m_Emit(new AgentUiEvent { Kind = "tool", Tool = call.Name ?? call.CallId, Text = argumentsJson });
-                ToolInvocationResult result;
+                m_Emit(new SessionUpdate { Kind = "tool", Tool = call.Name ?? call.CallId, Text = argumentsJson });
+                AgentToolResult result;
                 try
                 {
-                    result = await InvokeAsync(call.Name, argumentsJson, callToken);
+                    result = await InvokeAsync(call.Name, argumentsJson, cancellationToken);
                 }
                 catch (OperationCanceledException)
                 {
@@ -74,65 +65,39 @@ namespace CitiesSkylines2Agent.Agent
                     PoisonRemaining(toolCalls, index + 1);
                     throw;
                 }
-                finally
-                {
-                    if (advance)
-                    {
-                        m_EndAdvance();
-                    }
-                }
                 timer.Stop();
                 FunctionCount++;
                 m_Observability.Function(call.Name, argumentsJson, result.Text, result.Success, timer.ElapsedMilliseconds, 0,
                     result.Success ? null : result.Text);
                 // Completion pairs with the start event above by arrival order.
                 // Status carries only the outcome color for the tool row.
-                m_Emit(new AgentUiEvent
+                m_Emit(new SessionUpdate
                 {
                     Kind = "tool",
                     Tool = call.Name ?? call.CallId,
                     Text = TruncateToolText(result.Text),
                     Status = result.Success ? AgentStatus.Idle : AgentStatus.Error,
-                    Image = ToPreviewDataUri(result.PreviewBytes),
-                    ImageWidth = result.PreviewWidth,
-                    ImageHeight = result.PreviewHeight,
+                    Image = ToPreviewDataUri(result.PreviewJpeg),
                 });
                 m_AppendHistory(new ChatMessage(ChatRole.Tool,
                     new List<AIContent> { new FunctionResultContent(call.CallId, result.Text) }));
-                if (!string.IsNullOrWhiteSpace(result.ImagePath))
+                if (result.ImagePng != null && result.ImagePng.Length > 0)
                 {
-                    pendingImages.Add(new KeyValuePair<string, string>(call.Name, result.ImagePath));
+                    pendingImages.Add(result);
                 }
-                if (advance && callToken.IsCancellationRequested)
+                if (cancellationToken.IsCancellationRequested)
                 {
                     PoisonRemaining(toolCalls, index + 1);
-                    stopBatch = true;
-                    break;
+                    foreach (AgentToolResult pending in pendingImages)
+                    {
+                        AppendToolImage(pending);
+                    }
+                    throw new OperationCanceledException(cancellationToken);
                 }
             }
-            foreach (KeyValuePair<string, string> pending in pendingImages)
+            foreach (AgentToolResult pending in pendingImages)
             {
-                AppendToolImage(pending.Key, pending.Value);
-            }
-            if (stopBatch && cancellationToken.IsCancellationRequested)
-            {
-                throw new OperationCanceledException(cancellationToken);
-            }
-        }
-
-        private static bool IsTimeAdvance(string name, string argumentsJson)
-        {
-            if (!string.Equals(name, "set_simulation", StringComparison.Ordinal))
-            {
-                return false;
-            }
-            using (JsonDocument document = JsonDocument.Parse(argumentsJson))
-            {
-                JsonElement root = document.RootElement;
-                return root.ValueKind == JsonValueKind.Object &&
-                    root.TryGetProperty("action", out JsonElement action) &&
-                    action.ValueKind == JsonValueKind.String &&
-                    string.Equals(action.GetString(), "advance", StringComparison.Ordinal);
+                AppendToolImage(pending);
             }
         }
 
@@ -188,27 +153,24 @@ namespace CitiesSkylines2Agent.Agent
             return "data:image/jpeg;base64," + Convert.ToBase64String(preview);
         }
 
-        private async Task<ToolInvocationResult> InvokeAsync(string name, string argumentsJson, CancellationToken cancellationToken)
+        private async Task<AgentToolResult> InvokeAsync(string name, string argumentsJson, CancellationToken cancellationToken)
         {
             try
             {
-                if (string.Equals(name, MayorMandate.ToolName, StringComparison.Ordinal))
+                if (string.Equals(name, SessionPlan.ToolName, StringComparison.Ordinal))
                 {
-                    MandateCallResult plan = m_Mandate.SetPlan(argumentsJson);
+                    PlanCallResult plan = m_Plan.SetPlan(argumentsJson);
                     if (plan.Success)
                     {
                         m_OnPlanChanged();
                     }
-                    return new ToolInvocationResult { Success = plan.Success, Text = plan.Text };
+                    return new AgentToolResult { Success = plan.Success, Text = plan.Text };
                 }
-                if (!m_ToolSurface.IsAvailable(name, m_ClientFactory.GetProfile()))
+                if (!m_ToolSurface.IsListed(name, m_ClientFactory.GetProfile()))
                 {
                     return Error("tool is not available for this model or current settings");
                 }
-                ToolDefinition tool = ToolCatalog.Find(name);
-                if (tool == null) return Error("unknown tool: " + name);
-
-                return await AgentToolBridge.InvokeAsync(tool, argumentsJson, cancellationToken);
+                return await m_ToolSurface.InvokeAsync(name, argumentsJson, cancellationToken);
             }
             catch (OperationCanceledException)
             {
@@ -221,36 +183,31 @@ namespace CitiesSkylines2Agent.Agent
             }
         }
 
-        private void AppendToolImage(string toolName, string imagePath)
+        private void AppendToolImage(AgentToolResult result)
         {
-            if (string.IsNullOrWhiteSpace(imagePath) || !m_ClientFactory.GetProfile().VisionAvailable ||
-                !File.Exists(imagePath)) return;
-            try
+            byte[] image = result.ImagePng;
+            if (image == null || image.Length == 0 || !m_ClientFactory.GetProfile().VisionAvailable)
             {
-                byte[] image = File.ReadAllBytes(imagePath);
-                if (image.Length == 0 || image.Length > 8 * 1024 * 1024)
-                {
-                    m_Observability.Error("vision-attach", "screenshot exceeds image attachment limit");
-                    return;
-                }
-                string caption = string.Equals(toolName, "map_image", StringComparison.Ordinal)
-                    ? "Map overview returned by the map_image tool."
-                    : "Screenshot returned by the screenshot tool.";
-                m_AppendHistory(new ChatMessage(ChatRole.User, new List<AIContent>
-                {
-                    new TextContent(caption),
-                    new DataContent(new ReadOnlyMemory<byte>(image), "image/png"),
-                }));
+                return;
             }
-            catch (Exception e)
+            if (image.Length > 8 * 1024 * 1024)
             {
-                m_Observability.Error("vision-attach", e.ToString());
+                m_Observability.Error("vision-attach", "image exceeds attachment limit");
+                return;
             }
+            string caption = string.IsNullOrWhiteSpace(result.ImageCaption)
+                ? "Image returned by the tool."
+                : result.ImageCaption;
+            m_AppendHistory(new ChatMessage(ChatRole.User, new List<AIContent>
+            {
+                new TextContent(caption),
+                new DataContent(new ReadOnlyMemory<byte>(image), "image/png"),
+            }));
         }
 
-        private static ToolInvocationResult Error(string message)
+        private static AgentToolResult Error(string message)
         {
-            return new ToolInvocationResult { Success = false, Text = JsonSerializer.Serialize(new { error = message }) };
+            return new AgentToolResult { Success = false, Text = JsonSerializer.Serialize(new { error = message }) };
         }
     }
 }

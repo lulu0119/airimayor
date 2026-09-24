@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 
-namespace CitiesSkylines2Agent.Agent
+namespace CitiesSkylines2Agent.Host
 {
     /// <summary>Filesystem locations for agent state and logs.</summary>
     /// <remarks>Runtime files stay outside the watched mod asset directory.</remarks>

@@ -7,12 +7,13 @@ using Microsoft.Extensions.AI;
 using OpenAI;
 using OpenAI.Chat;
 
-namespace CitiesSkylines2Agent.Agent
+namespace AgentRuntime
 {
     /// <summary>
     /// Owns the OpenAI-compatible client cache and the resolved model profile.
-    /// The request shape follows Setting.ApiKind; the token window follows
-    /// Setting.WindowTokens. Model names are never parsed.
+    /// The request shape follows <see cref="ModelSettings.Wire"/>; the token
+    /// window follows <see cref="ModelSettings.WindowTokens"/>. Model names
+    /// are never parsed.
     /// </summary>
     internal sealed class AgentClientFactory : IDisposable
     {
@@ -22,6 +23,8 @@ namespace CitiesSkylines2Agent.Agent
 
         private readonly AgentObservability m_Observability;
         private readonly string m_SessionId;
+        private readonly Func<ModelSettings> m_ReadModel;
+        private readonly IChatClient m_Override;
         private readonly Func<IReadOnlyList<ReasoningEchoSnapshot>> m_ReasoningSnapshots;
         private readonly object m_Lock = new object();
         private IChatClient m_Client;
@@ -31,11 +34,15 @@ namespace CitiesSkylines2Agent.Agent
         public AgentClientFactory(
             AgentObservability observability,
             string sessionId,
-            Func<IReadOnlyList<ReasoningEchoSnapshot>> reasoningSnapshots = null)
+            Func<ModelSettings> readModel,
+            Func<IReadOnlyList<ReasoningEchoSnapshot>> reasoningSnapshots = null,
+            IChatClient chatClient = null)
         {
             m_Observability = observability;
             m_SessionId = sessionId;
+            m_ReadModel = readModel;
             m_ReasoningSnapshots = reasoningSnapshots;
+            m_Override = chatClient;
         }
 
         public IChatClient GetClient()
@@ -43,13 +50,18 @@ namespace CitiesSkylines2Agent.Agent
             lock (m_Lock)
             {
                 RefreshConfigurationLocked();
+                if (m_Override != null)
+                {
+                    return m_Override;
+                }
                 if (m_Client != null)
                 {
                     return m_Client;
                 }
-                if (string.IsNullOrWhiteSpace(Setting.StaticEndpoint) ||
-                    string.IsNullOrWhiteSpace(Setting.StaticApiKey) ||
-                    string.IsNullOrWhiteSpace(Setting.StaticModel))
+                ModelSettings settings = Read();
+                if (string.IsNullOrWhiteSpace(settings.Endpoint) ||
+                    string.IsNullOrWhiteSpace(settings.ApiKey) ||
+                    string.IsNullOrWhiteSpace(settings.Model))
                 {
                     return null;
                 }
@@ -58,7 +70,7 @@ namespace CitiesSkylines2Agent.Agent
                 {
                     var options = new OpenAIClientOptions
                     {
-                        Endpoint = new Uri(Setting.StaticEndpoint),
+                        Endpoint = new Uri(settings.Endpoint),
                         NetworkTimeout = ModelRequestTimeout,
                     };
                     options.AddPolicy(
@@ -68,17 +80,17 @@ namespace CitiesSkylines2Agent.Agent
                         new ReasoningEchoPolicy(m_ReasoningSnapshots, OnReasoningEchoed),
                         PipelinePosition.PerCall);
                     var openAiClient = new OpenAIClient(
-                        new ApiKeyCredential(Setting.StaticApiKey),
+                        new ApiKeyCredential(settings.ApiKey),
                         options);
-                    if (Setting.StaticApiKind == ApiKind.Responses)
+                    if (settings.Wire == ModelWire.Responses)
                     {
 #pragma warning disable OPENAI001
-                        m_Client = openAiClient.GetResponsesClient().AsIChatClient(Setting.StaticModel);
+                        m_Client = openAiClient.GetResponsesClient().AsIChatClient(settings.Model);
 #pragma warning restore OPENAI001
                     }
                     else
                     {
-                        ChatClient chatClient = openAiClient.GetChatClient(Setting.StaticModel);
+                        ChatClient chatClient = openAiClient.GetChatClient(settings.Model);
                         m_Client = chatClient.AsIChatClient();
                     }
                     return m_Client;
@@ -121,10 +133,11 @@ namespace CitiesSkylines2Agent.Agent
 
         private void RefreshConfigurationLocked()
         {
-            string signature = Setting.StaticEndpoint + "|" +
-                Setting.StaticApiKey + "|" + Setting.StaticModel + "|" +
-                Setting.StaticWindowTokens + "|" + Setting.StaticVisionToolMode + "|" +
-                Setting.StaticApiKind;
+            ModelSettings settings = Read();
+            string signature = settings.Endpoint + "|" +
+                settings.ApiKey + "|" + settings.Model + "|" +
+                settings.WindowTokens + "|" + settings.Vision + "|" +
+                settings.Wire;
             if (string.Equals(m_ConfigSignature, signature, StringComparison.Ordinal))
             {
                 return;
@@ -134,9 +147,14 @@ namespace CitiesSkylines2Agent.Agent
             m_Client = null;
             m_ConfigSignature = signature;
             m_Profile = AgentModelProfile.Resolve(
-                Setting.StaticWindowTokens,
-                Setting.StaticVisionToolMode == VisionToolMode.On,
-                Setting.StaticApiKind.ToString());
+                settings.WindowTokens,
+                settings.Vision,
+                settings.Wire.ToString());
+        }
+
+        private ModelSettings Read()
+        {
+            return m_ReadModel();
         }
 
         public void Dispose()

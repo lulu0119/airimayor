@@ -7,7 +7,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 
-namespace CitiesSkylines2Agent.Agent
+namespace AgentRuntime
 {
     /// <summary>
     /// Per-call pipeline policy that echoes stored thinking-model reasoning

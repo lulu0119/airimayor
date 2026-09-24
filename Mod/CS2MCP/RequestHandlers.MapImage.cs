@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
-using CitiesSkylines2Agent.Agent;
+using CitiesSkylines2Agent.Host;
 using Game.Simulation;
 using Newtonsoft.Json;
 using Unity.Jobs;
@@ -80,9 +80,7 @@ namespace CS2MCP
                     return BridgeResponse.Error(BridgeErrorKind.Internal, "map PNG encode failed");
                 }
                 DumpMapImage(strokes, fills, frame, mapScale, layering, png);
-                return BridgeResponse.Png(png,
-                    ToolPreview.EncodeThumbnail(texture, out int previewWidth, out int previewHeight),
-                    previewWidth, previewHeight);
+                return BridgeResponse.Png(png, ToolPreview.EncodeThumbnail(texture));
             }
             catch (Exception e)
             {

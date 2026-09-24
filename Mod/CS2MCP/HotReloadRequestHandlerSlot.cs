@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Reflection;
 using CitiesSkylines2Agent;
-using CitiesSkylines2Agent.Agent;
+using CitiesSkylines2Agent.Host;
 
 namespace CS2MCP
 {

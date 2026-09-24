@@ -7,7 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
-namespace CitiesSkylines2Agent.Agent
+namespace AgentRuntime
 {
     /// <summary>
     /// JSONL agent timeline: task/turn/generation/function/compact/error
@@ -33,27 +33,38 @@ namespace CitiesSkylines2Agent.Agent
         private readonly object m_Lock = new object();
         private readonly string m_FilePath;
         private readonly string m_SessionId;
+        private readonly Action<string> m_Warn;
         private StreamWriter m_Writer;
         private long m_Sequence;
         private long m_Size;
         private bool m_Disposed;
 
-        public AgentObservability(string sessionId)
+        public AgentObservability(string sessionId, string logDirectory, Action<string> warn)
         {
             m_SessionId = sessionId;
-            ModPaths.EnsureDirectories();
-            m_FilePath = Path.Combine(
-                ModPaths.LogsDirectory,
-                "agent-timeline-" + sessionId + ".jsonl");
+            m_Warn = warn;
+            m_FilePath = string.IsNullOrWhiteSpace(logDirectory)
+                ? null
+                : Path.Combine(logDirectory, "agent-timeline-" + sessionId + ".jsonl");
+            if (m_FilePath == null)
+            {
+                return;
+            }
             try
             {
+                Directory.CreateDirectory(logDirectory);
                 m_Writer = new StreamWriter(m_FilePath, true, Encoding.UTF8);
                 m_Size = new FileInfo(m_FilePath).Length;
             }
             catch (Exception e)
             {
-                CS2MCP.Mod.Log.Warn($"observability log unavailable: {e.Message}");
+                Warn("observability log unavailable: " + e.Message);
             }
+        }
+
+        private void Warn(string message)
+        {
+            m_Warn?.Invoke(message);
         }
 
         public string SessionId => m_SessionId;
@@ -90,7 +101,7 @@ namespace CitiesSkylines2Agent.Agent
                 }
                 catch (Exception e)
                 {
-                    CS2MCP.Mod.Log.Warn($"observability write failed: {e.Message}");
+                    Warn("observability write failed: " + e.Message);
                 }
             }
         }
@@ -229,7 +240,7 @@ namespace CitiesSkylines2Agent.Agent
             }
             catch (Exception e)
             {
-                CS2MCP.Mod.Log.Warn($"observability rotation failed: {e.Message}");
+                Warn("observability rotation failed: " + e.Message);
             }
         }
 

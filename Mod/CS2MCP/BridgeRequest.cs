@@ -71,14 +71,6 @@ namespace CS2MCP
         /// </summary>
         public byte[] Preview;
 
-        /// <summary>
-        /// Source pixel size behind <see cref="Preview"/>. The thumbnail
-        /// keeps the source aspect; the chat window needs these because
-        /// Gameface img exposes no natural size for layout.
-        /// </summary>
-        public int PreviewWidth;
-        public int PreviewHeight;
-
         private static readonly JsonSerializerSettings s_JsonSettings = new JsonSerializerSettings
         {
             Formatting = Formatting.None,
@@ -113,9 +105,9 @@ namespace CS2MCP
             };
         }
 
-        public static BridgeResponse Png(byte[] png, byte[] preview = null, int previewWidth = 0, int previewHeight = 0)
+        public static BridgeResponse Png(byte[] png, byte[] preview = null)
         {
-            return new BridgeResponse { Body = png, Preview = preview, PreviewWidth = previewWidth, PreviewHeight = previewHeight };
+            return new BridgeResponse { Body = png, Preview = preview };
         }
 
         private static string ErrorKindName(BridgeErrorKind kind)

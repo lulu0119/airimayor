@@ -98,7 +98,11 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<EmbeddedResource Include="Agent\ToolCatalog.json" />
+		<ProjectReference Include="..\AgentRuntime\AgentRuntime.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Include="Host\ToolCatalog.json" />
 		<!-- The nested hot-reload payload has its own SDK project and obj tree;
 		     do not let this project's default Compile glob ingest its generated
 		     assembly-attribute sources. -->

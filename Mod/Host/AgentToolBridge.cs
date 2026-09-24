@@ -7,7 +7,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace CitiesSkylines2Agent.Agent
+namespace CitiesSkylines2Agent.Host
 {
     /// <summary>Result of one in-process tool invocation.</summary>
     public sealed class ToolInvocationResult
@@ -16,8 +16,6 @@ namespace CitiesSkylines2Agent.Agent
         public string Text;       // JSON or deterministic plain-text tool result
         public string ImagePath;  // screenshot path when the tool returned PNG
         public byte[] PreviewBytes; // UI-only JPEG thumbnail for the chat window
-        public int PreviewWidth;  // source pixels behind PreviewBytes (aspect for UI layout)
-        public int PreviewHeight;
     }
 
     /// <summary>
@@ -49,7 +47,7 @@ namespace CitiesSkylines2Agent.Agent
             }
             catch (Exception e)
             {
-                return Error($"invalid arguments for {tool.Name}: {AgentObservability.RedactSecrets(e.Message)}");
+                return Error($"invalid arguments for {tool.Name}: {AgentRuntime.AgentObservability.RedactSecrets(e.Message)}");
             }
 
             bool advance = string.Equals(tool.Name, "set_simulation", StringComparison.Ordinal) &&
@@ -83,8 +81,6 @@ namespace CitiesSkylines2Agent.Agent
                     Success = true,
                     ImagePath = path,
                     PreviewBytes = response.Preview,
-                    PreviewWidth = response.PreviewWidth,
-                    PreviewHeight = response.PreviewHeight,
                     Text = "{\"saved\":\"" + JsonEncodedText.Encode(path).ToString() + "\"}",
                 };
             }

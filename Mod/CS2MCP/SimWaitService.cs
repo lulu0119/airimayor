@@ -52,8 +52,8 @@ namespace CS2MCP
                         false,
                         SimWaitResult.TakenOverNote);
                 }
-                // A player message or stop ends the advance early: restore
-                // the clock so the player never inherits the run speed.
+                // Stop ends the advance early: restore the clock so the
+                // player never inherits the run speed.
                 bridge.CancelTimedRun();
                 string state = await TryGetJsonAsync(bridge, "/state");
                 return SimWaitResult.Build(

@@ -14,19 +14,12 @@ namespace CS2MCP
         private const int MaxWidth = 480;
         private const int Quality = 60;
 
-        public static byte[] EncodeThumbnail(Texture2D source, out int width, out int height)
+        public static byte[] EncodeThumbnail(Texture2D source)
         {
-            width = 0;
-            height = 0;
             if (source == null || source.width <= 0 || source.height <= 0)
             {
                 return null;
             }
-            // The thumbnail keeps the source aspect, so the source size fully
-            // describes the preview aspect for UI layout (Gameface exposes no
-            // naturalWidth/naturalHeight on img).
-            width = source.width;
-            height = source.height;
             Texture2D thumbnail = null;
             try
             {

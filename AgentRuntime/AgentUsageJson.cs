@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.AI;
 
-namespace CitiesSkylines2Agent.Agent
+namespace AgentRuntime
 {
     /// <summary>
     /// Timeline usage JSON: omit absent MEAI fields, never coerce unknown to 0.

@@ -4,7 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.Text.Json;
 
-namespace CitiesSkylines2Agent.Agent
+namespace CitiesSkylines2Agent.Host
 {
     /// <summary>One query parameter mapping for a bridge route.</summary>
     public sealed class ToolQuerySpec
@@ -28,7 +28,7 @@ namespace CitiesSkylines2Agent.Agent
     }
 
     /// <summary>
-    /// Loads Mod/Agent/ToolCatalog.json (owned by this mod; originally derived
+    /// Loads Mod/Host/ToolCatalog.json (owned by this mod; originally derived
     /// from the CS2MCP upstream catalog, see Mod/CS2MCP/NOTICE.txt) and exposes
     /// its tool definitions.
     /// </summary>
@@ -130,7 +130,7 @@ namespace CitiesSkylines2Agent.Agent
         private static IReadOnlyList<ToolDefinition> LoadEmbedded()
         {
             using (Stream stream = Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("CitiesSkylines2Agent.Agent.ToolCatalog.json"))
+                .GetManifestResourceStream("CitiesSkylines2Agent.Host.ToolCatalog.json"))
             {
                 if (stream == null)
                 {

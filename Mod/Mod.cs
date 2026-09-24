@@ -3,7 +3,7 @@ using Colossal.Logging;
 using Game;
 using Game.Modding;
 using Game.SceneFlow;
-using CitiesSkylines2Agent.Agent;
+using CitiesSkylines2Agent.Host;
 
 namespace CitiesSkylines2Agent
 {
@@ -38,7 +38,8 @@ namespace CitiesSkylines2Agent
         public void OnDispose()
         {
             log.Info(nameof(OnDispose));
-            AgentLoop.Instance?.Dispose();
+            AgentSessionHost.Current?.Dispose();
+            AgentSessionHost.Current = null;
             Setting.Instance = null;
             if (m_Setting != null)
             {

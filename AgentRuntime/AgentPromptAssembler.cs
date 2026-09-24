@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Microsoft.Extensions.AI;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
-namespace CitiesSkylines2Agent.Agent
+namespace AgentRuntime
 {
     internal sealed class AgentPromptAssembler
     {
@@ -62,7 +62,7 @@ namespace CitiesSkylines2Agent.Agent
             {
                 ChatMessage message = history[index];
                 if (message.Role != ChatRole.System ||
-                    !(message.Text ?? "").StartsWith(MayorMandate.HistoryNotePrefix, StringComparison.Ordinal))
+                    !(message.Text ?? "").StartsWith(SessionPlan.HistoryNotePrefix, StringComparison.Ordinal))
                 {
                     continue;
                 }

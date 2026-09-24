@@ -7,12 +7,10 @@ using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Channels;
-using Game;
-using Game.SceneFlow;
 using Microsoft.Extensions.AI;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
-namespace CitiesSkylines2Agent.Agent
+namespace AgentRuntime
 {
     public enum AgentStatus
     {
@@ -24,7 +22,7 @@ namespace CitiesSkylines2Agent.Agent
     }
 
     /// <summary>UI-facing event emitted by the agent loop.</summary>
-    public sealed class AgentUiEvent
+    public sealed class SessionUpdate
     {
         public string Kind;      // status|delta|tool|user|error|compact|turn|progress|plan
         public string Text;
@@ -33,10 +31,6 @@ namespace CitiesSkylines2Agent.Agent
 
         /// <summary>UI-only image preview (data URI) for image tool results.</summary>
         public string Image;
-
-        /// <summary>Source pixels behind <see cref="Image"/>; UI aspect layout.</summary>
-        public int ImageWidth;
-        public int ImageHeight;
 
         public string ToJsonString()
         {
@@ -54,11 +48,6 @@ namespace CitiesSkylines2Agent.Agent
             {
                 obj["image"] = Image;
             }
-            if (ImageWidth > 0 && ImageHeight > 0)
-            {
-                obj["imageWidth"] = ImageWidth;
-                obj["imageHeight"] = ImageHeight;
-            }
             return obj.ToJsonString();
         }
     }
@@ -71,13 +60,12 @@ namespace CitiesSkylines2Agent.Agent
     /// <summary>
     /// In-process agent runtime: IChatClient + hand-rolled function-calling
     /// loop. One user message runs one turn. Each model round pins the
-    /// mayor-mandate live note. When Continuous is on, a turn that becomes
+    /// plan live note. When continuation is on, a turn that becomes
     /// idle with no pending player text opens another turn. A turn ends
-    /// when the model stops calling tools, a generation times out, the
-    /// player steers or interrupts, or the city unloads. Player messages
-    /// leave the mandate in place.
+    /// when the model stops calling tools, a generation times out, or the
+    /// player steers or interrupts. Player messages leave the plan in place.
     /// </summary>
-    public sealed class AgentLoop : IDisposable
+    public sealed class AgentRuntime : IDisposable
     {
         private const string CompactionTaskPrompt = @"COMPACTION TASK:
 Ignore the normal assistant response format for this response.
@@ -95,60 +83,30 @@ Return strict JSON with:
   ""paused_state"": string,
   ""last_world_snapshot"": string
 }
-Do not restate the active city plan; an [active plan] note is already provided; do not duplicate it.
+Do not restate the active plan; an [active plan] note is already provided; do not duplicate it.
 Preserve player constraints, player instructions, open loops, important names,
-and current world/session state (city money, population, demand, notifications)
+and current world/session state
 in durable_facts. Prefer compressing assistant chatter, tool chatter, and stale
 notices. Do not keep stale relative-time phrases; convert them into stable facts
 or timeline notes. Keep each list item short and concrete.";
 
         private const string SummaryPrefix = "[context summary] ";
 
-        public static AgentLoop Instance { get; private set; }
-
-        /// <summary>
-        /// Starts a clean session for a newly loaded city. The previous loop is
-        /// cancelled and disposed so pending work and history cannot leak across
-        /// saves.
-        /// </summary>
-        public static AgentLoop StartCitySession()
-        {
-            AgentLoop previous = Instance;
-            var current = new AgentLoop();
-            previous?.Dispose();
-            return current;
-        }
-
-        /// <summary>Disposes the current city session and clears <see cref="Instance"/>.</summary>
-        public static void LeaveCitySession()
-        {
-            Instance?.Dispose();
-        }
-
-        private static bool IsInLoadedCity()
-        {
-            GameManager manager = GameManager.instance;
-            return manager != null &&
-                   manager.gameMode == GameMode.Game &&
-                   !manager.isGameLoading;
-        }
-
         private readonly Channel<AgentInput> m_Pending = Channel.CreateUnbounded<AgentInput>();
         private readonly List<ChatMessage> m_History = new List<ChatMessage>();
         private readonly object m_Lock = new object();
         private readonly AgentObservability m_Observability;
-        private readonly AgentToolSurface m_ToolSurface = new AgentToolSurface();
+        private readonly AgentToolSurface m_ToolSurface;
         private readonly AgentPromptAssembler m_PromptAssembler;
         private readonly AgentToolExecutor m_ToolExecutor;
-        private readonly MayorMandate m_Mandate = new MayorMandate();
+        private readonly SessionPlan m_Plan = new SessionPlan();
 
         private readonly AgentClientFactory m_ClientFactory;
+        private readonly Func<ModelSettings> m_ReadModel;
         private readonly object m_CancelGate = new object();
         private Task m_LoopTask;
         private CancellationTokenSource m_TurnCts;
         private CancellationTokenSource m_GenerationCts;
-        private CancellationTokenSource m_AdvanceCts;
-        private bool m_AdvanceActive;
         private CancellationTokenSource m_LoopCts = new CancellationTokenSource();
         private string m_SessionId;
         private string m_TurnId;
@@ -159,87 +117,81 @@ or timeline notes. Keep each list item short and concrete.";
         private bool m_TimeoutOccurred;
         private bool m_Disposed;
 
-        public AgentLoop()
+        public AgentRuntime(
+            IAgentTools tools,
+            string systemPrompt,
+            Func<ModelSettings> readModel,
+            string logDirectory,
+            Action<string> warn = null)
+            : this(tools, systemPrompt, readModel, logDirectory, null, warn)
         {
-            Instance = this;
+        }
+
+        internal AgentRuntime(
+            IAgentTools tools,
+            string systemPrompt,
+            Func<ModelSettings> readModel,
+            string logDirectory,
+            IChatClient chatClient,
+            Action<string> warn = null)
+        {
+            m_ReadModel = readModel;
             m_SessionId = Guid.NewGuid().ToString("N").Substring(0, 8);
-            m_Observability = new AgentObservability(m_SessionId);
-            m_ClientFactory = new AgentClientFactory(m_Observability, m_SessionId, CaptureReasoningSnapshots);
-            m_PromptAssembler = new AgentPromptAssembler(AgentSystemPrompt.Text, SummaryPrefix);
+            m_Observability = new AgentObservability(m_SessionId, logDirectory, warn);
+            m_ClientFactory = new AgentClientFactory(
+                m_Observability, m_SessionId, readModel, CaptureReasoningSnapshots, chatClient);
+            m_ToolSurface = new AgentToolSurface(tools);
+            m_PromptAssembler = new AgentPromptAssembler(systemPrompt, SummaryPrefix);
             m_ToolExecutor = new AgentToolExecutor(
                 m_ToolSurface,
                 m_ClientFactory,
                 m_Observability,
-                m_Mandate,
+                m_Plan,
                 Emit,
                 AppendHistoryMessage,
-                EmitPlan,
-                BeginAdvance,
-                EndAdvance);
+                EmitPlan);
         }
 
-        public event Action<AgentUiEvent> UiEvent;
-
-        public AgentObservability Observability => m_Observability;
+        public event Action<SessionUpdate> Updated;
 
         public AgentStatus Status { get; private set; } = AgentStatus.Idle;
 
         public bool IsBusy => Status == AgentStatus.Thinking || Status == AgentStatus.Working;
 
         /// <summary>
-        /// Queue a player message. A reply in progress stops. A tool batch
-        /// finishes first, except an in-game time advance, which stops and
-        /// restores the previous clock. The mandate stays.
+        /// Queue a player message. A reply in progress stops. A tool already
+        /// running finishes. The plan stays.
         /// </summary>
-        public void Send(string text)
+        public void Prompt(string text)
         {
-            if (!IsInLoadedCity())
+            if (m_Disposed)
             {
-                Emit(new AgentUiEvent
-                {
-                    Kind = "error",
-                    Text = "Available only in a loaded city; message not sent.",
-                });
-                return;
+                throw new ObjectDisposedException(nameof(AgentRuntime));
             }
             string safe = text ?? "";
-            bool busy = IsBusy;
-            AgentStatus status = Status;
+            bool thinking = Status == AgentStatus.Thinking;
             m_Pending.Writer.TryWrite(new AgentInput { Text = safe });
-            if (busy)
+            if (thinking)
             {
-                if (status == AgentStatus.Thinking)
-                {
-                    CancelGeneration();
-                }
-                else
-                {
-                    CancelAdvanceIfActive();
-                }
+                CancelGeneration();
             }
-            Emit(new AgentUiEvent { Kind = "user", Text = safe });
+            Emit(new SessionUpdate { Kind = "user", Text = safe });
             EnsureLoop();
         }
 
-        public void Interrupt()
+        public void Cancel()
         {
-            if (!IsInLoadedCity())
+            if (m_Disposed)
             {
                 return;
             }
             m_TurnCts?.Cancel();
             CancelGeneration();
-            CancelAdvanceIfActive();
             Status = AgentStatus.Interrupted;
-            Emit(new AgentUiEvent { Kind = "status", Status = AgentStatus.Interrupted, Text = "Current turn interrupted" });
+            Emit(new SessionUpdate { Kind = "status", Status = AgentStatus.Interrupted, Text = "Current turn interrupted" });
         }
 
-        public void RefreshConfig()
-        {
-            m_ClientFactory.Refresh();
-        }
-
-        public string RenderChatStateJson()
+        public string ChatStateJson()
         {
             lock (m_Lock)
             {
@@ -320,7 +272,7 @@ or timeline notes. Keep each list item short and concrete.";
                     messages.Add(entry);
                 }
                 AgentModelProfile profile = m_ClientFactory.GetProfile();
-                string planJson = m_Mandate.ToUiJson();
+                string planJson = m_Plan.ToUiJson();
                 var state = new JsonObject
                 {
                     ["status"] = Status.ToString(),
@@ -353,12 +305,13 @@ or timeline notes. Keep each list item short and concrete.";
 
         private async Task RunLoopAsync()
         {
+            ModelSettings settings = ReadModel();
             AgentModelProfile profile = m_ClientFactory.GetProfile();
             m_Observability.TaskStart(
-                Setting.StaticModel,
+                settings.Model,
                 profile.ContextWindowTokens,
                 (double)profile.CompactAtTokens / profile.ContextWindowTokens,
-                Setting.StaticApiKind.ToString());
+                settings.Wire.ToString());
             while (!m_LoopCts.IsCancellationRequested)
             {
                 AgentInput first;
@@ -377,7 +330,7 @@ or timeline notes. Keep each list item short and concrete.";
                     !m_TurnCts.IsCancellationRequested)
                 {
                     await RunTurnAsync(current);
-                    bool wantAuto = Setting.StaticContinuous &&
+                    bool wantAuto = ReadModel().ContinueWhenIdle &&
                         !m_TimeoutOccurred &&
                         m_Pending.Reader.Count == 0 &&
                         !m_TurnCts.IsCancellationRequested &&
@@ -433,7 +386,7 @@ or timeline notes. Keep each list item short and concrete.";
                     }
                     lock (m_Lock)
                     {
-                        m_PromptAssembler.Apply(m_History, m_Mandate.LiveNote());
+                        m_PromptAssembler.Apply(m_History, m_Plan.LiveNote());
                     }
                     var round = await RunModelRoundAsync(m_TurnCts.Token);
                     if (round.IsError || round.IsPlayerMessage)
@@ -464,7 +417,7 @@ or timeline notes. Keep each list item short and concrete.";
             catch (Exception e)
             {
                 m_Observability.Error("loop", e.ToString());
-                Emit(new AgentUiEvent
+                Emit(new SessionUpdate
                 {
                     Kind = "error",
                     Text = "Loop error: " + AgentObservability.RedactSecrets(e.Message),
@@ -479,8 +432,8 @@ or timeline notes. Keep each list item short and concrete.";
                 AgentUsageJson.Serialize(m_TurnUsage),
                 AgentUsageJson.SerializeCoverage(m_TurnUsageCoverage));
             Status = AgentStatus.Idle;
-            Emit(new AgentUiEvent { Kind = "status", Status = AgentStatus.Idle });
-            Emit(new AgentUiEvent { Kind = "turn", Text = m_TurnId });
+            Emit(new SessionUpdate { Kind = "status", Status = AgentStatus.Idle });
+            Emit(new SessionUpdate { Kind = "turn", Text = m_TurnId });
         }
 
         private void AppendHistoryMessage(ChatMessage message)
@@ -556,10 +509,10 @@ or timeline notes. Keep each list item short and concrete.";
             IChatClient client = m_ClientFactory.GetClient();
             if (client == null)
             {
-                Emit(new AgentUiEvent
+                Emit(new SessionUpdate
                 {
                     Kind = "error",
-                    Text = "Model not configured: set Endpoint / API Key / Model in the mod settings.",
+                    Text = "Model not configured.",
                 });
                 return ModelRound.Error("no client");
             }
@@ -567,7 +520,7 @@ or timeline notes. Keep each list item short and concrete.";
             AgentModelProfile profile = m_ClientFactory.GetProfile();
             var options = new ChatOptions
             {
-                ModelId = Setting.StaticModel,
+                ModelId = ReadModel().Model,
                 MaxOutputTokens = (int)Math.Min(int.MaxValue, profile.OutputReserveTokens),
                 Tools = m_ToolSurface.Build(profile),
                 ToolMode = ChatToolMode.Auto,
@@ -581,7 +534,7 @@ or timeline notes. Keep each list item short and concrete.";
             {
                 Status = AgentStatus.Thinking;
                 ArmGeneration(generationCts);
-                Emit(new AgentUiEvent { Kind = "status", Status = AgentStatus.Thinking });
+                Emit(new SessionUpdate { Kind = "status", Status = AgentStatus.Thinking });
                 using (CancellationTokenSource timeoutCts =
                     CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, generationCts.Token))
                 {
@@ -598,7 +551,7 @@ or timeline notes. Keep each list item short and concrete.";
                 }
                 if (pendingDelta.Length > 0)
                 {
-                    Emit(new AgentUiEvent { Kind = "delta", Text = pendingDelta.ToString() });
+                    Emit(new SessionUpdate { Kind = "delta", Text = pendingDelta.ToString() });
                 }
                 timer.Stop();
 
@@ -649,7 +602,7 @@ or timeline notes. Keep each list item short and concrete.";
                     m_Observability.Error(
                         "generation-timeout",
                         "model response exceeded " + AgentClientFactory.ModelRequestTimeoutSeconds + "s");
-                    Emit(new AgentUiEvent
+                    Emit(new SessionUpdate
                     {
                         Kind = "error",
                         Text = "Model response timed out (" + AgentClientFactory.ModelRequestTimeoutSeconds +
@@ -675,7 +628,7 @@ or timeline notes. Keep each list item short and concrete.";
                 }
                 m_Observability.Error("generation", e.ToString());
                 string safeMessage = AgentObservability.RedactSecrets(e.Message);
-                Emit(new AgentUiEvent { Kind = "error", Text = "Model call failed: " + safeMessage });
+                Emit(new SessionUpdate { Kind = "error", Text = "Model call failed: " + safeMessage });
                 return ModelRound.Error(safeMessage);
             }
             finally
@@ -747,7 +700,7 @@ or timeline notes. Keep each list item short and concrete.";
                     summaryInput,
                     new ChatOptions
                     {
-                        ModelId = Setting.StaticModel,
+                        ModelId = ReadModel().Model,
                         MaxOutputTokens = (int)Math.Min(int.MaxValue, profile.OutputReserveTokens),
                         Tools = m_ToolSurface.Build(profile),
                         // Console Go gateway only supports tool_choice=auto; None is rejected (400).
@@ -767,7 +720,7 @@ or timeline notes. Keep each list item short and concrete.";
                     m_Observability.Error(
                         "compact",
                         "rejected unusable summary: " + AgentContextBudget.Truncate(summary, 400));
-                    Emit(new AgentUiEvent
+                    Emit(new SessionUpdate
                     {
                         Kind = "error",
                         Text = "Compaction summary rejected (tool markup or empty); skipping this compaction",
@@ -787,7 +740,7 @@ or timeline notes. Keep each list item short and concrete.";
                         m_History,
                         summary,
                         keptMessages);
-                    m_PromptAssembler.Apply(m_History, m_Mandate.LiveNote());
+                    m_PromptAssembler.Apply(m_History, m_Plan.LiveNote());
                 }
                 m_EstimatedTokens = budget.Estimate(m_History);
 
@@ -797,7 +750,7 @@ or timeline notes. Keep each list item short and concrete.";
                     keptMessages.Count,
                     summary,
                     m_EstimatedTokens);
-                Emit(new AgentUiEvent
+                Emit(new SessionUpdate
                 {
                     Kind = "compact",
                     Text = "Context compacted (removed " + oldMessages.Count + " old messages)",
@@ -810,7 +763,7 @@ or timeline notes. Keep each list item short and concrete.";
             catch (Exception e)
             {
                 m_Observability.Error("compact", e.ToString());
-                Emit(new AgentUiEvent
+                Emit(new SessionUpdate
                 {
                     Kind = "error",
                     Text = "Compaction failed: " + AgentObservability.RedactSecrets(e.Message),
@@ -861,7 +814,7 @@ or timeline notes. Keep each list item short and concrete.";
             JsonObject usage = AgentUsageJson.Serialize(response.Usage);
             AgentUsageJson.Accumulate(m_TurnUsage, m_TurnUsageCoverage, response.Usage);
             m_Observability.Generation(
-                response.ModelId ?? Setting.StaticModel,
+                response.ModelId ?? ReadModel().Model,
                 SummarizeHistory(m_History),
                 reasoning,
                 calls,
@@ -938,48 +891,18 @@ or timeline notes. Keep each list item short and concrete.";
             }
         }
 
-        private CancellationToken BeginAdvance(CancellationToken turn)
-        {
-            lock (m_CancelGate)
-            {
-                m_AdvanceCts?.Dispose();
-                m_AdvanceCts = CancellationTokenSource.CreateLinkedTokenSource(turn);
-                m_AdvanceActive = true;
-                return m_AdvanceCts.Token;
-            }
-        }
-
-        private void EndAdvance()
-        {
-            lock (m_CancelGate)
-            {
-                m_AdvanceActive = false;
-            }
-        }
-
-        private void CancelAdvanceIfActive()
-        {
-            lock (m_CancelGate)
-            {
-                if (m_AdvanceActive)
-                {
-                    m_AdvanceCts?.Cancel();
-                }
-            }
-        }
-
         private void EmitPlan()
         {
-            Emit(new AgentUiEvent { Kind = "plan", Text = m_Mandate.ToUiJson() });
+            Emit(new SessionUpdate { Kind = "plan", Text = m_Plan.ToUiJson() });
         }
 
-        private void Emit(AgentUiEvent uiEvent)
+        private void Emit(SessionUpdate uiEvent)
         {
             if (uiEvent.Kind == "status")
             {
                 Status = uiEvent.Status;
             }
-            UiEvent?.Invoke(uiEvent);
+            Updated?.Invoke(uiEvent);
         }
 
         public void Dispose()
@@ -992,18 +915,13 @@ or timeline notes. Keep each list item short and concrete.";
             m_LoopCts.Cancel();
             m_TurnCts?.Cancel();
             CancelGeneration();
-            CancelAdvanceIfActive();
-            lock (m_CancelGate)
-            {
-                m_AdvanceCts?.Dispose();
-                m_AdvanceCts = null;
-            }
             m_Observability.Dispose();
             m_ClientFactory.Dispose();
-            if (Instance == this)
-            {
-                Instance = null;
-            }
+        }
+
+        private ModelSettings ReadModel()
+        {
+            return m_ReadModel();
         }
 
         private sealed class ModelRound

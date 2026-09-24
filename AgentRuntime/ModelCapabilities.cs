@@ -1,6 +1,6 @@
 using System;
 
-namespace CitiesSkylines2Agent.Agent
+namespace AgentRuntime
 {
     internal sealed class ModelCapabilities
     {
