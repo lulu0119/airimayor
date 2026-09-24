@@ -47,15 +47,6 @@ namespace CitiesSkylines2Agent
         public string ApiKey { get; set; } = "";
 
         [SettingsUISection(kSection, kConnectionGroup)]
-        [SettingsUIDropdown(typeof(Setting), nameof(GetModelPresetItems))]
-        [SettingsUIValueVersion(typeof(Setting), nameof(ModelPresetVersion))]
-        public string ModelPreset
-        {
-            get => Model;
-            set { if (!string.IsNullOrEmpty(value)) { Model = value; } }
-        }
-
-        [SettingsUISection(kSection, kConnectionGroup)]
         [SettingsUIButton]
         public bool FetchModels
         {
@@ -63,7 +54,8 @@ namespace CitiesSkylines2Agent
         }
 
         [SettingsUISection(kSection, kConnectionGroup)]
-        [SettingsUITextInput]
+        [SettingsUIDropdown(typeof(Setting), nameof(GetModelPresetItems))]
+        [SettingsUIValueVersion(typeof(Setting), nameof(ModelPresetVersion))]
         public string Model { get; set; } = "";
 
         [SettingsUISection(kSection, kConnectionGroup)]
@@ -116,7 +108,7 @@ namespace CitiesSkylines2Agent
         public static string StaticApiKey => Instance?.ApiKey ?? "";
         public static long StaticWindowTokens => Instance?.WindowTokens ?? 200_000;
 
-        // ---- Fetched model presets (Options dropdown) --------
+        // ---- Model list (dynamic dropdown source) --------
 
         private static readonly object s_ModelPresetLock = new object();
         private static List<string> s_ModelPresets = new List<string>();
@@ -213,12 +205,10 @@ namespace CitiesSkylines2Agent
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.Endpoint)), "OpenAI-compatible API base URL." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ApiKey)), "API key" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.ApiKey)), "Stored in settings only." },
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Model)), "Model" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Model)), "e.g. gpt-5.6-sol, deepseek-v4-flash." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.FetchModels)), "Fetch models" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.FetchModels)), "Load the model list from the endpoint; selects the first model when the current one is empty or missing." },
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ModelPreset)), "Model preset" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.ModelPreset)), "Pick a fetched model; writes into Model. Manual input stays in Model." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Model)), "Model" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Model)), "Pick a model loaded from the endpoint." },
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AutoStart)), "Auto-start" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.AutoStart)), "Start a turn on city load." },
