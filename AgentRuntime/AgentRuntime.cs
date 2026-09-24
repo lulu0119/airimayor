@@ -59,8 +59,8 @@ namespace AgentRuntime
 
     /// <summary>
     /// In-process agent runtime: IChatClient + hand-rolled function-calling
-    /// loop. One user message runs one turn. Each model round pins the
-    /// plan live note. When continuation is on, a turn that becomes
+    /// loop. One user message runs one turn. The plan stays in the session
+    /// until the next set_plan. When continuation is on, a turn that becomes
     /// idle with no pending player text opens another turn. A turn ends
     /// when the model stops calling tools, a generation times out, or the
     /// player steers or interrupts. Player messages leave the plan in place.
@@ -83,7 +83,6 @@ Return strict JSON with:
   ""paused_state"": string,
   ""last_world_snapshot"": string
 }
-Do not restate the active plan; an [active plan] note is already provided; do not duplicate it.
 Preserve player constraints, player instructions, open loops, important names,
 and current world/session state
 in durable_facts. Prefer compressing assistant chatter, tool chatter, and stale
@@ -386,7 +385,7 @@ or timeline notes. Keep each list item short and concrete.";
                     }
                     lock (m_Lock)
                     {
-                        m_PromptAssembler.Apply(m_History, m_Plan.LiveNote());
+                        m_PromptAssembler.Apply(m_History);
                     }
                     var round = await RunModelRoundAsync(m_TurnCts.Token);
                     if (round.IsError || round.IsPlayerMessage)
@@ -740,7 +739,7 @@ or timeline notes. Keep each list item short and concrete.";
                         m_History,
                         summary,
                         keptMessages);
-                    m_PromptAssembler.Apply(m_History, m_Plan.LiveNote());
+                    m_PromptAssembler.Apply(m_History);
                 }
                 m_EstimatedTokens = budget.Estimate(m_History);
 

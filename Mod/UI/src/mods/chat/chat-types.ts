@@ -18,9 +18,13 @@ export interface AgentContextInfo {
   vision: boolean;
 }
 
-export interface MayorPlan {
-  goal: string;
-  success: string;
+export type PlanPriority = "high" | "medium" | "low";
+export type PlanStatus = "pending" | "in_progress" | "completed";
+
+export interface PlanEntry {
+  content: string;
+  priority: PlanPriority;
+  status: PlanStatus;
 }
 
 export interface AgentSnapshot {
@@ -29,7 +33,7 @@ export interface AgentSnapshot {
   pendingInputs: number;
   session: string;
   context?: AgentContextInfo;
-  plan?: MayorPlan | null;
+  plan?: unknown;
   messages: StateMessage[];
 }
 

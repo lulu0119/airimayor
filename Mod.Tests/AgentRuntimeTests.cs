@@ -34,11 +34,7 @@ namespace CitiesSkylines2Agent.Agent
             var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             var tools = new HoldingTools(started);
             var client = new ScriptedChatClient(
-                ToolCall("plan-1", "set_plan", new Dictionary<string, object>
-                {
-                    ["goal"] = "keep the lights on",
-                    ["success"] = "power stable",
-                }),
+                ToolCall("plan-1", "set_plan", PlanEntries()),
                 ToolCall("hold-1", "hold", new Dictionary<string, object>()),
                 Text("Done."));
             using (AgentRuntime.AgentRuntime runtime = Open(tools, client))
@@ -54,8 +50,11 @@ namespace CitiesSkylines2Agent.Agent
                 using (JsonDocument state = JsonDocument.Parse(runtime.ChatStateJson()))
                 {
                     JsonElement plan = state.RootElement.GetProperty("plan");
-                    Assert.Equal("keep the lights on", plan.GetProperty("goal").GetString());
-                    Assert.Equal("power stable", plan.GetProperty("success").GetString());
+                    JsonElement entries = plan.GetProperty("entries");
+                    Assert.Equal(2, entries.GetArrayLength());
+                    Assert.Equal("keep the lights on", entries[0].GetProperty("content").GetString());
+                    Assert.Equal("in_progress", entries[0].GetProperty("status").GetString());
+                    Assert.Equal("power stable", entries[1].GetProperty("content").GetString());
                 }
                 Assert.False(tools.Cancelled);
             }
@@ -67,11 +66,7 @@ namespace CitiesSkylines2Agent.Agent
             var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             var tools = new HoldingTools(started);
             var client = new ScriptedChatClient(
-                ToolCall("plan-1", "set_plan", new Dictionary<string, object>
-                {
-                    ["goal"] = "keep the lights on",
-                    ["success"] = "power stable",
-                }),
+                ToolCall("plan-1", "set_plan", PlanEntries()),
                 ToolCall("hold-1", "hold", new Dictionary<string, object>()));
             using (AgentRuntime.AgentRuntime runtime = Open(tools, client))
             {
@@ -82,10 +77,32 @@ namespace CitiesSkylines2Agent.Agent
                 using (JsonDocument state = JsonDocument.Parse(runtime.ChatStateJson()))
                 {
                     JsonElement plan = state.RootElement.GetProperty("plan");
-                    Assert.Equal("keep the lights on", plan.GetProperty("goal").GetString());
+                    Assert.Equal("keep the lights on", plan.GetProperty("entries")[0].GetProperty("content").GetString());
                 }
                 Assert.True(tools.Cancelled);
             }
+        }
+
+        private static Dictionary<string, object> PlanEntries()
+        {
+            return new Dictionary<string, object>
+            {
+                ["entries"] = new object[]
+                {
+                    new Dictionary<string, object>
+                    {
+                        ["content"] = "keep the lights on",
+                        ["priority"] = "high",
+                        ["status"] = "in_progress",
+                    },
+                    new Dictionary<string, object>
+                    {
+                        ["content"] = "power stable",
+                        ["priority"] = "medium",
+                        ["status"] = "pending",
+                    },
+                },
+            };
         }
 
         private static AgentRuntime.AgentRuntime Open(IAgentTools tools, IChatClient client)

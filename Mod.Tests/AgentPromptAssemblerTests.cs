@@ -11,7 +11,7 @@ namespace CitiesSkylines2Agent.Agent
         private const string SummaryPrefix = "[context summary] ";
 
         [Fact]
-        public void Apply_keeps_one_live_note_and_replaces_it()
+        public void Apply_pins_the_system_prompt()
         {
             var assembler = new AgentPromptAssembler(Prompt, SummaryPrefix);
             var history = new List<ChatMessage>
@@ -19,34 +19,30 @@ namespace CitiesSkylines2Agent.Agent
                 new ChatMessage(ChatRole.User, "grow"),
             };
 
-            assembler.Apply(history, SessionPlan.HistoryNotePrefix + "goal=a");
-            Assert.Equal(3, history.Count);
+            assembler.Apply(history);
+            Assert.Equal(2, history.Count);
             Assert.Equal(Prompt, history[0].Text);
-            Assert.StartsWith(SessionPlan.HistoryNotePrefix, history[1].Text);
-            Assert.Equal("grow", history[2].Text);
+            Assert.Equal("grow", history[1].Text);
 
-            assembler.Apply(history, SessionPlan.HistoryNotePrefix + "goal=b");
-            Assert.Equal(3, history.Count);
-            Assert.Equal(SessionPlan.HistoryNotePrefix + "goal=b", history[1].Text);
+            assembler.Apply(history);
+            Assert.Equal(2, history.Count);
         }
 
         [Fact]
-        public void Apply_pins_live_note_after_summary()
+        public void Apply_leaves_the_summary_and_kept_messages()
         {
             var assembler = new AgentPromptAssembler(Prompt, SummaryPrefix);
             var history = new List<ChatMessage>();
             assembler.Rebuild(history, "{\"session_state\":\"mayor loop\"}", new List<ChatMessage>
             {
                 new ChatMessage(ChatRole.User, "keep going"),
-                new ChatMessage(ChatRole.System, SessionPlan.HistoryNotePrefix + "stale"),
             });
-            assembler.Apply(history, SessionPlan.HistoryNotePrefix + "goal=fresh");
+            assembler.Apply(history);
 
+            Assert.Equal(3, history.Count);
             Assert.Equal(Prompt, history[0].Text);
             Assert.Equal(SummaryPrefix + "{\"session_state\":\"mayor loop\"}", history[1].Text);
-            Assert.Equal(SessionPlan.HistoryNotePrefix + "goal=fresh", history[2].Text);
-            Assert.Equal("keep going", history[3].Text);
-            Assert.Equal(4, history.Count);
+            Assert.Equal("keep going", history[2].Text);
         }
     }
 }

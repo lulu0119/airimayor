@@ -38,6 +38,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0030-player-message-keeps-plan.md](./adr/0030-player-message-keeps-plan.md) | Player messages keep the plan; a reply stops, a tool step finishes, an advance ends |
 | [0031-explicit-pause.md](./adr/0031-explicit-pause.md) | `get_simulation` reads the clock; `set_simulation` can advance or pause |
 | [0032-agent-runtime-tool-port.md](./adr/0032-agent-runtime-tool-port.md) | In-process loop is `AgentRuntime`; city tools are a port. Later, Gameface drives an external runtime over ACP and city tools over MCP |
+| [0033-chat-plan-entries.md](./adr/0033-chat-plan-entries.md) | Built-in plan and the chat strip are one step list; `set_plan` replaces it and returns it |
 
 ## Guide
 

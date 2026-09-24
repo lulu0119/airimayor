@@ -19,3 +19,21 @@ declare module "@iconify-icons/solar/alt-arrow-down-bold-duotone" {
   const icon: IconifyIcon;
   export default icon;
 }
+
+declare module "@iconify-icons/solar/clock-circle-bold-duotone" {
+  import type { IconifyIcon } from "@iconify/react";
+  const icon: IconifyIcon;
+  export default icon;
+}
+
+declare module "@iconify-icons/solar/play-circle-bold-duotone" {
+  import type { IconifyIcon } from "@iconify/react";
+  const icon: IconifyIcon;
+  export default icon;
+}
+
+declare module "@iconify-icons/solar/check-circle-bold-duotone" {
+  import type { IconifyIcon } from "@iconify/react";
+  const icon: IconifyIcon;
+  export default icon;
+}

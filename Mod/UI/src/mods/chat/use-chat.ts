@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useValue } from "cs2/api";
 import { agentEvents$, agentState$, interruptTurn, sendChatMessage } from "mods/bindings";
-import type { AgentContextInfo, AgentSnapshot, AgentWireEvent, ChatLine, MayorPlan } from "./chat-types";
+import type { AgentContextInfo, AgentSnapshot, AgentWireEvent, ChatLine, PlanEntry } from "./chat-types";
 import { applyWireEvent, emptyTranscript, hydrateTranscript } from "./transcript";
 
 export interface QueuedMessage {
@@ -23,7 +23,7 @@ export interface ChatModel {
   pending: number;
   note: string;
   context: AgentContextInfo | null;
-  plan: MayorPlan | null;
+  plan: PlanEntry[] | null;
   send: (text: string) => void;
   interrupt: () => void;
 }
@@ -43,7 +43,7 @@ const parseSnapshot = (json: string): AgentSnapshot | null => {
   }
 };
 
-const parsePlan = (value: unknown): MayorPlan | null => {
+const parsePlan = (value: unknown): PlanEntry[] | null => {
   if (typeof value === "string") {
     try {
       value = JSON.parse(value);
@@ -54,14 +54,30 @@ const parsePlan = (value: unknown): MayorPlan | null => {
   if (value == null || typeof value !== "object") {
     return null;
   }
-  const record = value as { goal?: unknown; success?: unknown };
-  if (typeof record.goal !== "string" || record.goal.length === 0) {
+  const raw = (value as { entries?: unknown }).entries;
+  if (!Array.isArray(raw)) {
     return null;
   }
-  return {
-    goal: record.goal,
-    success: typeof record.success === "string" ? record.success : "",
-  };
+  const entries: PlanEntry[] = [];
+  for (const item of raw) {
+    if (item == null || typeof item !== "object") {
+      continue;
+    }
+    const record = item as { content?: unknown; priority?: unknown; status?: unknown };
+    const priority = record.priority;
+    const status = record.status;
+    if (typeof record.content !== "string" || record.content.trim().length === 0) {
+      continue;
+    }
+    if (priority !== "high" && priority !== "medium" && priority !== "low") {
+      continue;
+    }
+    if (status !== "pending" && status !== "in_progress" && status !== "completed") {
+      continue;
+    }
+    entries.push({ content: record.content, priority, status });
+  }
+  return entries.length === 0 ? null : entries;
 };
 
 const parseEvent = (json: string): AgentWireEvent | null => {
@@ -85,7 +101,7 @@ export const useChat = (): ChatModel => {
   const [pending, setPending] = useState(0);
   const [note, setNote] = useState("");
   const [context, setContext] = useState<AgentContextInfo | null>(null);
-  const [plan, setPlan] = useState<MayorPlan | null>(null);
+  const [plan, setPlan] = useState<PlanEntry[] | null>(null);
   const sessionRef = useRef("");
   const nextIdRef = useRef(0);
   const queuedRef = useRef<QueuedMessage[]>([]);

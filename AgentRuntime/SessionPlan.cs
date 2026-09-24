@@ -1,61 +1,72 @@
 using System;
+using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace AgentRuntime
 {
     /// <summary>
-    /// Loop-owned plan. The model declares it with set_plan.
-    /// Player messages and autonomous continuation leave it in place.
+    /// Loop-owned plan: one list of steps. The model replaces the whole list
+    /// with set_plan. Player messages and autonomous continuation leave it in place.
     /// </summary>
     internal sealed class SessionPlan
     {
         public const string ToolName = "set_plan";
 
-        public const string HistoryNotePrefix = "[active plan] ";
-
         public const string ToolDescription =
-            "Declare the single active plan. " +
-            "goal is one sentence. success is the measurable stop condition. " +
+            "Declare the single active plan as a list of steps. " +
+            "Each entry has content, priority (high, medium, or low), " +
+            "and status (pending, in_progress, or completed). " +
             "Replaces the previous plan.";
 
         private static readonly JsonDocument ParametersDocument = JsonDocument.Parse(
             @"{
                 ""type"": ""object"",
                 ""properties"": {
-                    ""goal"": {
-                        ""type"": ""string"",
-                        ""description"": ""One sentence: what this plan will do""
-                    },
-                    ""success"": {
-                        ""type"": ""string"",
-                        ""description"": ""Measurable stop condition""
+                    ""entries"": {
+                        ""type"": ""array"",
+                        ""description"": ""The complete step list. Replaces the previous plan."",
+                        ""items"": {
+                            ""type"": ""object"",
+                            ""properties"": {
+                                ""content"": {
+                                    ""type"": ""string"",
+                                    ""description"": ""What this step will do""
+                                },
+                                ""priority"": {
+                                    ""type"": ""string"",
+                                    ""enum"": [""high"", ""medium"", ""low""],
+                                    ""description"": ""high, medium, or low""
+                                },
+                                ""status"": {
+                                    ""type"": ""string"",
+                                    ""enum"": [""pending"", ""in_progress"", ""completed""],
+                                    ""description"": ""pending, in_progress, or completed""
+                                }
+                            },
+                            ""required"": [""content"", ""priority"", ""status""]
+                        }
                     }
                 },
-                ""required"": [""goal"", ""success""]
+                ""required"": [""entries""]
             }");
 
         public static JsonElement Parameters => ParametersDocument.RootElement;
 
         private readonly object m_Gate = new object();
-        private string m_Goal;
-        private string m_Success;
+        private readonly List<PlanEntry> m_Entries = new List<PlanEntry>();
 
         public PlanCallResult SetPlan(string argumentsJson)
         {
-            if (!TryReadField(argumentsJson, "goal", out string goal))
+            if (!TryReadEntries(argumentsJson, out List<PlanEntry> entries, out string error))
             {
-                return PlanCallResult.Fail("goal is required");
-            }
-            if (!TryReadField(argumentsJson, "success", out string success))
-            {
-                return PlanCallResult.Fail("success is required");
+                return PlanCallResult.Fail(error);
             }
 
             lock (m_Gate)
             {
-                m_Goal = goal;
-                m_Success = success;
+                m_Entries.Clear();
+                m_Entries.AddRange(entries);
                 return PlanCallResult.Ok(ToUiJsonUnlocked());
             }
         }
@@ -64,28 +75,7 @@ namespace AgentRuntime
         {
             lock (m_Gate)
             {
-                m_Goal = null;
-                m_Success = null;
-            }
-        }
-
-        /// <summary>
-        /// Pinned system note for every model round. Always starts with
-        /// <see cref="HistoryNotePrefix"/>.
-        /// </summary>
-        public string LiveNote()
-        {
-            lock (m_Gate)
-            {
-                if (string.IsNullOrEmpty(m_Goal))
-                {
-                    return HistoryNotePrefix +
-                        "none. Call set_plan when you can name one goal.";
-                }
-
-                return HistoryNotePrefix + "goal=" + m_Goal +
-                    " success=" + m_Success +
-                    ". Continue this plan. Do not start a new review until this plan is met or you call set_plan to replace it.";
+                m_Entries.Clear();
             }
         }
 
@@ -99,57 +89,126 @@ namespace AgentRuntime
 
         private string ToUiJsonUnlocked()
         {
-            if (string.IsNullOrEmpty(m_Goal))
+            if (m_Entries.Count == 0)
             {
                 return "";
             }
+
+            var entries = new JsonArray();
+            foreach (PlanEntry entry in m_Entries)
+            {
+                entries.Add(new JsonObject
+                {
+                    ["content"] = entry.Content,
+                    ["priority"] = entry.Priority,
+                    ["status"] = entry.Status,
+                });
+            }
             return new JsonObject
             {
-                ["goal"] = m_Goal,
-                ["success"] = m_Success,
+                ["entries"] = entries,
             }.ToJsonString();
         }
 
-        private static bool TryReadField(string argumentsJson, string name, out string value)
+        private static bool TryReadEntries(string argumentsJson, out List<PlanEntry> entries, out string error)
         {
-            value = null;
+            entries = null;
+            error = "entries is required";
             if (string.IsNullOrWhiteSpace(argumentsJson))
             {
                 return false;
             }
+
             try
             {
                 using (JsonDocument document = JsonDocument.Parse(argumentsJson))
                 {
                     JsonElement root = document.RootElement;
-                    if (root.ValueKind != JsonValueKind.Object)
+                    if (root.ValueKind != JsonValueKind.Object ||
+                        !TryGetProperty(root, "entries", out JsonElement rawEntries) ||
+                        rawEntries.ValueKind != JsonValueKind.Array)
                     {
                         return false;
                     }
-                    foreach (JsonProperty property in root.EnumerateObject())
+                    if (rawEntries.GetArrayLength() == 0)
                     {
-                        if (!string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
-                        {
-                            continue;
-                        }
-                        if (property.Value.ValueKind == JsonValueKind.String)
-                        {
-                            value = property.Value.GetString();
-                        }
-                        else if (property.Value.ValueKind != JsonValueKind.Null &&
-                            property.Value.ValueKind != JsonValueKind.Undefined)
-                        {
-                            value = property.Value.ToString();
-                        }
-                        return !string.IsNullOrWhiteSpace(value);
+                        error = "entries must contain one step";
+                        return false;
                     }
+
+                    var parsed = new List<PlanEntry>();
+                    foreach (JsonElement item in rawEntries.EnumerateArray())
+                    {
+                        if (item.ValueKind != JsonValueKind.Object ||
+                            !TryGetString(item, "content", out string content))
+                        {
+                            error = "content is required";
+                            return false;
+                        }
+                        if (!TryGetString(item, "priority", out string priority) ||
+                            (priority != "high" && priority != "medium" && priority != "low"))
+                        {
+                            error = "priority must be high, medium, or low";
+                            return false;
+                        }
+                        if (!TryGetString(item, "status", out string status) ||
+                            (status != "pending" && status != "in_progress" && status != "completed"))
+                        {
+                            error = "status must be pending, in_progress, or completed";
+                            return false;
+                        }
+                        parsed.Add(new PlanEntry(content, priority, status));
+                    }
+
+                    entries = parsed;
+                    error = null;
+                    return true;
                 }
             }
             catch (JsonException)
             {
                 return false;
             }
+        }
+
+        private static bool TryGetProperty(JsonElement root, string name, out JsonElement value)
+        {
+            foreach (JsonProperty property in root.EnumerateObject())
+            {
+                if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = property.Value;
+                    return true;
+                }
+            }
+            value = default(JsonElement);
             return false;
+        }
+
+        private static bool TryGetString(JsonElement item, string name, out string value)
+        {
+            value = null;
+            if (!TryGetProperty(item, name, out JsonElement raw) ||
+                raw.ValueKind != JsonValueKind.String)
+            {
+                return false;
+            }
+            value = raw.GetString();
+            return !string.IsNullOrWhiteSpace(value);
+        }
+
+        private readonly struct PlanEntry
+        {
+            public PlanEntry(string content, string priority, string status)
+            {
+                Content = content;
+                Priority = priority;
+                Status = status;
+            }
+
+            public string Content { get; }
+            public string Priority { get; }
+            public string Status { get; }
         }
     }
 
