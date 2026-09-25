@@ -21,6 +21,11 @@
   </ItemGroup>
 
     <ItemGroup>
+    <Compile Include="..\Mod\CS2MCP\MapRgb.cs" Link="Production\MapRgb.cs" />
+    <Compile Include="..\Mod\CS2MCP\MapImageModel.cs" Link="Production\MapImageModel.cs" />
+    <Compile Include="..\Mod\CS2MCP\MapStrokeRaster.cs" Link="Production\MapStrokeRaster.cs" />
+    <Compile Include="..\Mod\CS2MCP\TrackStrokePaint.cs" Link="Production\TrackStrokePaint.cs" />
+    <Compile Include="..\Mod\CS2MCP\MapImagePaint.cs" Link="Production\MapImagePaint.cs" />
     <Compile Include="..\Mod\CS2MCP\MapStrokeJoin.cs" Link="Production\MapStrokeJoin.cs" />
     <Compile Include="..\Mod\CS2MCP\NetworkBuildArguments.cs" Link="Production\NetworkBuildArguments.cs" />
     <Compile Include="..\Mod\CS2MCP\OperationalAreaPlanningMath.cs" Link="Production\OperationalAreaPlanningMath.cs" />

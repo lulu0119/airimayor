@@ -1,6 +1,6 @@
 # map_image ways are the road graph; elevation is paint
 
-Status: accepted
+Status: accepted. Elevation-span paint superseded by [0034](./0034-edge-grade-not-elevation.md).
 
 A CS2 road is a graph of edges. An OSM way is one polyline. `map_image`
 assembles native edges of the same style and width into ways, then paints

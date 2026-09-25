@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -61,11 +60,7 @@ namespace CitiesSkylines2Agent.Host
             }
             ToolInvocationResult invoked = await AgentToolBridge.InvokeAsync(
                 tool, argumentsJson, cancellationToken);
-            byte[] image = null;
-            if (!string.IsNullOrWhiteSpace(invoked.ImagePath) && File.Exists(invoked.ImagePath))
-            {
-                image = File.ReadAllBytes(invoked.ImagePath);
-            }
+            byte[] image = invoked.ImagePng;
             return new AgentToolResult
             {
                 Success = invoked.Success,

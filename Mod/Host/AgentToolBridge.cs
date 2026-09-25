@@ -14,7 +14,8 @@ namespace CitiesSkylines2Agent.Host
     {
         public bool Success;
         public string Text;       // JSON or deterministic plain-text tool result
-        public string ImagePath;  // screenshot path when the tool returned PNG
+        public string ImagePath;  // camera screenshot on disk; map images are not written here
+        public byte[] ImagePng;    // PNG bytes for the model, map or screenshot alike
         public byte[] PreviewBytes; // UI-only JPEG thumbnail for the chat window
     }
 
@@ -75,13 +76,17 @@ namespace CitiesSkylines2Agent.Host
             }
             if (string.Equals(tool.Response, "png", StringComparison.Ordinal))
             {
-                string path = SaveImage(tool.Name, response.Body);
+                bool map = string.Equals(tool.Name, "map_image", StringComparison.Ordinal);
+                string path = map ? null : SaveScreenshot(response.Body);
                 return new ToolInvocationResult
                 {
                     Success = true,
                     ImagePath = path,
+                    ImagePng = response.Body,
                     PreviewBytes = response.Preview,
-                    Text = "{\"saved\":\"" + JsonEncodedText.Encode(path).ToString() + "\"}",
+                    Text = map
+                        ? "{}"
+                        : "{\"saved\":\"" + JsonEncodedText.Encode(path).ToString() + "\"}",
                 };
             }
 
@@ -132,13 +137,12 @@ namespace CitiesSkylines2Agent.Host
             return Error(string.IsNullOrWhiteSpace(body) ? "bridge request failed" : body);
         }
 
-        private static string SaveImage(string toolName, byte[] png)
+        private static string SaveScreenshot(byte[] png)
         {
             ModPaths.EnsureDirectories();
-            string prefix = string.Equals(toolName, "map_image", StringComparison.Ordinal) ? "map-" : "shot-";
             string path = Path.Combine(
                 ModPaths.ScreenshotsDirectory,
-                prefix + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture) + ".png");
+                "shot-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture) + ".png");
             File.WriteAllBytes(path, png);
             return path;
         }

@@ -130,135 +130,67 @@ namespace CS2MCP
         }
 
         /// <summary>
-        /// Paint band only. Placement's ground band is ±2 m; carto uses ±4 m
-        /// so slight grade stays the same way, drawn as ground.
-        /// </summary>
-        private const float GradeGroundM = 4f;
-
-        /// <summary>
-        /// One polyline per native edge, with relative elevation on vertices.
-        /// Grade does not split the line; the painter uses Rel as paint.
-        /// Start/end native nodes carry the topology; the join walks them.
+        /// One polyline per native edge. The edge composition is the grade:
+        /// elevated is a bridge, tunnel is a tunnel, and a raised embankment
+        /// stays ground. Start/end native nodes carry the topology.
         /// </summary>
         private void EmitNetworkStroke(
             Entity entity, Game.Net.Edge edge, Game.Net.Curve curve, MapStrokeStyle style, float widthM, List<MapStroke> strokes)
         {
             int samples = math.clamp((int)math.ceil(curve.m_Length / 16f), 1, 32);
-            bool hasRelative = EntityManager.HasComponent<Game.Net.Elevation>(entity);
-            float2 relative = hasRelative
-                ? EntityManager.GetComponentData<Game.Net.Elevation>(entity).m_Elevation
-                : float2.zero;
             var stroke = new MapStroke
             {
                 Style = style,
+                Grade = EdgeGrade(entity),
                 WidthM = widthM,
                 HasElev = true,
                 StartNode = NetNodeKey(edge.m_Start),
                 EndNode = NetNodeKey(edge.m_End),
             };
             double heightSum = 0.0;
-            AppendSample(stroke, curve, 0f, relative, ref heightSum);
+            AppendSample(stroke, curve, 0f, ref heightSum);
             for (int i = 0; i < samples; i++)
             {
-                float t0 = i / (float)samples;
-                float t1 = (i + 1) / (float)samples;
-                float e0 = math.lerp(relative.x, relative.y, t0);
-                float e1 = math.lerp(relative.x, relative.y, t1);
-                if (hasRelative)
-                {
-                    InsertThresholds(stroke, curve, relative, t0, t1, e0, e1, ref heightSum);
-                }
-                AppendSample(stroke, curve, t1, relative, ref heightSum);
+                AppendSample(stroke, curve, (i + 1) / (float)samples, ref heightSum);
             }
             if (stroke.X.Count < 2)
             {
                 return;
             }
             stroke.Elev = heightSum / stroke.X.Count;
-            stroke.Grade = DominantGrade(stroke.Rel);
             strokes.Add(stroke);
         }
 
-        private static void InsertThresholds(
-            MapStroke stroke, Game.Net.Curve curve, float2 relative, float t0, float t1, float e0, float e1,
-            ref double heightSum)
+        private MapGrade EdgeGrade(Entity entity)
         {
-            float uLow = CrossingU(e0, e1, -GradeGroundM);
-            float uHigh = CrossingU(e0, e1, GradeGroundM);
-            if (uLow > 0f && uHigh > 0f && uHigh < uLow)
+            if (!EntityManager.HasComponent<Composition>(entity))
             {
-                float swap = uLow;
-                uLow = uHigh;
-                uHigh = swap;
+                return MapGrade.Ground;
             }
-            if (uLow > 0f)
+            Entity composition = EntityManager.GetComponentData<Composition>(entity).m_Edge;
+            if (!EntityManager.HasComponent<NetCompositionData>(composition))
             {
-                AppendSample(stroke, curve, t0 + (t1 - t0) * uLow, relative, ref heightSum);
+                return MapGrade.Ground;
             }
-            if (uHigh > 0f)
+            CompositionFlags.General general =
+                EntityManager.GetComponentData<NetCompositionData>(composition).m_Flags.m_General;
+            if ((general & CompositionFlags.General.Tunnel) != 0)
             {
-                AppendSample(stroke, curve, t0 + (t1 - t0) * uHigh, relative, ref heightSum);
+                return MapGrade.Tunnel;
             }
+            if ((general & CompositionFlags.General.Elevated) != 0)
+            {
+                return MapGrade.Bridge;
+            }
+            return MapGrade.Ground;
         }
 
-        private static float CrossingU(float e0, float e1, float threshold)
-        {
-            if ((e0 - threshold) * (e1 - threshold) >= 0f)
-            {
-                return 0f;
-            }
-            float u = (threshold - e0) / (e1 - e0);
-            return u > 0.001f && u < 0.999f ? u : 0f;
-        }
-
-        private static void AppendSample(
-            MapStroke stroke, Game.Net.Curve curve, float t, float2 relative, ref double heightSum)
+        private static void AppendSample(MapStroke stroke, Game.Net.Curve curve, float t, ref double heightSum)
         {
             float3 point = BezierPoint(curve.m_Bezier, t);
             stroke.X.Add(point.x);
             stroke.Y.Add(point.z);
-            stroke.Rel.Add(math.lerp(relative.x, relative.y, t));
             heightSum += point.y;
-        }
-
-        private static MapGrade DominantGrade(List<float> rel)
-        {
-            int tunnel = 0;
-            int bridge = 0;
-            for (int i = 0; i < rel.Count; i++)
-            {
-                MapGrade grade = GradeFromRelative(rel[i]);
-                if (grade == MapGrade.Tunnel)
-                {
-                    tunnel++;
-                }
-                else if (grade == MapGrade.Bridge)
-                {
-                    bridge++;
-                }
-            }
-            if (bridge > tunnel && bridge > 0)
-            {
-                return MapGrade.Bridge;
-            }
-            if (tunnel > 0)
-            {
-                return MapGrade.Tunnel;
-            }
-            return MapGrade.Ground;
-        }
-
-        private static MapGrade GradeFromRelative(float elevation)
-        {
-            if (elevation < -GradeGroundM)
-            {
-                return MapGrade.Tunnel;
-            }
-            if (elevation > GradeGroundM)
-            {
-                return MapGrade.Bridge;
-            }
-            return MapGrade.Ground;
         }
 
         private void CollectNativeBuildingFootprints(

@@ -5,59 +5,43 @@ namespace CS2MCP
 {
     /// <summary>
     /// Assemble native edges into OSM ways: one polyline per carriageway
-    /// (same style, good continuation through shared native nodes).
-    /// Elevation and width are paint, not reasons to break the line.
+    /// (same style and grade, good continuation through shared native nodes).
+    /// Width is paint. A bridge edge does not join a ground edge.
     /// </summary>
     internal static class MapStrokeJoin
     {
         private const double StraightDot = -0.5;
 
-        internal sealed class Piece
+        public static List<MapStroke> Join(IReadOnlyList<MapStroke> strokes)
         {
-            public int Style;
-            public int Layer;
-            public double WidthM;
-            public double Elev;
-            public bool HasElev;
-            public long StartNode;
-            public long EndNode;
-            public bool CapStart = true;
-            public bool CapEnd = true;
-            public List<double> X = new List<double>();
-            public List<double> Y = new List<double>();
-            public List<float> Rel = new List<float>();
-        }
-
-        public static List<Piece> Join(IReadOnlyList<Piece> pieces)
-        {
-            var result = new List<Piece>();
-            if (pieces.Count == 0)
+            var result = new List<MapStroke>();
+            if (strokes.Count == 0)
             {
                 return result;
             }
 
-            int[] parent = new int[pieces.Count];
+            int[] parent = new int[strokes.Count];
             for (int i = 0; i < parent.Length; i++)
             {
                 parent[i] = i;
             }
-            Dictionary<long, List<End>> nodes = CollectEnds(pieces);
-            var adj = new List<int>[pieces.Count];
+            Dictionary<long, List<End>> nodes = CollectEnds(strokes);
+            var adj = new List<int>[strokes.Count];
             for (int i = 0; i < adj.Length; i++)
             {
                 adj[i] = new List<int>();
             }
-            PairContinuations(pieces, nodes, parent, adj);
+            PairContinuations(strokes, nodes, parent, adj);
 
-            var seen = new bool[pieces.Count];
-            for (int i = 0; i < pieces.Count; i++)
+            var seen = new bool[strokes.Count];
+            for (int i = 0; i < strokes.Count; i++)
             {
-                if (seen[i] || pieces[i].X.Count < 2)
+                if (seen[i] || strokes[i].X.Count < 2)
                 {
                     continue;
                 }
                 int start = PathStart(adj, i);
-                Piece joined = Copy(pieces[start]);
+                MapStroke joined = Copy(strokes[start]);
                 seen[start] = true;
                 int prev = -1;
                 int cur = start;
@@ -68,7 +52,7 @@ namespace CS2MCP
                     {
                         break;
                     }
-                    Concat(joined, pieces[next]);
+                    Concat(joined, strokes[next]);
                     seen[next] = true;
                     prev = cur;
                     cur = next;
@@ -88,33 +72,33 @@ namespace CS2MCP
             public double Ty;
         }
 
-        private static Dictionary<long, List<End>> CollectEnds(IReadOnlyList<Piece> pieces)
+        private static Dictionary<long, List<End>> CollectEnds(IReadOnlyList<MapStroke> strokes)
         {
             var nodes = new Dictionary<long, List<End>>();
-            for (int i = 0; i < pieces.Count; i++)
+            for (int i = 0; i < strokes.Count; i++)
             {
-                Piece piece = pieces[i];
-                if (piece.X.Count < 2)
+                MapStroke stroke = strokes[i];
+                if (stroke.X.Count < 2)
                 {
                     continue;
                 }
-                AddEnd(nodes, i, piece, true);
-                AddEnd(nodes, i, piece, false);
+                AddEnd(nodes, i, stroke, true);
+                AddEnd(nodes, i, stroke, false);
             }
             return nodes;
         }
 
-        private static void AddEnd(Dictionary<long, List<End>> nodes, int index, Piece piece, bool atStart)
+        private static void AddEnd(Dictionary<long, List<End>> nodes, int index, MapStroke stroke, bool atStart)
         {
-            long node = atStart ? piece.StartNode : piece.EndNode;
+            long node = atStart ? stroke.StartNode : stroke.EndNode;
             if (node == 0)
             {
                 return;
             }
-            int at = atStart ? 0 : piece.X.Count - 1;
-            int next = atStart ? 1 : piece.X.Count - 2;
-            double dx = piece.X[next] - piece.X[at];
-            double dy = piece.Y[next] - piece.Y[at];
+            int at = atStart ? 0 : stroke.X.Count - 1;
+            int next = atStart ? 1 : stroke.X.Count - 2;
+            double dx = stroke.X[next] - stroke.X[at];
+            double dy = stroke.Y[next] - stroke.Y[at];
             double length = Math.Sqrt(dx * dx + dy * dy);
             if (!nodes.TryGetValue(node, out List<End> ends))
             {
@@ -131,7 +115,7 @@ namespace CS2MCP
         }
 
         private static void PairContinuations(
-            IReadOnlyList<Piece> pieces, Dictionary<long, List<End>> nodes, int[] parent, List<int>[] adj)
+            IReadOnlyList<MapStroke> strokes, Dictionary<long, List<End>> nodes, int[] parent, List<int>[] adj)
         {
             var used = new HashSet<int>();
             foreach (List<End> ends in nodes.Values)
@@ -147,7 +131,7 @@ namespace CS2MCP
                     {
                         End ea = ends[a];
                         End eb = ends[b];
-                        if (ea.Index == eb.Index || !SameClass(pieces[ea.Index], pieces[eb.Index]))
+                        if (ea.Index == eb.Index || !SameClass(strokes[ea.Index], strokes[eb.Index]))
                         {
                             continue;
                         }
@@ -182,9 +166,9 @@ namespace CS2MCP
             }
         }
 
-        private static bool SameClass(Piece a, Piece b)
+        private static bool SameClass(MapStroke a, MapStroke b)
         {
-            return a.Style == b.Style;
+            return a.Style == b.Style && a.Grade == b.Grade;
         }
 
         private static int PathStart(List<int>[] adj, int seed)
@@ -217,11 +201,12 @@ namespace CS2MCP
             return -1;
         }
 
-        private static Piece Copy(Piece src)
+        private static MapStroke Copy(MapStroke src)
         {
-            return new Piece
+            var dest = new MapStroke
             {
                 Style = src.Style,
+                Grade = src.Grade,
                 Layer = src.Layer,
                 WidthM = src.WidthM,
                 Elev = src.Elev,
@@ -230,13 +215,13 @@ namespace CS2MCP
                 EndNode = src.EndNode,
                 CapStart = src.CapStart,
                 CapEnd = src.CapEnd,
-                X = new List<double>(src.X),
-                Y = new List<double>(src.Y),
-                Rel = new List<float>(src.Rel),
             };
+            dest.X.AddRange(src.X);
+            dest.Y.AddRange(src.Y);
+            return dest;
         }
 
-        private static void Concat(Piece dest, Piece src)
+        private static void Concat(MapStroke dest, MapStroke src)
         {
             int attach = AttachMode(dest, src);
             if (attach == 0 || attach == 1)
@@ -261,7 +246,7 @@ namespace CS2MCP
             }
         }
 
-        private static void UpdateOuterNodes(Piece dest, Piece src, int attach)
+        private static void UpdateOuterNodes(MapStroke dest, MapStroke src, int attach)
         {
             long destStart = dest.StartNode;
             long destEnd = dest.EndNode;
@@ -295,7 +280,7 @@ namespace CS2MCP
         /// 0 dest-end to src-start, 1 dest-end to src-end,
         /// 2 dest-start to src-end, 3 dest-start to src-start.
         /// </summary>
-        private static int AttachMode(Piece dest, Piece src)
+        private static int AttachMode(MapStroke dest, MapStroke src)
         {
             int dLast = dest.X.Count - 1;
             int sLast = src.X.Count - 1;
@@ -324,7 +309,7 @@ namespace CS2MCP
             return dx * dx + dy * dy;
         }
 
-        private static void Append(Piece dest, Piece src, bool reverseSrc)
+        private static void Append(MapStroke dest, MapStroke src, bool reverseSrc)
         {
             if (reverseSrc)
             {
@@ -332,10 +317,6 @@ namespace CS2MCP
                 {
                     dest.X.Add(src.X[i]);
                     dest.Y.Add(src.Y[i]);
-                    if (i < src.Rel.Count)
-                    {
-                        dest.Rel.Add(src.Rel[i]);
-                    }
                 }
                 return;
             }
@@ -343,37 +324,32 @@ namespace CS2MCP
             {
                 dest.X.Add(src.X[i]);
                 dest.Y.Add(src.Y[i]);
-                if (i < src.Rel.Count)
-                {
-                    dest.Rel.Add(src.Rel[i]);
-                }
             }
         }
 
-        private static void Reverse(Piece piece)
+        private static void Reverse(MapStroke stroke)
         {
-            piece.X.Reverse();
-            piece.Y.Reverse();
-            piece.Rel.Reverse();
-            long node = piece.StartNode;
-            piece.StartNode = piece.EndNode;
-            piece.EndNode = node;
-            bool cap = piece.CapStart;
-            piece.CapStart = piece.CapEnd;
-            piece.CapEnd = cap;
+            stroke.X.Reverse();
+            stroke.Y.Reverse();
+            long node = stroke.StartNode;
+            stroke.StartNode = stroke.EndNode;
+            stroke.EndNode = node;
+            bool cap = stroke.CapStart;
+            stroke.CapStart = stroke.CapEnd;
+            stroke.CapEnd = cap;
         }
 
-        private static void AssignCaps(List<Piece> pieces)
+        private static void AssignCaps(List<MapStroke> strokes)
         {
-            foreach (Piece piece in pieces)
+            foreach (MapStroke stroke in strokes)
             {
-                if (piece.X.Count < 2)
+                if (stroke.X.Count < 2)
                 {
                     continue;
                 }
-                bool loop = piece.StartNode != 0 && piece.StartNode == piece.EndNode;
-                piece.CapStart = !loop;
-                piece.CapEnd = !loop;
+                bool loop = stroke.StartNode != 0 && stroke.StartNode == stroke.EndNode;
+                stroke.CapStart = !loop;
+                stroke.CapEnd = !loop;
             }
         }
 
