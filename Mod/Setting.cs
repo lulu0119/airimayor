@@ -144,7 +144,7 @@ namespace airimayor
                 ModelCatalog.FetchResult result = await ModelCatalog.FetchAsync(endpoint, apiKey);
                 if (result.Models.Count == 0)
                 {
-                    CS2MCP.Mod.Log.Info("fetch-models: " + result.Error);
+                    AgentTimeline.Warn("model", "fetch-models: " + result.Error);
                     return;
                 }
                 lock (s_ModelPresetLock)
@@ -161,7 +161,7 @@ namespace airimayor
                     instance.ModelPresetVersion++;
                     instance.ApplyAndSave();
                 }
-                CS2MCP.Mod.Log.Info($"fetch-models: loaded {result.Models.Count} models.");
+                AgentTimeline.Info("model", $"fetch-models: loaded {result.Models.Count} models.");
             });
         }
 

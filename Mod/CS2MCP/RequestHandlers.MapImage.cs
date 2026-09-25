@@ -64,7 +64,7 @@ namespace CS2MCP
                 ? MapFrame.FromBounds(xMin, zMin, xMax, zMax)
                 : MapFrame.FromData(strokes, fills) ?? MapFrame.World();
             MapScale mapScale = MapImagePaint.ScaleOf(frame, MapImagePaint.WidthPx);
-            Mod.Log.Info($"map_image: {strokes.Count} strokes, {fills.Count} footprints, {mapScale}" +
+            AgentTimeline.Info("map-image", $"map_image: {strokes.Count} strokes, {fills.Count} footprints, {mapScale}" +
                 (hasBounds ? $" (extent {xMin},{zMin} to {xMax},{zMax})" : " (citywide)") +
                 $" in {collectTimer.ElapsedMilliseconds}ms");
 
@@ -119,12 +119,12 @@ namespace CS2MCP
             }
             if (!result.Converged)
             {
-                Mod.Log.Warn("map_image: road layer constraints did not converge; " +
+                AgentTimeline.Warn("map-image", "road layer constraints did not converge; " +
                     "deep stacks are clamped at the top layer");
             }
             if (result.SkippedCells > 0)
             {
-                Mod.Log.Warn($"map_image: skipped {result.SkippedCells} overfull hash cells; " +
+                AgentTimeline.Warn("map-image", $"skipped {result.SkippedCells} overfull hash cells; " +
                     "nearby overpasses may draw flat");
             }
             return result;
@@ -197,11 +197,11 @@ namespace CS2MCP
                 File.WriteAllBytes(Path.Combine(directory, "map.png"), png);
                 File.WriteAllText(Path.Combine(directory, "meta.json"), BuildMapMeta(frame, mapScale, strokes, fills, layering));
                 File.WriteAllText(Path.Combine(directory, "source.geojson"), BuildMapSourceGeoJson(strokes, fills));
-                Mod.Log.Info($"map_image dump {directory}");
+                AgentTimeline.Info("map-image", $"dump map-image/{stamp} ({strokes.Count} strokes, {fills.Count} footprints)");
             }
             catch (Exception e)
             {
-                Mod.Log.Warn($"map_image dump failed: {e.GetType().Name}: {e.Message}");
+                AgentTimeline.Warn("map-image", $"dump failed: {e.GetType().Name}: {e.Message}");
             }
         }
 

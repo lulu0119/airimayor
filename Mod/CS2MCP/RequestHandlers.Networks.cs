@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using airimayor;
+using airimayor.Host;
 using Game.Prefabs;
 using Game.Simulation;
 using Unity.Collections;
@@ -307,8 +307,8 @@ namespace CS2MCP
                     $"{TypedNetworkMath.TopologyClassName(issue.Class)} " +
                     $"edges={issue.EdgeA}/{issue.EdgeB} {site} distance={issue.DistanceM:F1}");
             }
-            Mod.Log.Info(
-                "topology: kind=" + TypedNetworkMath.PrimaryKindName(filter) +
+            AgentTimeline.Info("topology",
+                "kind=" + TypedNetworkMath.PrimaryKindName(filter) +
                 (hasCenter ? $" center=({center.x:F1},{center.y:F1}) radius={radius:F0}" : " citywide") +
                 $" edges={snapshot.Count} computed={computedCount} returned={issues.Count} components=[{string.Join("; ", components)}] " +
                 $"findings=[{string.Join("; ", findings)}]");

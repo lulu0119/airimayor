@@ -121,6 +121,7 @@ namespace airimayor.Host
                 ModPaths.LogsDirectory,
                 message => Mod.log.Warn(message));
             m_Session.Updated += OnAgentEvent;
+            Mod.log.Info("agent session opened " + m_Session.Timeline.SessionId);
         }
 
         private static ModelSettings ReadModel()
@@ -146,6 +147,7 @@ namespace airimayor.Host
                 return;
             }
             m_Session.Updated -= OnAgentEvent;
+            Mod.log.Info("agent session closed " + m_Session.Timeline.SessionId);
             if (ReferenceEquals(AgentSessionHost.Current, m_Session))
             {
                 AgentSessionHost.Current = null;

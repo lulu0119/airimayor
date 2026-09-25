@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using airimayor.Host;
 using Colossal.Mathematics;
 using Game;
 using Game.City;
@@ -561,7 +562,7 @@ namespace CS2MCP
             }
             catch (Exception e)
             {
-                Mod.Log.Warn($"BridgeToolSystem error in stage {m_Stage}: {e}");
+                AgentTimeline.Warn("tool", $"BridgeToolSystem error in stage {m_Stage}: {e}");
                 CompletePending(BridgeResponse.Error(BridgeErrorKind.Internal, $"tool operation failed: {e.GetType().Name}: {e.Message}"));
                 applyMode = ApplyMode.None;
                 Deactivate();

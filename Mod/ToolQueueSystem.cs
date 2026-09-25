@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Concurrent;
-using Colossal.Logging;
+using airimayor.Host;
 using Game;
 using UnityEngine.Scripting;
 
@@ -11,8 +11,6 @@ namespace airimayor
     {
         public static ToolQueueSystem Instance { get; private set; }
 
-        private static readonly ILog Log = LogManager.GetLogger($"{nameof(airimayor)}.{nameof(ToolQueueSystem)}").SetShowsErrorsInUI(false);
-
         private readonly ConcurrentQueue<Action> m_Pending = new ConcurrentQueue<Action>();
 
         [Preserve]
@@ -20,7 +18,7 @@ namespace airimayor
         {
             base.OnCreate();
             Instance = this;
-            Log.Info("ToolQueueSystem created (UIUpdate)");
+            AgentTimeline.Info("tool-queue", "ToolQueueSystem created (UIUpdate)");
         }
 
         public void Enqueue(Action work)
@@ -44,7 +42,7 @@ namespace airimayor
                 }
                 catch (Exception exception)
                 {
-                    Log.Warn(exception, "ToolQueueSystem work failed");
+                    AgentTimeline.Warn("tool-queue", "work failed: " + exception);
                 }
             }
         }

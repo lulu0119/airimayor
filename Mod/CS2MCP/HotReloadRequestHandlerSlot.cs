@@ -55,7 +55,7 @@ namespace CS2MCP
                     m_OverrideActive = false;
                     m_LastWriteUtc = default;
                     m_LastLength = -1;
-                    Mod.Log.Info("development tools off; restored built-in handlers");
+                    AgentTimeline.Info("hot-reload", "development tools off; restored built-in handlers");
                 }
                 return;
             }
@@ -74,7 +74,7 @@ namespace CS2MCP
                     m_OverrideActive = false;
                     m_LastWriteUtc = default;
                     m_LastLength = -1;
-                    Mod.Log.Info("hot-reload handler payload removed; restored built-in handlers");
+                    AgentTimeline.Info("hot-reload", "hot-reload handler payload removed; restored built-in handlers");
                 }
                 return;
             }
@@ -91,7 +91,7 @@ namespace CS2MCP
                 if (!m_LimitLogged)
                 {
                     m_LimitLogged = true;
-                    Mod.Log.Warn(
+                    AgentTimeline.Warn("hot-reload",
                         "hot-reload limit reached (" + MaxReloadsPerGameSession +
                         "); restart the game before loading another handler payload");
                 }
@@ -118,14 +118,14 @@ namespace CS2MCP
                 m_Current = replacement;
                 m_OverrideActive = true;
                 m_ReloadCount++;
-                Mod.Log.Info(
+                AgentTimeline.Info("hot-reload",
                     "hot-reloaded request handlers " + m_ReloadCount + "/" +
                     MaxReloadsPerGameSession + " " +
                     assembly.ManifestModule.ModuleVersionId.ToString("N"));
             }
             catch (Exception e)
             {
-                Mod.Log.Warn(
+                AgentTimeline.Warn("hot-reload",
                     "hot-reload handler payload rejected; keeping last known-good handlers: " +
                     e.Message);
             }

@@ -80,7 +80,7 @@ namespace airimayor.Host
                     s_UsingOverride = false;
                     s_OverrideWriteUtc = default;
                     s_OverrideLength = -1;
-                    CS2MCP.Mod.Log.Info("development tools off; restored embedded catalog");
+                    AgentTimeline.Info("catalog", "development tools off; restored embedded catalog");
                 }
                 return;
             }
@@ -93,7 +93,7 @@ namespace airimayor.Host
                     s_UsingOverride = false;
                     s_OverrideWriteUtc = default;
                     s_OverrideLength = -1;
-                    CS2MCP.Mod.Log.Info("hot-reload tool catalog removed; restored embedded catalog");
+                    AgentTimeline.Info("catalog", "hot-reload tool catalog removed; restored embedded catalog");
                 }
                 return;
             }
@@ -115,13 +115,13 @@ namespace airimayor.Host
                 s_UsingOverride = true;
                 s_OverrideWriteUtc = file.LastWriteTimeUtc;
                 s_OverrideLength = file.Length;
-                CS2MCP.Mod.Log.Info("hot-reloaded tool catalog");
+                AgentTimeline.Info("catalog", "hot-reloaded tool catalog");
             }
             catch (Exception e)
             {
                 // Keep the last valid catalog. A later read retries after the
                 // build finishes replacing the file.
-                CS2MCP.Mod.Log.Warn(
+                AgentTimeline.Warn("catalog",
                     "hot-reload tool catalog rejected; keeping last known-good catalog: " +
                     e.Message);
             }

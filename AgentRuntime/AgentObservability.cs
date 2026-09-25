@@ -140,8 +140,8 @@ namespace AgentRuntime
             Record("generation", new JsonObject
             {
                 ["model"] = model,
-                ["input"] = Truncate(messageSummary, 2048),
-                ["reasoning"] = Truncate(reasoning, 2048),
+                ["input"] = Truncate(messageSummary, 32768),
+                ["reasoning"] = Truncate(reasoning, 32768),
                 ["toolCalls"] = toolCalls ?? new JsonArray(),
                 ["usage"] = usage ?? new JsonObject(),
                 ["elapsedMs"] = elapsedMs,
@@ -178,6 +178,15 @@ namespace AgentRuntime
                 ["keptMessages"] = keptMessages,
                 ["summary"] = Truncate(summary, 32768),
                 ["newEstimate"] = newEstimate,
+            });
+        }
+
+        public void System(string source, string message)
+        {
+            Record("system", new JsonObject
+            {
+                ["source"] = source,
+                ["message"] = Truncate(message, 32768),
             });
         }
 

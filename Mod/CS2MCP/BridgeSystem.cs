@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using airimayor.Host;
 using Colossal.Serialization.Entities;
 using Game;
 using Game.Simulation;
@@ -78,7 +79,7 @@ namespace CS2MCP
             AutoPauseTargetFrame = 0;
             m_WaitRestoreSpeed = -1f;
             LastWaitOutcome = WaitOutcome.Cancelled;
-            Mod.Log.Info("timed wait cancelled, simulation state restored");
+            AgentTimeline.Info("wait", "timed wait cancelled, simulation state restored");
         }
 
         [Preserve]
@@ -113,7 +114,7 @@ namespace CS2MCP
                 !m_AsyncRequest.CompletionTask.IsCompleted &&
                 (DateTime.UtcNow - m_AsyncStartedUtc).TotalSeconds > AsyncOperationTimeoutSeconds)
             {
-                Mod.Log.Warn("aborting stuck bridge tool operation after " +
+                AgentTimeline.Warn("bridge", "aborting stuck bridge tool operation after " +
                              AsyncOperationTimeoutSeconds + "s");
                 BridgeToolSystem tool = World.GetOrCreateSystemManaged<BridgeToolSystem>();
                 tool.AbortStuckOperation();
@@ -128,7 +129,7 @@ namespace CS2MCP
                     AutoPauseTargetFrame = 0;
                     m_WaitRestoreSpeed = -1f;
                     LastWaitOutcome = WaitOutcome.TakenOver;
-                    Mod.Log.Info("timed wait handed over: clock changed externally");
+                    AgentTimeline.Info("wait", "timed wait handed over: clock changed externally");
                 }
                 else if (m_SimulationSystem.frameIndex >= AutoPauseTargetFrame)
                 {
@@ -138,7 +139,7 @@ namespace CS2MCP
                     AutoPauseTargetFrame = 0;
                     m_WaitRestoreSpeed = -1f;
                     LastWaitOutcome = WaitOutcome.Finished;
-                    Mod.Log.Info("timed wait finished, simulation state restored");
+                    AgentTimeline.Info("wait", "timed wait finished, simulation state restored");
                 }
                 else if ((DateTime.UtcNow - m_WaitStartedUtc).TotalSeconds > WaitNotAdvancingGraceSeconds &&
                          m_SimulationSystem.frameIndex <= m_WaitStartFrame + 10u)
@@ -149,7 +150,7 @@ namespace CS2MCP
                     AutoPauseTargetFrame = 0;
                     m_WaitRestoreSpeed = -1f;
                     LastWaitOutcome = WaitOutcome.Stalled;
-                    Mod.Log.Warn("timed wait aborted: simulation did not advance for " +
+                    AgentTimeline.Warn("wait", "timed wait aborted: simulation did not advance for " +
                                  WaitNotAdvancingGraceSeconds + "s (modal pause barrier?)");
                 }
             }
@@ -164,7 +165,7 @@ namespace CS2MCP
                 }
                 catch (Exception e)
                 {
-                    Mod.Log.Warn($"error handling {request.Path}: {e}");
+                    AgentTimeline.Warn("bridge", $"error handling {request.Path}: {e}");
                     response = BridgeResponse.Error(
                         BridgeErrorKind.Internal,
                         $"{e.GetType().Name}: {e.Message}");

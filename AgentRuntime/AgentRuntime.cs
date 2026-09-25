@@ -153,6 +153,9 @@ or timeline notes. Keep each list item short and concrete.";
 
         public event Action<SessionUpdate> Updated;
 
+        /// <summary>Converged dev log sink: city code records here when a session is live.</summary>
+        public AgentObservability Timeline => m_Observability;
+
         public AgentStatus Status { get; private set; } = AgentStatus.Idle;
 
         public bool IsBusy => Status == AgentStatus.Thinking || Status == AgentStatus.Working;

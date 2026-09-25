@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
+using airimayor.Host;
 
 namespace CS2MCP
 {
@@ -112,7 +113,7 @@ namespace CS2MCP
             }
             catch (Exception e)
             {
-                Mod.Log.Warn($"post-wait {route} failed: {e.Message}");
+                AgentTimeline.Warn("wait", $"post-wait {route} failed: {e.Message}");
             }
             return null;
         }
