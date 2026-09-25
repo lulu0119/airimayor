@@ -1,6 +1,6 @@
 # Native road facts; category first, width never promotes
 
-Status: accepted
+Status: accepted. `build_road` renamed `build_network` by [0027](./0027-tool-surface-renaming.md). Remainder still stands.
 
 `list_prefabs`, `list_networks`, `map_text` and `map_image` share one road
 identity: UI-group category, speed limit, car-lane count, highway-rules

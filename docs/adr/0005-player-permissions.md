@@ -1,6 +1,6 @@
 # Player permissions are settings, not call arguments
 
-Status: accepted
+Status: accepted. Visual `Auto` removed in the agent-core slim-down; visual tools are Off/On player settings and the model name is never parsed (see [0008](./0008-context-budget-auto-custom.md) superseded). Settings-not-flags and the remainder still stand.
 
 Whether the Agent may demolish, spend Development Points, or use visual tools is a player choice, not a model-chosen flag. Settings show or hide those writes. When demolition is allowed, there is no extra confirmation modal.
 

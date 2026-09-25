@@ -1,6 +1,6 @@
 # One typed network graph behind list, demolish, and topology QA
 
-Status: accepted
+Status: accepted. `build_road` renamed `build_network` by [0027](./0027-tool-surface-renaming.md). Remainder still stands.
 
 This ADR records the typed-network graph seam. It is not a second inventory taxonomy. Roads, water pipes, sewage pipes, and low-voltage cables are one typed Net (`Game.Net` edges). Auto-connect, `list_networks`, demolish, and topology QA all use `TypedNetworkKinds` from native prefab layers.
 

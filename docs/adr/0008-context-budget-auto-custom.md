@@ -1,6 +1,6 @@
 # Context budget: Auto from the model name, Custom from the player
 
-Status: superseded — the loop no longer parses model names. Window is always the player-set WindowTokens; request shape follows the player-set API kind. See open-work agent-core slim-down items.
+Status: superseded — the loop no longer parses model names. Window is always the player-set WindowTokens; request shape follows the player-set API kind. See CONTEXT Context budget and `AgentModelProfile` (player settings only).
 
 Visual tools already use Auto / On / Off. The token window should match: Auto infers the window from the model name; Custom uses the player setting and wins over the profile.
 

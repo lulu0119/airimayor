@@ -221,7 +221,7 @@ namespace airimayor
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.EnableDevelopmentTools)), "Development / acceptance tools" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.EnableDevelopmentTools)), "Expose diagnostic, experimental, and manual-save tools to the in-game agent." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.VisionTools)), "Visual tools" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.VisionTools)), "Auto follows model-name capabilities; On and Off force the result." },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.VisionTools)), "On shows visual tools; Off hides them." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Api)), "API kind" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.Api)), "Chat Completions or Responses. This is the loop's request shape, not the server model limit." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.WindowTokens)), "Window tokens" },

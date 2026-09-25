@@ -1,6 +1,6 @@
 # Linear networks are not buildings
 
-Status: accepted
+Status: accepted. `build_road` renamed `build_network` by [0027](./0027-tool-surface-renaming.md). Ground vs grade-separated and no silent promotion still stand.
 
 Roads, pipes, and cables are native network transactions, not placed objects, so they cannot share `place_building`. The write is `build_road`. Road prefabs take `ground` (default) or `grade-separated`; other networks do not take a road mode.
 

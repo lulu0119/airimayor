@@ -38,7 +38,7 @@ namespace airimayor
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.EnableDevelopmentTools)), "开发 / 验收工具" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.EnableDevelopmentTools)), "向游戏内代理暴露诊断、实验和手动存档工具。" },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.VisionTools)), "视觉工具" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.VisionTools)), "自动跟随模型名称的能力；开和关强制指定结果。" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.VisionTools)), "开显示视觉工具；关隐藏视觉工具。" },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Api)), "API 类型" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.Api)), "Chat Completions 或 Responses。这是循环的请求形状，不是服务端模型上限。" },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.WindowTokens)), "窗口 token 数" },

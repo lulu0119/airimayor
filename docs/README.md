@@ -10,10 +10,10 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0002-native-validation.md](./adr/0002-native-validation.md) | Ordinary native validation; no Anarchy or `force` |
 | [0003-one-step-building-placement.md](./adr/0003-one-step-building-placement.md) | `place_building` is the only model-facing building write |
 | [0004-linear-networks.md](./adr/0004-linear-networks.md) | Linear write (`build_network` since [0027](./adr/0027-tool-surface-renaming.md)); ground vs grade-separated; no silent promotion |
-| [0005-player-permissions.md](./adr/0005-player-permissions.md) | Demolish / progression / visual / development tools are settings |
-| [0006-budgeted-local-map.md](./adr/0006-budgeted-local-map.md) | `terrain` returns `LOCAL_MAP`, not a raw grid |
+| [0005-player-permissions.md](./adr/0005-player-permissions.md) | Demolish / progression / visual / development tools are settings (visual Auto removed; Off/On) |
+| [0006-budgeted-local-map.md](./adr/0006-budgeted-local-map.md) | `terrain`/`LOCAL_MAP` superseded by 0017; now `map_text` MAP_TEXT plus separate `map_image` |
 | [0007-session-lifecycle.md](./adr/0007-session-lifecycle.md) | Session follows the loaded city; data under `ModsData` |
-| [0008-context-budget-auto-custom.md](./adr/0008-context-budget-auto-custom.md) | Auto from model name; Custom from the player setting |
+| [0008-context-budget-auto-custom.md](./adr/0008-context-budget-auto-custom.md) | Superseded; window is always player-set WindowTokens, request shape follows player-set API kind |
 | [0009-typed-network-graph.md](./adr/0009-typed-network-graph.md) | One typed network behind list, demolish, and topology QA |
 | [0010-native-transit-lines.md](./adr/0010-native-transit-lines.md) | Transit lines via Route Tool apply; stops are not `place_building` |
 | [0011-specialized-industry-hub-identity.md](./adr/0011-specialized-industry-hub-identity.md) | Specialized-industry role follows declared extractor Operational areas |
@@ -35,7 +35,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0027-tool-surface-renaming.md](./adr/0027-tool-surface-renaming.md) | Verbs first, no shape suffixes, one finance write |
 | [0028-mayor-mandate.md](./adr/0028-mayor-mandate.md) | Loop-owned city plan; no write gating; no per-turn generation cap |
 | [0029-player-owned-clock.md](./adr/0029-player-owned-clock.md) | Player owns the clock; an advance restores speed/pause; no snapshot on the advance result |
-| [0030-player-message-keeps-plan.md](./adr/0030-player-message-keeps-plan.md) | Player messages keep the plan; a reply stops, a tool step finishes, an advance ends |
+| [0030-player-message-keeps-plan.md](./adr/0030-player-message-keeps-plan.md) | Player messages keep the plan; a reply stops, a tool step finishes including advance; Cancel cancels (see 0032) |
 | [0031-explicit-pause.md](./adr/0031-explicit-pause.md) | `get_simulation` reads the clock; `set_simulation` can advance or pause |
 | [0032-agent-runtime-tool-port.md](./adr/0032-agent-runtime-tool-port.md) | In-process loop is `AgentRuntime`; city tools are a port. Later, Gameface drives an external runtime over ACP and city tools over MCP |
 | [0033-chat-plan-entries.md](./adr/0033-chat-plan-entries.md) | Built-in plan and the chat strip are one step list; `set_plan` replaces it and returns it |
