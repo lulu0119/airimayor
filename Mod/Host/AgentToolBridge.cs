@@ -7,7 +7,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace CitiesSkylines2Agent.Host
+namespace airimayor.Host
 {
     /// <summary>Result of one in-process tool invocation.</summary>
     public sealed class ToolInvocationResult

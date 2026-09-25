@@ -2,7 +2,7 @@ using System.Text.Json;
 using AgentRuntime;
 using Xunit;
 
-namespace CitiesSkylines2Agent.Agent
+namespace airimayor.Agent
 {
     public sealed class SessionPlanTests
     {

@@ -13,7 +13,7 @@ if (-not (Test-Path -LiteralPath $IlRepackPath)) {
     throw "ilrepack not found at $IlRepackPath; install with: dotnet tool install -g dotnet-ilrepack"
 }
 
-$mainDll = Join-Path $DeployDir 'CitiesSkylines2Agent.dll'
+$mainDll = Join-Path $DeployDir 'airimayor.dll'
 if (-not (Test-Path -LiteralPath $mainDll)) {
     throw "Main mod dll missing: $mainDll"
 }
@@ -82,9 +82,9 @@ if ($inputs.Count -eq 1) {
 # ILRepack names the output assembly after the /out file name, so the temp
 # output must keep the real file name; a guid file name would leak into the
 # shipped assembly identity.
-$mergeDir = Join-Path $env:TEMP ("CitiesSkylines2Agent-merge-" + [Guid]::NewGuid().ToString('N'))
+$mergeDir = Join-Path $env:TEMP ("airimayor-merge-" + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $mergeDir | Out-Null
-$merged = Join-Path $mergeDir 'CitiesSkylines2Agent.dll'
+$merged = Join-Path $mergeDir 'airimayor.dll'
 
 $env:PATH = 'C:\Program Files\dotnet;' + $env:PATH
 $args = @(
@@ -111,7 +111,7 @@ foreach ($name in ($projectRefs + $managedRefs)) {
         Remove-Item -LiteralPath $path -Force
     }
 }
-foreach ($name in @('CitiesSkylines2Agent.pdb', 'AgentRuntime.pdb')) {
+foreach ($name in @('airimayor.pdb', 'AgentRuntime.pdb')) {
     $pdb = Join-Path $DeployDir $name
     if (Test-Path -LiteralPath $pdb) {
         Remove-Item -LiteralPath $pdb -Force

@@ -1,4 +1,4 @@
-namespace CitiesSkylines2Agent.Host
+namespace airimayor.Host
 {
     /// <summary>
     /// The full system prompt in one place: working style first, then the

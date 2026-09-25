@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 using AgentRuntime;
 using Xunit;
 
-namespace CitiesSkylines2Agent.Agent
+namespace airimayor.Agent
 {
     public sealed class ReasoningEchoMatcherTests
     {

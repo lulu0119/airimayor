@@ -14,7 +14,7 @@ namespace AgentRuntime
     internal sealed class ConversationHeaderPolicy : PipelinePolicy
     {
         private const string SessionHeader = "x-opencode-session";
-        private const string UserAgent = "cities-skylines-2-agent/1.0";
+        private const string UserAgent = "airimayor/1.0";
 
         private readonly string m_SessionId;
 

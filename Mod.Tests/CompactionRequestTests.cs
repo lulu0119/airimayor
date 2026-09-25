@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using AgentRuntime;
-using CitiesSkylines2Agent.Agent;
+using airimayor.Agent;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace CitiesSkylines2Agent.Agent
+namespace airimayor.Agent
 {
     /// <summary>
     /// Pins the working Responses compaction shape: normal instructions and

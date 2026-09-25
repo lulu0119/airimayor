@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using Colossal;
 
-namespace CitiesSkylines2Agent
+namespace airimayor
 {
     public class LocaleZhHans : IDictionarySource
     {

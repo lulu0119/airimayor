@@ -3,13 +3,13 @@ using Colossal.Logging;
 using Game;
 using Game.Modding;
 using Game.SceneFlow;
-using CitiesSkylines2Agent.Host;
+using airimayor.Host;
 
-namespace CitiesSkylines2Agent
+namespace airimayor
 {
     public class Mod : IMod
     {
-        public static ILog log = LogManager.GetLogger($"{nameof(CitiesSkylines2Agent)}.{nameof(Mod)}").SetShowsErrorsInUI(false);
+        public static ILog log = LogManager.GetLogger($"{nameof(airimayor)}.{nameof(Mod)}").SetShowsErrorsInUI(false);
         private Setting m_Setting;
 
         public void OnLoad(UpdateSystem updateSystem)
@@ -25,7 +25,7 @@ namespace CitiesSkylines2Agent
             m_Setting.RegisterInOptionsUI();
             GameManager.instance.localizationManager.AddSource("en-US", new LocaleEN(m_Setting));
             GameManager.instance.localizationManager.AddSource("zh-HANS", new LocaleZhHans(m_Setting));
-            AssetDatabase.global.LoadSettings(nameof(CitiesSkylines2Agent), m_Setting, new Setting(this));
+            AssetDatabase.global.LoadSettings(nameof(airimayor), m_Setting, new Setting(this));
             Setting.Instance = m_Setting;
 
             // UIUpdate keeps running while the simulation is paused.

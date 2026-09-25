@@ -43,7 +43,7 @@ cd Mod
 dotnet build
 ```
 
-Enable **CitiesSkylines2Agent**, load a save; chat is bottom-right. UI-only: `cd Mod/UI && npm run build`. Offline POCs: [archive/](./archive/README.md).
+Enable **AIRI Mayor**, load a save; chat is bottom-right. UI-only: `cd Mod/UI && npm run build`. Offline POCs: [archive/](./archive/README.md).
 
 ## License
 

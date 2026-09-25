@@ -9,7 +9,7 @@ using Game.SceneFlow;
 using Game.UI;
 using UnityEngine.Scripting;
 
-namespace CitiesSkylines2Agent.Host
+namespace airimayor.Host
 {
     /// <summary>
     /// Bridges the agent loop to Gameface: publishes agent state and a live
@@ -19,7 +19,7 @@ namespace CitiesSkylines2Agent.Host
     /// </summary>
     public sealed partial class AgentUISystem : UISystemBase
     {
-        private const string Group = "CitiesSkylines2Agent";
+        private const string Group = "airimayor";
         private const int MaxEventsPerUpdate = 32;
 
         private readonly ConcurrentQueue<SessionUpdate> m_Events =

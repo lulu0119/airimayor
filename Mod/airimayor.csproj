@@ -9,7 +9,7 @@
 
 	<ItemGroup>
 		<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
-			<_Parameter1>CitiesSkylines2Agent.HotReload</_Parameter1>
+			<_Parameter1>airimayor.HotReload</_Parameter1>
 		</AssemblyAttribute>
 	</ItemGroup>
 	
@@ -134,7 +134,7 @@
 	<!-- Overlay exists only while iterating with Mod/HotReload. A leftover
 	     file would silently replace the catalog just embedded in this DLL. -->
 	<Target Name="ClearHotReloadCatalog" AfterTargets="DeployWIP" Condition="'$(NeedBuild)' == 'true'">
-		<Delete Files="$(UserDataPath)\ModsData\CitiesSkylines2Agent\hot-reload\ToolCatalog.json" />
+		<Delete Files="$(UserDataPath)\ModsData\airimayor\hot-reload\ToolCatalog.json" />
 	</Target>
 
 </Project>

@@ -16,7 +16,7 @@
 
   <ItemGroup>
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
-      <_Parameter1>CitiesSkylines2Agent.Tests</_Parameter1>
+      <_Parameter1>airimayor.Tests</_Parameter1>
     </AssemblyAttribute>
   </ItemGroup>
 

@@ -3,7 +3,7 @@ using AgentRuntime;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace CitiesSkylines2Agent.Agent
+namespace airimayor.Agent
 {
     public sealed class AgentPromptAssemblerTests
     {

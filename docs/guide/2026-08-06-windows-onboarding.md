@@ -38,10 +38,10 @@ cd Mod
 dotnet build
 ```
 
-Deploy target: `%LocalLow%\Colossal Order\Cities Skylines II\Mods\CitiesSkylines2Agent\`  
+Deploy target: `%LocalLow%\Colossal Order\Cities Skylines II\Mods\airimayor\`  
 UI-only: `cd Mod/UI && npm run build` (needs `CSII_USERDATAPATH`). Hot reload: `-uiDeveloperMode` + `npm run dev`.
 
-Enable **CitiesSkylines2Agent** in-game, enter a save — chat shell mounts bottom-right (not the pink F/S/H/Q strip).
+Enable **AIRI Mayor** in-game, enter a save — chat shell mounts bottom-right (not the pink F/S/H/Q strip).
 
 ## Archived M1 smoke
 

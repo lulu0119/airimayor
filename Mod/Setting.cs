@@ -2,14 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using CitiesSkylines2Agent.Host;
+using airimayor.Host;
 using Colossal;
 using Colossal.IO.AssetDatabase;
 using Game.Modding;
 using Game.Settings;
 using Game.UI.Widgets;
 
-namespace CitiesSkylines2Agent
+namespace airimayor
 {
     public enum VisionToolMode
     {
@@ -23,7 +23,7 @@ namespace CitiesSkylines2Agent
         Responses,
     }
 
-    [FileLocation(nameof(CitiesSkylines2Agent))]
+    [FileLocation(nameof(airimayor))]
     [SettingsUIGroupOrder(kConnectionGroup, kAgentGroup)]
     [SettingsUIShowGroupName(kConnectionGroup, kAgentGroup)]
     public class Setting : ModSetting
@@ -183,7 +183,7 @@ namespace CitiesSkylines2Agent
 
     public static class ChatLocale
     {
-        public static string Id(string name) => $"CitiesSkylines2Agent.Chat.{name}";
+        public static string Id(string name) => $"airimayor.Chat.{name}";
     }
 
     public class LocaleEN : IDictionarySource

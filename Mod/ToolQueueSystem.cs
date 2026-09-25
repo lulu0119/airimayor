@@ -4,14 +4,14 @@ using Colossal.Logging;
 using Game;
 using UnityEngine.Scripting;
 
-namespace CitiesSkylines2Agent
+namespace airimayor
 {
     /// <summary>UIUpdate queue: drain work while paused (CS2MCP-style).</summary>
     public sealed partial class ToolQueueSystem : GameSystemBase
     {
         public static ToolQueueSystem Instance { get; private set; }
 
-        private static readonly ILog Log = LogManager.GetLogger($"{nameof(CitiesSkylines2Agent)}.{nameof(ToolQueueSystem)}").SetShowsErrorsInUI(false);
+        private static readonly ILog Log = LogManager.GetLogger($"{nameof(airimayor)}.{nameof(ToolQueueSystem)}").SetShowsErrorsInUI(false);
 
         private readonly ConcurrentQueue<Action> m_Pending = new ConcurrentQueue<Action>();
 

@@ -6,7 +6,7 @@ using AgentRuntime;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace CitiesSkylines2Agent.Agent
+namespace airimayor.Agent
 {
     /// <summary>
     /// The reasoning_content echo (ReasoningEchoPolicy + CaptureReasoningSnapshots)

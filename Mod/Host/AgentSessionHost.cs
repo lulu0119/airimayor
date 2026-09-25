@@ -1,6 +1,6 @@
 using AgentRuntime;
 
-namespace CitiesSkylines2Agent.Host
+namespace airimayor.Host
 {
     /// <summary>
     /// The loaded-city runtime. The UI system creates and clears it.

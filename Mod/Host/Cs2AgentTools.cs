@@ -5,7 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AgentRuntime;
 
-namespace CitiesSkylines2Agent.Host
+namespace airimayor.Host
 {
     /// <summary>
     /// City tools behind <see cref="IAgentTools"/>. Permission filtering

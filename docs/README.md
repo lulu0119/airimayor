@@ -40,6 +40,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0032-agent-runtime-tool-port.md](./adr/0032-agent-runtime-tool-port.md) | In-process loop is `AgentRuntime`; city tools are a port. Later, Gameface drives an external runtime over ACP and city tools over MCP |
 | [0033-chat-plan-entries.md](./adr/0033-chat-plan-entries.md) | Built-in plan and the chat strip are one step list; `set_plan` replaces it and returns it |
 | [0034-edge-grade-not-elevation.md](./adr/0034-edge-grade-not-elevation.md) | An edge is bridge, tunnel, or ground; an embankment stays ground |
+| [0035-mod-identity-airimayor.md](./adr/0035-mod-identity-airimayor.md) | The mod ships as `airimayor`; display name `AIRI Mayor`; no migration |
 
 ## Guide
 

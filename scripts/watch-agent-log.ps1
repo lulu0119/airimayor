@@ -24,7 +24,7 @@ function Find-LatestTimeline {
     if ([string]::IsNullOrWhiteSpace($userData)) {
         $userData = Join-Path $env:USERPROFILE 'AppData\LocalLow\Colossal Order\Cities Skylines II'
     }
-    $root = Join-Path $userData 'Mods\CitiesSkylines2Agent\logs'
+    $root = Join-Path $userData 'ModsData\airimayor\logs'
     if (Test-Path -LiteralPath $root) {
         Get-ChildItem -LiteralPath $root -Filter 'agent-timeline-*.jsonl' -File -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime -Descending | Select-Object -First 1

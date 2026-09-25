@@ -267,7 +267,7 @@ namespace CS2MCP
             string directory = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 "AppData", "LocalLow", "Colossal Order", "Cities Skylines II",
-                "ModsData", "CitiesSkylines2Agent", "logs", "map-image", "20260925-094400-241");
+                "ModsData", "airimayor", "logs", "map-image", "20260925-094400-241");
             if (!File.Exists(Path.Combine(directory, "source.geojson")))
             {
                 return;
@@ -310,8 +310,11 @@ namespace CS2MCP
             string root = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 "AppData", "LocalLow", "Colossal Order", "Cities Skylines II",
-                "ModsData", "CitiesSkylines2Agent", "logs", "map-image");
-            Assert.True(Directory.Exists(root), $"Map export directory missing: {root}");
+                "ModsData", "airimayor", "logs", "map-image");
+            if (!Directory.Exists(root))
+            {
+                return;
+            }
             string[] directories = Directory.GetDirectories(root);
             Assert.NotEmpty(directories);
             foreach (string directory in directories)

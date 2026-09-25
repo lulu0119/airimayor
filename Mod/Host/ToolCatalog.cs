@@ -4,7 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.Text.Json;
 
-namespace CitiesSkylines2Agent.Host
+namespace airimayor.Host
 {
     /// <summary>One query parameter mapping for a bridge route.</summary>
     public sealed class ToolQuerySpec
@@ -130,7 +130,7 @@ namespace CitiesSkylines2Agent.Host
         private static IReadOnlyList<ToolDefinition> LoadEmbedded()
         {
             using (Stream stream = Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("CitiesSkylines2Agent.Host.ToolCatalog.json"))
+                .GetManifestResourceStream("airimayor.Host.ToolCatalog.json"))
             {
                 if (stream == null)
                 {

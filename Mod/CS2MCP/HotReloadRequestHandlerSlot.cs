@@ -1,8 +1,8 @@
 using System;
 using System.IO;
 using System.Reflection;
-using CitiesSkylines2Agent;
-using CitiesSkylines2Agent.Host;
+using airimayor;
+using airimayor.Host;
 
 namespace CS2MCP
 {

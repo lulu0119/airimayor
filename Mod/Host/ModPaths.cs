@@ -1,13 +1,13 @@
 using System;
 using System.IO;
 
-namespace CitiesSkylines2Agent.Host
+namespace airimayor.Host
 {
     /// <summary>Filesystem locations for agent state and logs.</summary>
     /// <remarks>Runtime files stay outside the watched mod asset directory.</remarks>
     public static class ModPaths
     {
-        public const string ModId = "CitiesSkylines2Agent";
+        public const string ModId = "airimayor";
 
         /// <summary>
         /// User data root: CSII_USERDATAPATH when set (dev builds), otherwise

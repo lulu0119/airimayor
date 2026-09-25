@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <AssemblyName>CitiesSkylines2Agent.HotReload</AssemblyName>
+    <AssemblyName>airimayor.HotReload</AssemblyName>
     <RootNamespace>CS2MCP</RootNamespace>
     <Configurations>Debug;Release</Configurations>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
@@ -14,10 +14,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="CitiesSkylines2Agent">
+    <Reference Include="airimayor">
       <!-- Compile against the exact ILRepacked host identity that the running
            game loaded. The unmerged bin DLL has a different assembly name. -->
-      <HintPath>$(LocalModsPath)\CitiesSkylines2Agent\CitiesSkylines2Agent.dll</HintPath>
+      <HintPath>$(LocalModsPath)\airimayor\airimayor.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="Game"><Private>false</Private></Reference>
@@ -38,7 +38,7 @@
 
   <Target Name="DeployHotReloadPayload" AfterTargets="Build">
     <PropertyGroup>
-      <HotReloadDir>$(UserDataPath)\ModsData\CitiesSkylines2Agent\hot-reload</HotReloadDir>
+      <HotReloadDir>$(UserDataPath)\ModsData\airimayor\hot-reload</HotReloadDir>
       <!-- CS2 recursively discovers .dll files under the user-data tree as code
            mods. The host loads this payload explicitly from bytes, so keep a
            non-.dll extension to prevent a second, unintended mod load at boot. -->
