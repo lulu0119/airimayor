@@ -7,20 +7,25 @@ namespace AgentRuntime
     /// </summary>
     internal sealed class AgentModelProfile
     {
-        private readonly ModelCapabilities m_Caps;
-
-        private AgentModelProfile(ModelCapabilities caps, bool visionAvailable)
+        private AgentModelProfile(long contextWindowTokens, bool visionAvailable, string source)
         {
-            m_Caps = caps;
+            ContextWindowTokens = contextWindowTokens;
             VisionAvailable = visionAvailable;
+            Source = source;
         }
 
-        public long ContextWindowTokens => m_Caps.ContextWindowTokens;
-        public long CompactAtTokens => m_Caps.CompactAtTokens;
-        public long OutputReserveTokens => m_Caps.OutputReserveTokens;
-        public long TailBudgetTokens => m_Caps.TailBudgetTokens;
+        public long ContextWindowTokens { get; }
         public bool VisionAvailable { get; }
-        public string Source => m_Caps.Source;
+        public string Source { get; }
+
+        /// <summary>Tokens reserved so one reply fits in the window.</summary>
+        public long OutputReserveTokens => Math.Min(32_000, Math.Max(1, ContextWindowTokens - 8_000));
+
+        /// <summary>Estimated input size at which compaction runs.</summary>
+        public long CompactAtTokens => ContextWindowTokens - OutputReserveTokens;
+
+        /// <summary>Recent tokens kept verbatim during compaction.</summary>
+        public long TailBudgetTokens => Math.Min(15_000, Math.Max(2_000, CompactAtTokens / 4));
 
         public static AgentModelProfile Resolve(
             long windowTokens,
@@ -28,13 +33,8 @@ namespace AgentRuntime
             string apiKindName)
         {
             long context = Math.Max(16_000, windowTokens > 0 ? windowTokens : 200_000);
-            var caps = new ModelCapabilities
-            {
-                ContextWindowTokens = context,
-                SupportsVision = visionOn,
-                Source = string.IsNullOrEmpty(apiKindName) ? "player" : apiKindName,
-            };
-            return new AgentModelProfile(caps, visionOn);
+            string source = string.IsNullOrEmpty(apiKindName) ? "player" : apiKindName;
+            return new AgentModelProfile(context, visionOn, source);
         }
     }
 }

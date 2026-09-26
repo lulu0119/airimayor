@@ -15,11 +15,11 @@ namespace airimayor.Agent
             long compact,
             long tail)
         {
-            var caps = new ModelCapabilities { ContextWindowTokens = window };
-            Assert.Equal(output, caps.OutputReserveTokens);
-            Assert.Equal(compact, caps.CompactAtTokens);
-            Assert.Equal(tail, caps.TailBudgetTokens);
-            Assert.Equal(window, caps.CompactAtTokens + caps.OutputReserveTokens);
+            AgentModelProfile profile = AgentModelProfile.Resolve(window, false, "player");
+            Assert.Equal(output, profile.OutputReserveTokens);
+            Assert.Equal(compact, profile.CompactAtTokens);
+            Assert.Equal(tail, profile.TailBudgetTokens);
+            Assert.Equal(window, profile.CompactAtTokens + profile.OutputReserveTokens);
         }
 
         [Fact]
