@@ -1,10 +1,19 @@
-using System;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace CS2MCP
 {
+    /// <summary>How a timed simulation wait ended.</summary>
+    public enum WaitOutcome
+    {
+        None,
+        Finished,
+        Cancelled,
+        TakenOver,
+        Stalled,
+    }
+
     /// <summary>
     /// Builds the model-facing time-advance result: wait mechanics only
     /// (hours/completed/targetReached/note). Deliberately no city snapshot;
@@ -26,16 +35,8 @@ namespace CS2MCP
         public static string Build(
             string waitJson,
             string stateJson,
-            bool completed)
-        {
-            return Build(waitJson, stateJson, completed, null);
-        }
-
-        public static string Build(
-            string waitJson,
-            string stateJson,
             bool completed,
-            string noteOverride)
+            string noteOverride = null)
         {
             JsonObject waitRoot = ParseObject(waitJson);
             bool targetReached = TargetReached(waitRoot, ParseObject(stateJson));
