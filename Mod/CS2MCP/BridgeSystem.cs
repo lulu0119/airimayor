@@ -123,13 +123,14 @@ namespace CS2MCP
             if (AutoPauseTargetFrame != 0)
             {
                 float currentSpeed = m_SimulationSystem.selectedSpeed;
-                if (currentSpeed != m_WaitRunSpeed)
+                if (currentSpeed <= 0f)
                 {
-                    // Focus-loss pause is indistinguishable from the player pausing.
+                    // Pause, including focus-loss, hands the wait back and leaves
+                    // the clock paused. A lower positive speed keeps waiting.
                     AutoPauseTargetFrame = 0;
                     m_WaitRestoreSpeed = -1f;
                     LastWaitOutcome = WaitOutcome.TakenOver;
-                    AgentTimeline.Info("wait", "timed wait handed over: clock changed externally");
+                    AgentTimeline.Info("wait", "timed wait handed over: simulation paused");
                 }
                 else if (m_SimulationSystem.frameIndex >= AutoPauseTargetFrame)
                 {

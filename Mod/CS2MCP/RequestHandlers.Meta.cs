@@ -64,10 +64,6 @@ namespace CS2MCP
             }
             if (string.Equals(action, "pause", StringComparison.Ordinal))
             {
-                if (m_System.AutoPauseTargetFrame != 0)
-                {
-                    return BridgeResponse.Error(BridgeErrorKind.Conflict, "a timed simulation advance is already active; wait for it to finish first");
-                }
                 SimulationSystem sim = World.GetOrCreateSystemManaged<SimulationSystem>();
                 sim.selectedSpeed = 0f;
                 return BridgeResponse.Json(new
