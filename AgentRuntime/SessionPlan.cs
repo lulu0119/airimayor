@@ -89,20 +89,38 @@ namespace AgentRuntime
 
         private string ToUiJsonUnlocked()
         {
-            if (m_Entries.Count == 0)
-            {
-                return "";
-            }
-
-            var entries = new JsonArray();
+            var steps = new List<(string Content, string Priority, string Status)>(m_Entries.Count);
             foreach (PlanEntry entry in m_Entries)
             {
+                steps.Add((entry.Content, entry.Priority, entry.Status));
+            }
+            return Format(steps);
+        }
+
+        /// <summary>
+        /// One plan JSON shape for both writers: the loop-owned plan and
+        /// the ACP plan map. Blank steps are skipped; no plan is "".
+        /// </summary>
+        internal static string Format(
+            IEnumerable<(string Content, string Priority, string Status)> steps)
+        {
+            var entries = new JsonArray();
+            foreach ((string content, string priority, string status) in steps)
+            {
+                if (string.IsNullOrWhiteSpace(content))
+                {
+                    continue;
+                }
                 entries.Add(new JsonObject
                 {
-                    ["content"] = entry.Content,
-                    ["priority"] = entry.Priority,
-                    ["status"] = entry.Status,
+                    ["content"] = content,
+                    ["priority"] = priority,
+                    ["status"] = status,
                 });
+            }
+            if (entries.Count == 0)
+            {
+                return "";
             }
             return new JsonObject
             {

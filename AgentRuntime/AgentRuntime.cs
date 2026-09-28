@@ -29,6 +29,15 @@ namespace AgentRuntime
         public string Tool;
         public AgentStatus Status;
 
+        /// <summary>ACP tool call id. Absent on built-in tool events.</summary>
+        public string CallId;
+
+        /// <summary>ACP tool content text. Absent until the agent sends content.</summary>
+        public string Result;
+
+        /// <summary>ACP rawOutput JSON. Absent until the agent sends rawOutput.</summary>
+        public string Output;
+
         /// <summary>UI-only image preview (data URI) for image tool results.</summary>
         public string Image;
 
@@ -44,6 +53,18 @@ namespace AgentRuntime
             {
                 obj["tool"] = Tool;
             }
+            if (CallId != null)
+            {
+                obj["callId"] = CallId;
+            }
+            if (Result != null)
+            {
+                obj["result"] = Result;
+            }
+            if (Output != null)
+            {
+                obj["output"] = Output;
+            }
             if (Image != null)
             {
                 obj["image"] = Image;
@@ -55,6 +76,7 @@ namespace AgentRuntime
     internal sealed class AgentInput
     {
         public string Text;
+        public bool Report;
     }
 
     /// <summary>
@@ -65,7 +87,7 @@ namespace AgentRuntime
     /// when the model stops calling tools, a generation times out, or the
     /// player steers or interrupts. Player messages leave the plan in place.
     /// </summary>
-    public sealed class AgentRuntime : IDisposable
+    public sealed class AgentRuntime : IAgentSession
     {
         private const string CompactionTaskPrompt = @"COMPACTION TASK:
 Ignore the normal assistant response format for this response.
@@ -90,6 +112,7 @@ notices. Do not keep stale relative-time phrases; convert them into stable facts
 or timeline notes. Keep each list item short and concrete.";
 
         private const string SummaryPrefix = "[context summary] ";
+        private const string TaskReportAuthor = "task";
 
         private readonly Channel<AgentInput> m_Pending = Channel.CreateUnbounded<AgentInput>();
         private readonly List<ChatMessage> m_History = new List<ChatMessage>();
@@ -102,6 +125,12 @@ or timeline notes. Keep each list item short and concrete.";
 
         private readonly AgentClientFactory m_ClientFactory;
         private readonly Func<ModelSettings> m_ReadModel;
+        private readonly IAgentTools m_Tools;
+        private readonly string m_SystemPrompt;
+        private readonly string m_LogDirectory;
+        private readonly IChatClient m_ChatClient;
+        private readonly Action<string> m_Warn;
+        private readonly ConversationBook m_Conversations;
         private readonly object m_CancelGate = new object();
         private Task m_LoopTask;
         private CancellationTokenSource m_TurnCts;
@@ -132,23 +161,30 @@ or timeline notes. Keep each list item short and concrete.";
             Func<ModelSettings> readModel,
             string logDirectory,
             IChatClient chatClient,
-            Action<string> warn = null)
+            Action<string> warn = null,
+            bool enableTasks = true)
         {
             m_ReadModel = readModel;
+            m_Tools = tools;
+            m_SystemPrompt = systemPrompt;
+            m_LogDirectory = logDirectory;
+            m_ChatClient = chatClient;
+            m_Warn = warn;
             m_SessionId = Guid.NewGuid().ToString("N").Substring(0, 8);
+            m_Conversations = enableTasks
+                ? new ConversationBook(RunChildTurnAsync, Emit, EnqueueReport)
+                : null;
             m_Observability = new AgentObservability(m_SessionId, logDirectory, warn);
             m_ClientFactory = new AgentClientFactory(
                 m_Observability, m_SessionId, readModel, CaptureReasoningSnapshots, chatClient);
-            m_ToolSurface = new AgentToolSurface(tools);
+            m_ToolSurface = new AgentToolSurface(tools, m_Conversations, m_Plan, EmitPlan);
             m_PromptAssembler = new AgentPromptAssembler(systemPrompt, SummaryPrefix);
             m_ToolExecutor = new AgentToolExecutor(
                 m_ToolSurface,
                 m_ClientFactory,
                 m_Observability,
-                m_Plan,
                 Emit,
-                AppendHistoryMessage,
-                EmitPlan);
+                AppendHistoryMessage);
         }
 
         public event Action<SessionUpdate> Updated;
@@ -193,6 +229,16 @@ or timeline notes. Keep each list item short and concrete.";
             Emit(new SessionUpdate { Kind = "status", Status = AgentStatus.Interrupted, Text = "Current turn interrupted" });
         }
 
+        private void EnqueueReport(string text)
+        {
+            if (m_Disposed)
+            {
+                return;
+            }
+            m_Pending.Writer.TryWrite(new AgentInput { Text = text ?? "", Report = true });
+            EnsureLoop();
+        }
+
         public string ChatStateJson()
         {
             lock (m_Lock)
@@ -224,13 +270,19 @@ or timeline notes. Keep each list item short and concrete.";
                     {
                         continue;
                     }
+                    bool report = message.Role == ChatRole.User && message.AuthorName == TaskReportAuthor;
                     string role = message.Role == ChatRole.Assistant ? "assistant"
-                        : message.Role == ChatRole.Tool ? "tool"
+                        : message.Role == ChatRole.Tool || report ? "tool"
                         : "user";
                     string text = message.Text ?? "";
                     string tool = null;
 
-                    if (role == "tool")
+                    if (report)
+                    {
+                        tool = TaskReportAuthor;
+                        text = TruncateForLog(message.Text ?? "", 800);
+                    }
+                    else if (role == "tool")
                     {
                         foreach (AIContent content in message.Contents)
                         {
@@ -369,9 +421,14 @@ or timeline notes. Keep each list item short and concrete.";
                 }
                 else if (!string.IsNullOrWhiteSpace(input.Text))
                 {
+                    var message = new ChatMessage(ChatRole.User, input.Text);
+                    if (input.Report)
+                    {
+                        message.AuthorName = TaskReportAuthor;
+                    }
                     lock (m_Lock)
                     {
-                        m_History.Add(new ChatMessage(ChatRole.User, input.Text));
+                        m_History.Add(message);
                     }
                     m_Observability.TurnStart(m_TurnId, input.Text);
                 }
@@ -916,6 +973,7 @@ or timeline notes. Keep each list item short and concrete.";
             m_Disposed = true;
             m_LoopCts.Cancel();
             m_TurnCts?.Cancel();
+            m_Conversations?.CancelAll();
             CancelGeneration();
             m_Observability.Dispose();
             m_ClientFactory.Dispose();
@@ -924,6 +982,91 @@ or timeline notes. Keep each list item short and concrete.";
         private ModelSettings ReadModel()
         {
             return m_ReadModel();
+        }
+
+        private ModelSettings ChildModel()
+        {
+            ModelSettings settings = m_ReadModel();
+            settings.ContinueWhenIdle = false;
+            return settings;
+        }
+
+        private async Task<string> RunChildTurnAsync(string sessionId, string message, CancellationToken cancellationToken)
+        {
+            var child = new AgentRuntime(
+                m_Tools, m_SystemPrompt, ChildModel, m_LogDirectory, m_ChatClient, m_Warn, enableTasks: false);
+            var done = new TaskCompletionSource<string>();
+            var text = new StringBuilder();
+            var relay = new ChildToolRelay();
+            child.Updated += update =>
+            {
+                if (update.Kind == "delta")
+                {
+                    text.Append(update.Text ?? "");
+                }
+                else if (update.Kind == "tool")
+                {
+                    relay.On(this, sessionId, update);
+                }
+                else if (update.Kind == "turn" || update.Kind == "error")
+                {
+                    done.TrySetResult(text.ToString());
+                }
+                else if (update.Kind == "status" && update.Status == AgentStatus.Interrupted)
+                {
+                    done.TrySetCanceled();
+                }
+            };
+            using (cancellationToken.Register(() => child.Cancel()))
+            {
+                child.Prompt(message);
+                try
+                {
+                    return await done.Task.ConfigureAwait(false);
+                }
+                finally
+                {
+                    child.Dispose();
+                }
+            }
+        }
+
+        private sealed class ChildToolRelay
+        {
+            private string m_OpenCall;
+            private int m_OpenCount;
+
+            public void On(AgentRuntime runtime, string sessionId, SessionUpdate update)
+            {
+                if (!string.IsNullOrEmpty(update.CallId))
+                {
+                    runtime.Emit(update);
+                    return;
+                }
+                if (m_OpenCall == null)
+                {
+                    m_OpenCount++;
+                    m_OpenCall = "child:" + sessionId + ":" + m_OpenCount.ToString();
+                    runtime.Emit(new SessionUpdate
+                    {
+                        Kind = "tool",
+                        CallId = m_OpenCall,
+                        Tool = update.Tool,
+                        Text = update.Text,
+                        Status = AgentStatus.Working,
+                    });
+                    return;
+                }
+                runtime.Emit(new SessionUpdate
+                {
+                    Kind = "tool",
+                    CallId = m_OpenCall,
+                    Tool = update.Tool,
+                    Result = update.Text,
+                    Status = update.Status == AgentStatus.Error ? AgentStatus.Error : AgentStatus.Idle,
+                });
+                m_OpenCall = null;
+            }
         }
 
         private sealed class ModelRound

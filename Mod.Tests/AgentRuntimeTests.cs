@@ -105,7 +105,36 @@ namespace airimayor.Agent
             };
         }
 
-        private static AgentRuntime.AgentRuntime Open(IAgentTools tools, IChatClient client)
+        [Fact]
+        public async Task Cancel_leaves_a_running_conversation_and_dispose_stops_it()
+        {
+            var client = new HoldingChildClient();
+            AgentRuntime.AgentRuntime runtime = Open(new QuietTools(), client);
+            runtime.Prompt("start");
+            Assert.True(await client.ChildEntered.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+            runtime.Cancel();
+            await Task.Delay(150);
+            Assert.Equal(0, client.ChildCancelled);
+            runtime.Dispose();
+            await WaitUntilAsync(() => client.ChildCancelled == 1);
+        }
+
+        [Fact]
+        public async Task A_conversation_does_not_continue_or_receive_task()
+        {
+            var client = new ChildOnceClient();
+            using (AgentRuntime.AgentRuntime runtime = Open(new QuietTools(), client, continueWhenIdle: true))
+            {
+                runtime.Prompt("start");
+                await WaitUntilAsync(() => client.ChildStarts == 1 && runtime.ChatStateJson().Contains("studied"));
+                await Task.Delay(150);
+                Assert.Equal(1, client.ChildStarts);
+                Assert.Equal(0, client.ChildFollows);
+                Assert.False(client.ChildSawTask);
+            }
+        }
+
+        private static AgentRuntime.AgentRuntime Open(IAgentTools tools, IChatClient client, bool continueWhenIdle = false)
         {
             return new AgentRuntime.AgentRuntime(
                 tools,
@@ -115,6 +144,7 @@ namespace airimayor.Agent
                     Model = "test",
                     WindowTokens = 32_000,
                     Wire = ModelWire.ChatCompletions,
+                    ContinueWhenIdle = continueWhenIdle,
                 },
                 null,
                 client);
@@ -267,6 +297,161 @@ namespace airimayor.Agent
             public void Dispose()
             {
             }
+        }
+
+        private sealed class HoldingChildClient : IChatClient
+        {
+            private int m_ParentCalls;
+
+            public TaskCompletionSource<bool> ChildEntered { get; } =
+                new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            public int ChildCancelled;
+
+            public ChatClientMetadata Metadata => new ChatClientMetadata("hold-child");
+
+            public Task<ChatResponse> GetResponseAsync(
+                IEnumerable<ChatMessage> messages,
+                ChatOptions options = null,
+                CancellationToken cancellationToken = default)
+            {
+                throw new NotSupportedException();
+            }
+
+            public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+                IEnumerable<ChatMessage> messages,
+                ChatOptions options = null,
+                [EnumeratorCancellation] CancellationToken cancellationToken = default)
+            {
+                if (IsChild(messages))
+                {
+                    ChildEntered.TrySetResult(true);
+                    try
+                    {
+                        await Task.Delay(Timeout.Infinite, cancellationToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        Interlocked.Increment(ref ChildCancelled);
+                        throw;
+                    }
+                    yield break;
+                }
+                if (Interlocked.Increment(ref m_ParentCalls) == 1)
+                {
+                    yield return new ChatResponseUpdate(ChatRole.Assistant, new List<AIContent>
+                    {
+                        new FunctionCallContent("task-1", "task", new Dictionary<string, object>
+                        {
+                            ["description"] = "Wells",
+                            ["prompt"] = "inspect the wells",
+                        }),
+                    });
+                    yield break;
+                }
+                yield return new ChatResponseUpdate(ChatRole.Assistant, "ok");
+            }
+
+            public object GetService(Type serviceType, object serviceKey = null)
+            {
+                return null;
+            }
+
+            public void Dispose()
+            {
+            }
+        }
+
+        private sealed class ChildOnceClient : IChatClient
+        {
+            private int m_ParentCalls;
+
+            public int ChildStarts;
+            public int ChildFollows;
+            public bool ChildSawTask;
+
+            public ChatClientMetadata Metadata => new ChatClientMetadata("child-once");
+
+            public Task<ChatResponse> GetResponseAsync(
+                IEnumerable<ChatMessage> messages,
+                ChatOptions options = null,
+                CancellationToken cancellationToken = default)
+            {
+                throw new NotSupportedException();
+            }
+
+            public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+                IEnumerable<ChatMessage> messages,
+                ChatOptions options = null,
+                [EnumeratorCancellation] CancellationToken cancellationToken = default)
+            {
+                bool child = IsChild(messages);
+                bool follow = child && HasText(messages, "studied");
+                if (follow)
+                {
+                    Interlocked.Increment(ref ChildFollows);
+                    yield return new ChatResponseUpdate(ChatRole.Assistant, "again");
+                    yield break;
+                }
+                if (child)
+                {
+                    Interlocked.Increment(ref ChildStarts);
+                    if (options?.Tools != null)
+                    {
+                        foreach (AITool tool in options.Tools)
+                        {
+                            if (tool.Name != "task")
+                            {
+                                continue;
+                            }
+                            ChildSawTask = true;
+                            break;
+                        }
+                    }
+                    yield return new ChatResponseUpdate(ChatRole.Assistant, "studied");
+                    yield break;
+                }
+                if (Interlocked.Increment(ref m_ParentCalls) == 1)
+                {
+                    yield return new ChatResponseUpdate(ChatRole.Assistant, new List<AIContent>
+                    {
+                        new FunctionCallContent("task-1", "task", new Dictionary<string, object>
+                        {
+                            ["description"] = "Wells",
+                            ["prompt"] = "inspect the wells",
+                        }),
+                    });
+                    yield break;
+                }
+                yield return new ChatResponseUpdate(ChatRole.Assistant, "ok");
+                await Task.Yield();
+            }
+
+            public object GetService(Type serviceType, object serviceKey = null)
+            {
+                return null;
+            }
+
+            public void Dispose()
+            {
+            }
+        }
+
+        private static bool IsChild(IEnumerable<ChatMessage> messages)
+        {
+            return HasText(messages, "inspect the wells");
+        }
+
+        private static bool HasText(IEnumerable<ChatMessage> messages, string text)
+        {
+            foreach (ChatMessage message in messages)
+            {
+                if ((message.Text ?? "").Contains(text))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 }

@@ -14,22 +14,18 @@ namespace AgentRuntime
         private readonly AgentToolSurface m_ToolSurface;
         private readonly AgentClientFactory m_ClientFactory;
         private readonly AgentObservability m_Observability;
-        private readonly SessionPlan m_Plan;
         private readonly Action<SessionUpdate> m_Emit;
         private readonly Action<ChatMessage> m_AppendHistory;
-        private readonly Action m_OnPlanChanged;
 
         public AgentToolExecutor(AgentToolSurface toolSurface, AgentClientFactory clientFactory,
-            AgentObservability observability, SessionPlan plan, Action<SessionUpdate> emit,
-            Action<ChatMessage> appendHistory, Action onPlanChanged)
+            AgentObservability observability, Action<SessionUpdate> emit,
+            Action<ChatMessage> appendHistory)
         {
             m_ToolSurface = toolSurface;
             m_ClientFactory = clientFactory;
             m_Observability = observability;
-            m_Plan = plan;
             m_Emit = emit;
             m_AppendHistory = appendHistory;
-            m_OnPlanChanged = onPlanChanged;
         }
 
         public int FunctionCount { get; private set; }
@@ -77,7 +73,7 @@ namespace AgentRuntime
                     Tool = call.Name ?? call.CallId,
                     Text = TruncateToolText(result.Text),
                     Status = result.Success ? AgentStatus.Idle : AgentStatus.Error,
-                    Image = ToPreviewDataUri(result.PreviewJpeg),
+                    Image = ToolPreview.DataUri(result.PreviewJpeg),
                 });
                 m_AppendHistory(new ChatMessage(ChatRole.Tool,
                     new List<AIContent> { new FunctionResultContent(call.CallId, result.Text) }));
@@ -138,34 +134,10 @@ namespace AgentRuntime
             return text.Substring(0, MaxToolTextLength) + "…";
         }
 
-        /// <summary>
-        /// UI-only preview carrier. Base64 over the event binding is pure .NET
-        /// (safe on the agent thread); the thumbnail itself was rendered on the
-        /// main thread at capture time. Oversized payloads stay text-only.
-        /// </summary>
-        private static string ToPreviewDataUri(byte[] preview)
-        {
-            const int MaxPreviewBytes = 256 * 1024;
-            if (preview == null || preview.Length == 0 || preview.Length > MaxPreviewBytes)
-            {
-                return null;
-            }
-            return "data:image/jpeg;base64," + Convert.ToBase64String(preview);
-        }
-
         private async Task<AgentToolResult> InvokeAsync(string name, string argumentsJson, CancellationToken cancellationToken)
         {
             try
             {
-                if (string.Equals(name, SessionPlan.ToolName, StringComparison.Ordinal))
-                {
-                    PlanCallResult plan = m_Plan.SetPlan(argumentsJson);
-                    if (plan.Success)
-                    {
-                        m_OnPlanChanged();
-                    }
-                    return new AgentToolResult { Success = plan.Success, Text = plan.Text };
-                }
                 if (!m_ToolSurface.IsListed(name, m_ClientFactory.GetProfile()))
                 {
                     return Error("tool is not available for this model or current settings");
