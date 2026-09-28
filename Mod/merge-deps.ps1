@@ -47,7 +47,11 @@ $managedRefs = @(
     'Microsoft.Extensions.Logging.Abstractions.dll', 'Microsoft.Extensions.Options.dll',
     'Microsoft.Extensions.Caching.Abstractions.dll', 'System.ClientModel.dll',
     'Microsoft.Extensions.AI.Abstractions.dll', 'Microsoft.Extensions.AI.dll',
-    'Microsoft.Extensions.AI.OpenAI.dll', 'OpenAI.dll'
+    'Microsoft.Extensions.AI.OpenAI.dll', 'OpenAI.dll',
+    'dotacp.client.dll', 'dotacp.protocol.dll', 'StreamJsonRpc.dll',
+    'MessagePack.dll', 'Microsoft.VisualStudio.Threading.dll',
+    'Nerdbank.Streams.dll', 'System.Collections.Immutable.dll',
+    'System.Threading.Tasks.Dataflow.dll'
 )
 
 $inputs = @($mainDll)
@@ -61,9 +65,19 @@ foreach ($name in ($projectRefs + $managedRefs)) {
 # BCL assemblies the merged dll still references but the game's Managed
 # folder does not ship. Pull them from the NuGet cache so the mod stays a
 # single self-contained dll.
+$facades = Join-Path $env:USERPROFILE '.nuget\packages\microsoft.netframework.referenceassemblies.net48\1.0.3\build\.NETFramework\v4.8\Facades'
+$stubProject = Join-Path $PSScriptRoot 'Stubs\WindowsBaseStub.csproj'
+dotnet build $stubProject -c Release --nologo -v q
+if ($LASTEXITCODE -ne 0) {
+    throw "WindowsBase stub build failed with exit code $LASTEXITCODE"
+}
 $extraRefs = @(
     (Join-Path $env:USERPROFILE '.nuget\packages\system.valuetuple\4.6.2\lib\net47\System.ValueTuple.dll'),
-    (Join-Path $env:USERPROFILE '.nuget\packages\microsoft.netframework.referenceassemblies.net48\1.0.3\build\.NETFramework\v4.8\System.ComponentModel.DataAnnotations.dll')
+    (Join-Path $env:USERPROFILE '.nuget\packages\microsoft.netframework.referenceassemblies.net48\1.0.3\build\.NETFramework\v4.8\System.ComponentModel.DataAnnotations.dll'),
+    (Join-Path $facades 'System.Reflection.Emit.dll'),
+    (Join-Path $facades 'System.Reflection.Emit.ILGeneration.dll'),
+    (Join-Path $facades 'System.Reflection.Emit.Lightweight.dll'),
+    (Join-Path $PSScriptRoot 'Stubs\bin\Release\net48\WindowsBase.dll')
 )
 foreach ($path in $extraRefs) {
     if (Test-Path -LiteralPath $path) {

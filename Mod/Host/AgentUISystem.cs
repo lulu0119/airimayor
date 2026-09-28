@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.IO;
 using System.Text;
 using System.Threading;
 using AgentRuntime;
@@ -27,9 +28,15 @@ namespace airimayor.Host
         private ValueBinding<string> m_StateBinding;
         private EventBinding<string> m_EventBinding;
         private int m_StateDirty;
-        private AgentRuntime.AgentRuntime m_Session;
+        private IAgentSession m_Session;
         private SessionUpdate m_DeferredEvent;
+        private int m_Reopen;
         private bool m_AutoStartSent;
+
+        private void OnHeadApplied()
+        {
+            Interlocked.Exchange(ref m_Reopen, 1);
+        }
 
         [Preserve]
         protected override void OnCreate()
@@ -54,6 +61,7 @@ namespace airimayor.Host
                 ValueReaders.Create<string>()));
             AddBinding(new TriggerBinding(Group, "interrupt", OnInterrupt));
 
+            Setting.HeadApplied += OnHeadApplied;
             PushState();
         }
 
@@ -69,20 +77,14 @@ namespace airimayor.Host
 
             CloseSession();
             OpenSession();
-            while (m_Events.TryDequeue(out _)) { }
-            m_DeferredEvent = null;
-            m_AutoStartSent = false;
-            Interlocked.Exchange(ref m_StateDirty, 1);
+            ResetSessionState();
             PushState();
         }
 
         private void LeaveGameSession()
         {
             CloseSession();
-            while (m_Events.TryDequeue(out _)) { }
-            m_DeferredEvent = null;
-            m_AutoStartSent = false;
-            Interlocked.Exchange(ref m_StateDirty, 1);
+            ResetSessionState();
             PushState();
         }
 
@@ -114,14 +116,48 @@ namespace airimayor.Host
 
         private void OpenSession()
         {
-            m_Session = AgentSessionHost.Current = new AgentRuntime.AgentRuntime(
-                new Cs2AgentTools(),
+            m_Session = AgentSessionHost.Current = OpenHead();
+            m_Session.Updated += OnAgentEvent;
+            Mod.log.Info("agent session opened " + m_Session.Timeline.SessionId);
+        }
+
+        private void ResetSessionState()
+        {
+            while (m_Events.TryDequeue(out _)) { }
+            m_DeferredEvent = null;
+            m_AutoStartSent = false;
+            Interlocked.Exchange(ref m_StateDirty, 1);
+        }
+
+        private static IAgentSession OpenHead()
+        {
+            var tools = new Cs2AgentTools();
+            AgentChoice choice = AgentChoices.Find(Setting.StaticHead);
+            if (!choice.IsBuiltIn)
+            {
+                string root = Mod.InstallDirectory;
+                string mcp = string.IsNullOrEmpty(root)
+                    ? null
+                    : Path.Combine(root, "mcp", "airimayor-mcp.exe");
+                return new AcpSession(
+                    tools,
+                    AgentSystemPrompt.Text,
+                    () => Setting.StaticVisionToolMode == VisionToolMode.On,
+                    () => Setting.StaticContinuous,
+                    Setting.StaticStartupPrompt,
+                    choice.Command,
+                    choice.Arguments,
+                    mcp,
+                    string.IsNullOrEmpty(root) ? Directory.GetCurrentDirectory() : root,
+                    ModPaths.LogsDirectory,
+                    message => Mod.log.Warn(message));
+            }
+            return new AgentRuntime.AgentRuntime(
+                tools,
                 AgentSystemPrompt.Text,
                 ReadModel,
                 ModPaths.LogsDirectory,
                 message => Mod.log.Warn(message));
-            m_Session.Updated += OnAgentEvent;
-            Mod.log.Info("agent session opened " + m_Session.Timeline.SessionId);
         }
 
         private static ModelSettings ReadModel()
@@ -195,6 +231,12 @@ namespace airimayor.Host
         {
             base.OnUpdate();
             TryAutoStart();
+            if (Interlocked.Exchange(ref m_Reopen, 0) == 1 && IsInLoadedCity())
+            {
+                CloseSession();
+                OpenSession();
+                ResetSessionState();
+            }
             int processed = 0;
             while (processed < MaxEventsPerUpdate && TryDequeueForUi(out SessionUpdate agentEvent))
             {
@@ -275,6 +317,7 @@ namespace airimayor.Host
         [Preserve]
         protected override void OnDestroy()
         {
+            Setting.HeadApplied -= OnHeadApplied;
             CloseSession();
             base.OnDestroy();
         }

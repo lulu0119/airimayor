@@ -18,6 +18,8 @@ namespace airimayor
                 { m_Setting.GetOptionGroupLocaleID(Setting.kConnectionGroup), "连接" },
                 { m_Setting.GetOptionGroupLocaleID(Setting.kAgentGroup), "代理" },
 
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Head)), "代理" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Head)), "内置使用服务端地址和 API 密钥。其他项启动对应的命令。登录在游戏外完成。" },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Endpoint)), "服务端地址" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.Endpoint)), "OpenAI 兼容 API 基础地址。" },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ApiKey)), "API 密钥" },

@@ -95,6 +95,7 @@
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Extensions.AI" Version="10.8.3" />
 		<PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.8.3" />
+		<PackageReference Include="dotacp.client" Version="2026.7.19" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -107,12 +108,17 @@
 		     do not let this project's default Compile glob ingest its generated
 		     assembly-attribute sources. -->
 		<Compile Remove="HotReload\**\*.cs" />
+		<Compile Remove="Stubs\**\*.cs" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<None Include="$(ModPropsFile)" Link="Properties\Mod.props" />
 		<None Include="$(ModTargetsFile)" Link="Properties\Mod.targets" />
 	</ItemGroup>
+
+	<Target Name="PublishCityToolsMcp" AfterTargets="DeployWIP" Condition="'$(NeedBuild)' == 'true' and '$(DeployDir)' != ''">
+		<Exec Command="dotnet publish &quot;$(MSBuildProjectDirectory)\..\Mcp\airimayor.Mcp.csproj&quot; -c $(Configuration) -o &quot;$(DeployDir)\mcp&quot;" />
+	</Target>
 
 	<!-- Official ModPostProcessor requires a full Unity Editor install + ScriptAssemblies.
 	     This mod has no Burst jobs; skip so local builds work without Unity. -->

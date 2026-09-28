@@ -14,24 +14,26 @@
 
 ## Session
 
-Gameface calls `Prompt`, `Cancel`, and the `update` stream on the built-in agent. City tools pass through `IAgentTools`. Solid lines are that loop. Dashed lines are a later arrangement: those same calls go to an external agent over ACP (`session/prompt`, `session/cancel`, `session/update`), and city tools are handed to it as MCP. See [ADR 0032](docs/adr/0032-agent-runtime-tool-port.md).
+Gameface calls `Prompt`, `Cancel`, and the `update` stream. The default head is the built-in agent. City tools pass through `IAgentTools`. When Agent is OpenCode, those same calls go to `opencode acp` over ACP (`session/prompt`, `session/cancel`, `session/update`), and city tools are handed to it as a stdio MCP server. See [ADR 0032](docs/adr/0032-agent-runtime-tool-port.md) and [ADR 0036](docs/adr/0036-external-mayor-acp.md).
 
 ```mermaid
 flowchart TD
   ui[Gameface]
-  runtime["Built-in agent"]
-  acp["Later ACP client"]
-  external["External agent"]
-  mcp["Later MCP adapter"]
+  head[Session head]
+  builtin["Built-in agent"]
+  acp[ACP client]
+  agent[OpenCode]
+  mcp["stdio MCP server"]
+  bridge[Loopback bridge]
   tools[IAgentTools]
-  cs2[Cs2AgentTools]
-  ui -->|"Prompt, Cancel, Updated"| runtime
-  ui -.->|"session/prompt, cancel, update"| acp
-  acp -.-> external
-  runtime --> tools
-  external -.-> mcp
-  mcp -.-> tools
-  tools --> cs2
+  ui -->|"Prompt, Cancel, Updated"| head
+  head --> builtin
+  head --> acp
+  acp -->|"session/prompt, cancel, update"| agent
+  agent -->|"stdio MCP"| mcp
+  mcp --> bridge
+  bridge --> tools
+  builtin --> tools
 ```
 
 ## Build

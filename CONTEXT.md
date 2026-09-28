@@ -1,14 +1,18 @@
 # AIRI Mayor
 
-The in-game AI mayor: a Gameface chat UI talks to a C# loop that enqueues construction and city tools onto the simulation thread. Players install the mod and paste an API key; there is no external agent process.
+The in-game AI mayor: a Gameface chat UI talks to a C# loop that enqueues construction and city tools onto the simulation thread. The default mayor runs in the game and uses an API key. An optional external mayor is a separate agent process.
 
 ## Language
 
 ### Runtime
 
 **Agent**:
-The in-game mayor runtime: one session, one model, tools queued onto the simulation thread.
-_Avoid_: MCP client, external agent process, apeira
+The in-game mayor session: one chat, tools queued onto the simulation thread. The default head runs in the game. An external head launches OpenCode.
+_Avoid_: MCP client, apeira
+
+**External mayor**:
+An agent process the chat drives with prompt, cancel, and the update stream. City tools are handed to that process as a tool server. The player signs in to that agent outside the game.
+_Avoid_: a second chat, the built-in endpoint and API key, a filesystem or a terminal for the agent
 
 **Model-facing surface**:
 The tools and text the model is allowed to call or see.
@@ -33,6 +37,10 @@ _Avoid_: Endpoint, provider, or model name as the source of the window
 **Compaction**:
 Summarizing older turns when estimated tokens reach the compact threshold.
 _Avoid_: deleting the session, starting a new chat
+
+**Owned conversation**:
+A conversation the current chat opened for one task. The final text comes back on this chat. The player cannot address it.
+_Avoid_: a second chat, the player sending a message to that conversation, a conversation this client does not own, a follow-up, reading or cancelling it as its own tool
 
 **Plan**:
 The one list of steps declared with `set_plan`. Each step has content, a priority (high, medium, or low), and a status (pending, in progress, or completed). Only another `set_plan` replaces the whole list; player messages and autonomous continuation leave it in place.

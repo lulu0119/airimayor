@@ -39,14 +39,21 @@ namespace airimayor
         // ---- Connection -----------------------------------
 
         [SettingsUISection(kSection, kConnectionGroup)]
+        [SettingsUIDropdown(typeof(Setting), nameof(GetHeadItems))]
+        public string Head { get; set; } = AgentChoices.BuiltIn;
+
+        [SettingsUISection(kSection, kConnectionGroup)]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
         [SettingsUITextInput]
         public string Endpoint { get; set; } = "https://api.openai.com/v1";
 
         [SettingsUISection(kSection, kConnectionGroup)]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
         [SettingsUITextInput]
         public string ApiKey { get; set; } = "";
 
         [SettingsUISection(kSection, kConnectionGroup)]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
         [SettingsUIButton]
         public bool FetchModels
         {
@@ -54,12 +61,21 @@ namespace airimayor
         }
 
         [SettingsUISection(kSection, kConnectionGroup)]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
         [SettingsUIDropdown(typeof(Setting), nameof(GetModelPresetItems))]
         [SettingsUIValueVersion(typeof(Setting), nameof(ModelPresetVersion))]
         public string Model { get; set; } = "";
 
         [SettingsUISection(kSection, kConnectionGroup)]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
         public ApiKind Api { get; set; } = ApiKind.ChatCompletions;
+
+        [SettingsUISection(kSection, kConnectionGroup)]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
+        [SettingsUISlider(min = 16_000, max = 2_000_000, step = 1_000)]
+        public int WindowTokens { get; set; } = 200_000;
+
+        public bool HideBuiltinRequest() => !AgentChoices.Find(Head).IsBuiltIn;
 
         // ---- Agent ---------------------------------------
 
@@ -80,10 +96,6 @@ namespace airimayor
 
         [SettingsUISection(kSection, kAgentGroup)]
         public VisionToolMode VisionTools { get; set; } = VisionToolMode.Off;
-
-        [SettingsUISection(kSection, kAgentGroup)]
-        [SettingsUISlider(min = 16_000, max = 2_000_000, step = 1_000)]
-        public int WindowTokens { get; set; } = 200_000;
 
         // ---- Static facade ---------------------------------
 
@@ -107,6 +119,15 @@ namespace airimayor
             Instance?.Api ?? ApiKind.ChatCompletions;
         public static string StaticApiKey => Instance?.ApiKey ?? "";
         public static long StaticWindowTokens => Instance?.WindowTokens ?? 200_000;
+        public static string StaticHead => Instance?.Head ?? AgentChoices.BuiltIn;
+
+        public static event Action HeadApplied;
+
+        public override void Apply()
+        {
+            base.Apply();
+            HeadApplied?.Invoke();
+        }
 
         // ---- Model list (dynamic dropdown source) --------
 
@@ -114,6 +135,23 @@ namespace airimayor
         private static List<string> s_ModelPresets = new List<string>();
 
         public int ModelPresetVersion { get; set; }
+
+        public static DropdownItem<string>[] GetHeadItems()
+        {
+            string locale = Game.SceneFlow.GameManager.instance?.localizationManager?.activeLocaleId;
+            bool chinese = !string.IsNullOrEmpty(locale) && locale.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
+            var items = new DropdownItem<string>[AgentChoices.All.Length];
+            for (int i = 0; i < AgentChoices.All.Length; i++)
+            {
+                AgentChoice choice = AgentChoices.All[i];
+                items[i] = new DropdownItem<string>
+                {
+                    value = choice.Id,
+                    displayName = chinese ? choice.Chinese : choice.English,
+                };
+            }
+            return items;
+        }
 
         public static DropdownItem<string>[] GetModelPresetItems()
         {
@@ -167,6 +205,7 @@ namespace airimayor
 
         public override void SetDefaults()
         {
+            Head = AgentChoices.BuiltIn;
             Endpoint = "https://api.openai.com/v1";
             ApiKey = "";
             Model = "";
@@ -201,6 +240,8 @@ namespace airimayor
                 { m_Setting.GetOptionGroupLocaleID(Setting.kConnectionGroup), "Connection" },
                 { m_Setting.GetOptionGroupLocaleID(Setting.kAgentGroup), "Agent" },
 
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Head)), "Agent" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Head)), "Built-in uses the endpoint and API key. Any other row launches that command. Sign in outside the game." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Endpoint)), "Endpoint" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.Endpoint)), "OpenAI-compatible API base URL." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ApiKey)), "API key" },

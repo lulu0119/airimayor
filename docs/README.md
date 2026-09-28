@@ -37,10 +37,15 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0029-player-owned-clock.md](./adr/0029-player-owned-clock.md) | Player owns the clock; an advance restores speed/pause; no snapshot on the advance result |
 | [0030-player-message-keeps-plan.md](./adr/0030-player-message-keeps-plan.md) | Player messages keep the plan; a reply stops, a tool step finishes including advance; Cancel cancels (see 0032) |
 | [0031-explicit-pause.md](./adr/0031-explicit-pause.md) | `get_simulation` reads the clock; `set_simulation` can advance or pause |
-| [0032-agent-runtime-tool-port.md](./adr/0032-agent-runtime-tool-port.md) | In-process loop is `AgentRuntime`; city tools are a port. Later, Gameface drives an external runtime over ACP and city tools over MCP |
+| [0032-agent-runtime-tool-port.md](./adr/0032-agent-runtime-tool-port.md) | In-process loop is `AgentRuntime`; city tools are a port. An external head uses ACP and MCP ([0036](./adr/0036-external-mayor-acp.md)) |
 | [0033-chat-plan-entries.md](./adr/0033-chat-plan-entries.md) | Built-in plan and the chat strip are one step list; `set_plan` replaces it and returns it |
 | [0034-edge-grade-not-elevation.md](./adr/0034-edge-grade-not-elevation.md) | An edge is bridge, tunnel, or ground; an embankment stays ground |
 | [0035-mod-identity-airimayor.md](./adr/0035-mod-identity-airimayor.md) | The mod ships as `airimayor`; display name `AIRI Mayor`; no migration |
+| [0036-external-mayor-acp.md](./adr/0036-external-mayor-acp.md) | Optional external mayor: ACP child plus a stdio MCP server over the city tool port |
+| [0037-owned-conversations.md](./adr/0037-owned-conversations.md) | Both mayors may open conversations from the current chat; the player cannot address them |
+| [0038-one-task-tool.md](./adr/0038-one-task-tool.md) | One `task` tool; the report is the root agent's next turn; Stop leaves it running |
+| [0039-acp-tool-preview.md](./adr/0039-acp-tool-preview.md) | External tool rows use the same in-game JPEG thumbnail, paired to the ACP tool call |
+| [0040-advance-hands-over-on-pause.md](./adr/0040-advance-hands-over-on-pause.md) | An advance hands over only on pause; a lower positive speed keeps waiting |
 
 ## Guide
 

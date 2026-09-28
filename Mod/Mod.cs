@@ -3,6 +3,7 @@ using Colossal.Logging;
 using Game;
 using Game.Modding;
 using Game.SceneFlow;
+using System.IO;
 using airimayor.Host;
 
 namespace airimayor
@@ -12,6 +13,8 @@ namespace airimayor
         public static ILog log = LogManager.GetLogger($"{nameof(airimayor)}.{nameof(Mod)}").SetShowsErrorsInUI(false);
         private Setting m_Setting;
 
+        public static string InstallDirectory { get; private set; }
+
         public void OnLoad(UpdateSystem updateSystem)
         {
             log.Info(nameof(OnLoad));
@@ -19,6 +22,7 @@ namespace airimayor
             if (GameManager.instance.modManager.TryGetExecutableAsset(this, out var asset))
             {
                 log.Info($"Current mod asset at {asset.path}");
+                InstallDirectory = Path.GetDirectoryName(asset.path);
             }
 
             m_Setting = new Setting(this);
