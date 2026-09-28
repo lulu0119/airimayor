@@ -13,4 +13,6 @@ The thumbnail is produced on the main thread at capture time
 `BridgeResponse.Preview`; base64 over the binding is pure .NET on the agent
 thread. Preview is UI-only and best-effort: the model still gets the full PNG
 from disk, and any preview failure leaves a text-only result. Snapshots do
-not persist previews; session switch rehydrates text only.
+not persist previews; session switch rehydrates text only. An external mayor
+uses this same thumbnail, paired in the game to the tool call
+([0039](./0039-acp-tool-preview.md)).

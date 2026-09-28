@@ -1,8 +1,7 @@
 // Pure transcript reducer: the only place ChatLine[] is built.
 // No React, no bindings, no window globals — snapshots hydrate on session
-// switch, live wire events append. Tool start/done pairing uses the open
-// running row: the executor emits start then done per call, and a player
-// line may arrive between them.
+// switch, live wire events append. A tool event with callId patches that
+// ACP row. A tool event without one still closes the last running row.
 
 import type { AgentWireEvent, ChatLine, StateMessage, ToolRowState } from "./chat-types";
 
@@ -48,6 +47,7 @@ export function hydrateTranscript(messages: StateMessage[]): Transcript {
         name: message.tool ?? "tool",
         args: "",
         result: text.length > 0 ? text : null,
+        output: null,
         image: null,
         state: "done",
       });
@@ -66,6 +66,56 @@ export function hydrateTranscript(messages: StateMessage[]): Transcript {
   });
   return { lines, nextId: lines.length };
 }
+
+const acpToolState = (status: string | undefined): ToolRowState => {
+  if (status === "Error") {
+    return "error";
+  }
+  if (status === "Working") {
+    return "running";
+  }
+  return "done";
+};
+
+const toPatchedResult = (result: string | undefined): string | null | undefined => {
+  if (result === undefined) {
+    return undefined;
+  }
+  return result.length > 0 ? truncate(result) : null;
+};
+
+const applyAcpTool = (transcript: Transcript, event: AgentWireEvent): Transcript => {
+  const lines = [...transcript.lines];
+  const index = lines.findIndex((line) => line.kind === "tool" && line.callId === event.callId);
+  const result = toPatchedResult(event.result);
+  if (index >= 0) {
+    const open = lines[index];
+    if (open.kind !== "tool") {
+      return transcript;
+    }
+    lines[index] = {
+      ...open,
+      name: event.tool ?? open.name,
+      args: truncate(event.text ?? ""),
+      result: result === undefined ? open.result : result,
+      output: event.output ?? open.output,
+      image: event.image ? event.image : open.image,
+      state: acpToolState(event.status),
+    };
+    return { ...transcript, lines };
+  }
+  return push(transcript, lines, (id) => ({
+    id,
+    kind: "tool",
+    callId: event.callId,
+    name: event.tool ?? "tool",
+    args: truncate(event.text ?? ""),
+    result: result === undefined ? null : result,
+    output: event.output ?? null,
+    image: event.image ?? null,
+    state: acpToolState(event.status),
+  }));
+};
 
 export function applyWireEvent(
   transcript: Transcript,
@@ -97,6 +147,9 @@ export function applyWireEvent(
       }));
     }
     case "tool": {
+      if (event.callId) {
+        return applyAcpTool(transcript, event);
+      }
       const lines = [...transcript.lines];
       let openIndex = -1;
       for (let index = lines.length - 1; index >= 0; index--) {
@@ -125,6 +178,7 @@ export function applyWireEvent(
         name: event.tool ?? "tool",
         args: truncate(text),
         result: null,
+        output: null,
         image: null,
         state: "running",
       }));

@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -14,7 +12,6 @@ namespace airimayor.Host
     {
         public bool Success;
         public string Text;       // JSON or deterministic plain-text tool result
-        public string ImagePath;  // camera screenshot on disk; map images are not written here
         public byte[] ImagePng;    // PNG bytes for the model, map or screenshot alike
         public byte[] PreviewBytes; // UI-only JPEG thumbnail for the chat window
     }
@@ -76,17 +73,12 @@ namespace airimayor.Host
             }
             if (string.Equals(tool.Response, "png", StringComparison.Ordinal))
             {
-                bool map = string.Equals(tool.Name, "map_image", StringComparison.Ordinal);
-                string path = map ? null : SaveScreenshot(response.Body);
                 return new ToolInvocationResult
                 {
                     Success = true,
-                    ImagePath = path,
                     ImagePng = response.Body,
                     PreviewBytes = response.Preview,
-                    Text = map
-                        ? "{}"
-                        : "{\"saved\":\"" + JsonEncodedText.Encode(path).ToString() + "\"}",
+                    Text = "{}",
                 };
             }
 
@@ -135,16 +127,6 @@ namespace airimayor.Host
                 }
             }
             return Error(string.IsNullOrWhiteSpace(body) ? "bridge request failed" : body);
-        }
-
-        private static string SaveScreenshot(byte[] png)
-        {
-            ModPaths.EnsureDirectories();
-            string path = Path.Combine(
-                ModPaths.ScreenshotsDirectory,
-                "shot-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture) + ".png");
-            File.WriteAllBytes(path, png);
-            return path;
         }
 
         private static Dictionary<string, string> BuildQuery(ToolDefinition tool, string argumentsJson)

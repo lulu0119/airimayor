@@ -16,4 +16,5 @@
       "mod.json": ["../mod.json"]
     }
   },
+  "exclude": ["src/**/*.test.ts"]
 } 

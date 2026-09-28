@@ -54,6 +54,9 @@ export interface AgentWireEvent {
   tool?: string;
   status?: string;
   image?: string;
+  callId?: string;
+  result?: string;
+  output?: string;
 }
 
 export type ToolRowState = "running" | "done" | "error" | "interrupted";
@@ -67,7 +70,9 @@ export type ChatLine =
       name: string;
       args: string;
       result: string | null;
+      output: string | null;
       image: string | null;
       state: ToolRowState;
+      callId?: string;
     }
   | { id: number; kind: "error"; text: string };
