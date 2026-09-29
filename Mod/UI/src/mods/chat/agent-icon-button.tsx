@@ -1,5 +1,5 @@
 import { Button, Tooltip } from "cs2/ui";
-import airi from "images/airi-icon.svg";
+import airi from "images/airimayor-icon.svg";
 import { togglePanel, usePanelOpen } from "./panel-visibility";
 import { useChatText } from "./locale";
 import styles from "./chat.module.scss";
