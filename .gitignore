@@ -2,6 +2,8 @@ node_modules/
 dist/
 bin/
 obj/
+.venv/
+notebooks/data/
 .DS_Store
 *.log
 Mod/UI/node_modules/

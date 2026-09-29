@@ -1,0 +1,17 @@
+[project]
+name = "street-form-similarity"
+version = "0.1.0"
+description = "Compare real cities by street-form indicators and project a new city into that plane."
+requires-python = ">=3.12"
+dependencies = [
+    "ipykernel",
+    "jupyterlab",
+    "matplotlib",
+    "osmnx",
+    "pandas",
+    "plotly>=7.1.0",
+    "scikit-learn",
+]
+
+[tool.uv]
+package = false
