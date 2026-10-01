@@ -13,10 +13,24 @@ namespace airimayor.Host
     /// </summary>
     internal sealed class Cs2AgentTools : IAgentTools
     {
-        private static readonly HashSet<string> s_DevelopmentTools =
+        private static readonly HashSet<string> s_Construction =
             new HashSet<string>(StringComparer.Ordinal)
             {
-                "replace_road_type", "debug_zone_blocks", "save_game",
+                "place_building",
+                "build_network",
+                "zone",
+                "set_road_features",
+                "replace_road_type",
+                "expand_operational_area",
+                "set_facility_upgrade",
+                "add_transit_line",
+                "remove_transit_line",
+            };
+
+        private static readonly HashSet<string> s_Treasury =
+            new HashSet<string>(StringComparer.Ordinal)
+            {
+                "set_budget", "set_policy", "buy_tiles",
             };
 
         private static readonly HashSet<string> s_VisionTools =
@@ -50,12 +64,21 @@ namespace airimayor.Host
             CancellationToken cancellationToken)
         {
             ToolDefinition tool = ToolCatalog.Find(name);
-            if (tool == null)
+            if (tool == null || !IsAllowed(name, Setting.StaticVisionTools))
             {
                 return new AgentToolResult
                 {
                     Success = false,
                     Text = JsonSerializer.Serialize(new { error = "unknown tool: " + name }),
+                };
+            }
+            if (string.Equals(name, "panel", StringComparison.Ordinal))
+            {
+                PanelResult panel = await PanelCommand.RunAsync(argumentsJson, cancellationToken);
+                return new AgentToolResult
+                {
+                    Success = panel.Ok,
+                    Text = panel.Text,
                 };
             }
             ToolInvocationResult invoked = await AgentToolBridge.InvokeAsync(
@@ -86,20 +109,43 @@ namespace airimayor.Host
 
         private static bool IsAllowed(string name, bool visionAvailable)
         {
+            if (s_Construction.Contains(name))
+            {
+                return Setting.StaticAllowConstruction;
+            }
+            if (s_Treasury.Contains(name))
+            {
+                return Setting.StaticAllowTreasury;
+            }
             if (!visionAvailable && s_VisionTools.Contains(name))
             {
                 return false;
             }
-            if (s_DevelopmentTools.Contains(name))
+            if (name == "purchase_development_node")
             {
-                return Setting.StaticEnableDevelopmentTools;
+                return Setting.StaticAllowProgressionPurchases;
             }
-            if (name == "purchase_development_node" &&
-                !Setting.StaticAllowProgressionPurchases)
+            if (name == "set_simulation")
             {
-                return false;
+                return Setting.StaticAllowClock;
             }
-            return name != "demolish" || Setting.StaticAllowDemolition;
+            if (name == "demolish")
+            {
+                return Setting.StaticAllowDemolition;
+            }
+            if (name == "save_game")
+            {
+                return Setting.StaticAllowSave;
+            }
+            if (name == "debug_zone_blocks")
+            {
+                return Setting.StaticAllowDiagnostics;
+            }
+            if (name == "panel")
+            {
+                return Setting.StaticAllowPanel;
+            }
+            return true;
         }
     }
 }

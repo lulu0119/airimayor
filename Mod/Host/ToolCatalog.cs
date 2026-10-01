@@ -70,20 +70,6 @@ namespace airimayor.Host
 
         private static void RefreshOverride()
         {
-            // Hot-reload is a development path: without the dev gate the
-            // embedded catalog is authoritative and no disk check runs.
-            if (!Setting.StaticEnableDevelopmentTools)
-            {
-                if (s_UsingOverride)
-                {
-                    s_Tools = LoadEmbedded();
-                    s_UsingOverride = false;
-                    s_OverrideWriteUtc = default;
-                    s_OverrideLength = -1;
-                    AgentTimeline.Info("catalog", "development tools off; restored embedded catalog");
-                }
-                return;
-            }
             string path = ModPaths.HotReloadToolCatalogFile;
             if (!File.Exists(path))
             {

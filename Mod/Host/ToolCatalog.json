@@ -4,7 +4,7 @@
   "tools": [
     {
       "name": "get_progression",
-      "description": "Read milestone/XP progress, unspent Development Points, purchased node names, and the current Development Tree frontier. The default omits distant locked branches; pass service to inspect one service tree. Use this after a milestone or when an advanced service is locked.",
+      "description": "Read milestone/XP progress, unspent Development Points, purchased node names, and the current Development Tree frontier. The default shows the frontier; pass service to inspect one service tree in full. Use this after a milestone or when an advanced service is locked.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -26,7 +26,7 @@
     },
     {
       "name": "purchase_development_node",
-      "description": "Purchase one eligible Development Tree node by name from get_progression. Spends legitimately earned points and unlocks the node; leaves state unchanged when points, service availability or prerequisites are insufficient.",
+      "description": "Purchase one eligible Development Tree node by name from get_progression, spending legitimately earned points to unlock it. Eligibility needs points, service availability and prerequisites.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -50,7 +50,7 @@
     },
     {
       "name": "get_demand",
-      "description": "Residential (low/medium/high density), commercial, industrial, office and storage demand of the loaded city. buildingDemand uses the game's internal 0-255 scale (NOT 0-100); companyDemand counters can exceed 255. Includes the demand factors that explain WHY demand is high or low (e.g. Taxes, Unemployment, EmptyZones, Homelessness). Positive factor values push demand up, negative values push it down.",
+      "description": "Residential (low/medium/high density), commercial, industrial, office and storage demand of the loaded city. buildingDemand uses the game's internal 0-255 scale; companyDemand counters can exceed 255. Includes the demand factors that explain WHY demand is high or low (e.g. Taxes, Unemployment, EmptyZones, Homelessness). Positive factor values push demand up, negative values push it down.",
       "parameters": {
         "type": "object",
         "properties": {},
@@ -74,7 +74,7 @@
     },
     {
       "name": "set_simulation",
-      "description": "Advance the city by in-game time, or pause it. action=advance runs 1-8 in-game hours (default 1, about 20-30 real seconds per hour) at high speed, then restores the previous speed or pause. action=pause pauses immediately and returns; if the city is already paused it stays paused, and the player can resume. Advance returns hours/completed/targetReached/note. Read the city yourself afterward: get_demand, list_notifications, get_services, get_budget. Advance when the next decision needs simulated time; otherwise keep writing. Finish a related group of writes, then one advance (1-2 hours) and one round of re-reads. Do not advance after every step. Never poll.",
+      "description": "Advance the city by in-game time, or pause it. action=advance runs 1-8 in-game hours (default 1, about 20-30 real seconds per hour) at high speed, then restores the previous speed or pause. action=pause pauses immediately and returns; if the city is already paused it stays paused, and the player can resume. Advance returns hours/completed/targetReached/note. Read the city yourself afterward: get_demand, list_notifications, get_services, get_budget. Advance when the next decision needs simulated time; otherwise keep writing. Finish a related group of writes, then one advance (1-2 hours) and one round of re-reads.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -108,7 +108,7 @@
     },
     {
       "name": "debug_zone_blocks",
-      "description": "Diagnostic (use only when asked): dump zone prefab metadata and per-block cell state around x,z.",
+      "description": "Dump zone prefab metadata and per-block cell state around x,z for troubleshooting zone growth; use only when asked.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -268,7 +268,7 @@
     },
     {
       "name": "get_services",
-      "description": "Electricity (production/consumption/battery/trade), water & sewage (capacity/consumption/trade), and daily garbage production of the loaded city. Garbage production is not a shortage; use list_notifications for actual GarbagePilingUp warnings. Compare electricity/water/sewage supply against consumption.",
+      "description": "Electricity (production/consumption/battery/trade), water & sewage (capacity/consumption/trade), and daily garbage production of the loaded city. Garbage production is the daily amount generated; actual GarbagePilingUp warnings live in list_notifications. Compare electricity/water/sewage supply against consumption.",
       "parameters": {
         "type": "object",
         "properties": {},
@@ -292,7 +292,7 @@
     },
     {
       "name": "get_statistics",
-      "description": "Time series of a city statistic (sampled 32x per in-game day). Useful types: Population, Money, Income, Expense, HouseholdCount, WorkerCount, Unemployed, TouristCount, CrimeRate, BirthRate, DeathRate, CitizensMovedIn, CitizensMovedAway, ResidentialTaxableIncome, TrafficFlow-style passenger counts (PassengerCountBus/Subway/Train...). An invalid type returns the full list of valid names.",
+      "description": "Time series of a city statistic (sampled 32x per in-game day). Useful types: Population, Money, Income, Expense, HouseholdCount, WorkerCount, Unemployed, TouristCount, CrimeRate, BirthRate, DeathRate, CitizensMovedIn, CitizensMovedAway, ResidentialTaxableIncome, TrafficFlow-style passenger counts (PassengerCountBus/Subway/Train...). Pass one of those types; any other value returns the full list of valid names.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -407,7 +407,7 @@
     },
     {
       "name": "set_policy",
-      "description": "Activate or deactivate a city-wide policy by its internal name (from list_policies). Slider policies additionally accept an adjustment value. Locked policies cannot be set.",
+      "description": "Activate or deactivate a city-wide policy by its internal name (from list_policies). Slider policies additionally accept an adjustment value; the policy needs to be unlocked.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -460,7 +460,7 @@
     },
     {
       "name": "list_prefabs",
-      "description": "Search game prefabs by name and/or typed role. Requires role and/or query. Use role for infrastructure/services; query for name substrings like 'Highway' or 'School'. Check 'locked' for milestone blocks. Road rows also return road{roadClass, speedKmh, carLanes, highwayRules, zonable}: roadClass is the game's road category (highway = Highways, not a width threshold), speedKmh is the speed limit, carLanes counts car lanes. Default limit 16, max 64.",
+      "description": "Search game prefabs by name and/or typed role. Requires role and/or query. Use role for infrastructure/services; query for name substrings like 'Highway' or 'School'. role=transport includes stations, depots, and roadside stops. role=post includes the post office and mailboxes. category=object lists other roadside objects such as a bicycle rack. Check 'locked' for milestone blocks. Road rows also return road{roadClass, speedKmh, carLanes, highwayRules, zonable}: roadClass is the game's road category (highway = the Highways category), speedKmh is the speed limit, carLanes counts car lanes. Default limit 16, max 64.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -470,9 +470,10 @@
               "building",
               "road",
               "net",
-              "tree"
+              "tree",
+              "object"
             ],
-            "description": "Prefab category (default building); 'net' = all networks incl. train tracks, pipes, power lines, pedestrian paths"
+            "description": "Prefab category (default building); 'net' = all networks incl. train tracks, pipes, power lines, pedestrian paths; 'object' = roadside objects such as stops, mailboxes, and bicycle racks"
           },
           "query": {
             "type": "string",
@@ -530,7 +531,7 @@
     },
     {
       "name": "inspect_operational_area",
-      "description": "Inspect building-owned operational polygons such as landfill storage or specialized-industry extraction areas. Returns polygon nodes, surface area, current storage/extraction state and capacity/resource requirements. Use index+version from list_buildings. This is read-only.",
+      "description": "Inspect building-owned operational polygons such as landfill storage or specialized-industry extraction areas. Returns polygon nodes, surface area, current storage/extraction state and capacity/resource requirements. Use index+version from list_buildings.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -563,7 +564,7 @@
     },
     {
       "name": "expand_operational_area",
-      "description": "Expand one owner-linked landfill storage or specialized-industry extractor area to a requested total surface. Keeps the building edge, grows a near-circle around obstacles, and rejects candidates that cross unowned land, buildings or roads. Extractors rank clear candidates by resource coverage; fertile land, ore, oil and fish use the natural-resource map while forest scans productive trees. Call inspect_operational_area afterward to verify production.",
+      "description": "Expand one owner-linked landfill storage or specialized-industry extractor area to a requested total surface. Keeps the building edge, grows a near-circle around obstacles, and stays on owned land clear of buildings and roads. Extractors rank clear candidates by resource coverage; fertile land, ore, oil and fish use the natural-resource map while forest scans productive trees. Call inspect_operational_area afterward to verify production.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -691,7 +692,7 @@
     },
     {
       "name": "list_transit_stops",
-      "description": "List existing transit stops (station sub-stops and roadside stops) with type, position and how many lines already use them. Read-only. Use these entity ids with add_transit_line. Do not use place_building to create a stop.",
+      "description": "List existing transit stops (station sub-stops and roadside stops) with type, position and how many lines already use them. Read-only. Use these entity ids with add_transit_line. A new roadside stop is place_building.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -839,7 +840,7 @@
     },
     {
       "name": "remove_transit_line",
-      "description": "Delete one transit line from list_transit_lines. Does not demolish stops or stations.",
+      "description": "Delete one transit line from list_transit_lines; stops and stations remain.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -872,7 +873,7 @@
     },
     {
       "name": "place_building",
-      "description": "Place one standalone prefab at x/z. For every site you choose, include radius and omit rotation so the tool can find a nearby legal pose (clearance, road frontage when the prefab needs a road, shoreline snap when it needs water). Omit radius or set rotation only when the player requires that exact pose. If exact placement fails, retry with a larger radius and no rotation. Off-road water/sewage/low-voltage nodes receive a matching pipe or cable (never High-voltage Line or High-voltage Ground Cable); road-fronted nodes use the networks on that road. Do NOT use this for regular zoned residential/commercial/industrial/office buildings - those grow from zone.",
+      "description": "Place one standalone prefab at x/z. For every site you choose, include radius and omit rotation so the tool can find a nearby legal pose (clearance, road frontage when the prefab needs a road, shoreline snap when it needs water). A roadside object (stop, mailbox, bicycle rack) snaps to the near side of a road or track inside the radius. Omit radius or set rotation for a player-selected exact pose. If exact placement fails, retry with a larger radius and no rotation. Off-road water/sewage/low-voltage nodes receive a matching pipe or cable; high voltage is hand-built. Road-fronted nodes use the networks on that road. Do not use this for regular zoned residential/commercial/industrial/office buildings; those grow from zone.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -892,7 +893,7 @@
             "type": "number",
             "minimum": 8,
             "maximum": 300,
-            "description": "Nearby search radius in meters. Required for sites you choose; omit only for a player-selected exact pose. Increase it after a failed exact or narrow placement."
+            "description": "Nearby search radius in meters for sites you choose; omit for a player-selected exact pose. Increase it after a failed exact or narrow placement."
           },
           "rotation": {
             "type": "number",
@@ -932,7 +933,7 @@
     },
     {
       "name": "build_network",
-      "description": "Build a road or utility-network connection between two world coordinates. Omit shape for one straight segment. shape=simple is one ramp curve that leaves and joins along the roads at the two ends (departure and arrival, each 0..1 of the end-to-end distance). shape=complex is two segments with a smooth joint; mx and mz move that joint sideways. shape=parallel copies the road between the two given points as a frontage road: each end snaps to the nearest road, offset is required (-80..80 m, positive is to the right walking from start to end) and raise is optional meters up or down (at most 64 road edges per call). A field that does not belong to the chosen shape is rejected. Use SHORT segments (50-250m) on OWNED map tiles. An end that hits a compatible node or road edge joins it; a miss starts a new node. The result reports shape, lengthM, steepestGrade, segmentCount and joins. Small streets may join a highway where native validation allows, but prefer a ramp/collector/arterial path and verify flowPercent stays at 70 or above via list_networks. For ROAD prefabs, omitting mode selects ground: the route is sampled at roughly 4m or finer intervals for water and local grade, rejecting detected water crossings or grades above 10% (or a stricter prefab limit) instead of silently becoming a bridge or tunnel. Use mode=grade-separated only for an intentional bridge, elevated road or tunnel; provide both e1 and e2, with at least one nonzero. On a grade-separated road, profile=ease keeps the ends flat (easeStart and easeEnd, each 0..0.5) and profile=arch adds a crest (archHeight, archAt). Do not pass mode, profile or parallel for pipes, cables or other non-road networks. Pipes and Ground Cables remain UNDERGROUND by default (auto -10m buried), so omit e1/e2 to accept that burial. If the call fails, change the route or use shorter segments; do NOT repeat the same coordinates.",
+      "description": "Build a road or utility-network connection between two world coordinates. Omit shape for one straight segment. shape=simple is one ramp curve that leaves and joins along the roads at the two ends (departure and arrival, each 0..1 of the end-to-end distance). shape=complex is two segments with a smooth joint; mx and mz move that joint sideways. shape=parallel copies the road between the two given points as a frontage road: each end snaps to the nearest road, offset is required (-80..80 m, positive is to the right walking from start to end) and raise is optional meters up or down (at most 64 road edges per call). Each shape uses only its own fields. Use SHORT segments (50-250m) on OWNED map tiles. An end that hits a compatible node or road edge joins it; a miss starts a new node. The result reports shape, lengthM, steepestGrade, segmentCount and joins. Small streets may join a highway where native validation allows; prefer a ramp/collector/arterial path and verify flowPercent stays at 70 or above via list_networks. For ROAD prefabs, omitting mode selects ground: the route is sampled at roughly 4m or finer intervals for water and local grade, keeping the route on the ground: detected water crossings and grades above 10% (or a stricter prefab limit) call for mode=grade-separated. Use mode=grade-separated for an intentional bridge, elevated road or tunnel; provide both e1 and e2, with at least one nonzero. On a grade-separated road, profile=ease keeps the ends flat (easeStart and easeEnd, each 0..0.5) and profile=arch adds a crest (archHeight, archAt). Pipes, cables and other non-road networks take shape only. Pipes and Ground Cables remain UNDERGROUND by default (auto -10m buried), so omit e1/e2 to accept that burial. If the call fails, change the route or use shorter segments; do not repeat the same coordinates.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1037,19 +1038,19 @@
               "ground",
               "grade-separated"
             ],
-            "description": "Road prefabs only. Omit to select ground, which samples at roughly 4m or finer intervals and rejects detected water crossings or local grades above 10% (or a stricter prefab limit). Use grade-separated only for an intentional bridge/elevated/tunnel segment; provide both e1 and e2, with at least one nonzero. Never pass mode for utility-network prefabs."
+            "description": "Road prefabs only. Omit to select ground sampling at roughly 4m or finer intervals, keeping the route clear of detected water crossings and local grades above 10% (or a stricter prefab limit). Use grade-separated for an intentional bridge/elevated/tunnel segment; provide both e1 and e2, with at least one nonzero."
           },
           "e1": {
             "type": "number",
             "minimum": -30,
             "maximum": 60,
-            "description": "Elevation at start in meters relative to terrain (-30..60). Required together with e2 for a grade-separated road, where at least one endpoint must be nonzero; positive values are elevated and negative values are underground. Not an entity id. Omit for a ground road or automatic utility burial."
+            "description": "Elevation at start in meters relative to terrain (-30..60). Required together with e2 for a grade-separated road, where at least one endpoint must be nonzero; positive values are elevated and negative values are underground. Omit for a ground road or automatic utility burial."
           },
           "e2": {
             "type": "number",
             "minimum": -30,
             "maximum": 60,
-            "description": "Elevation at end in meters relative to terrain (-30..60). Required together with e1 for a grade-separated road, where at least one endpoint must be nonzero. Not an entity id. Omit for a ground road or automatic utility burial."
+            "description": "Elevation at end in meters relative to terrain (-30..60). Required together with e1 for a grade-separated road, where at least one endpoint must be nonzero. Omit for a ground road or automatic utility burial."
           }
         },
         "required": [
@@ -1253,7 +1254,7 @@
     },
     {
       "name": "zone",
-      "description": "Paint zoning inside one rotated rectangle along straight road frontage: choose a center, width, depth and rotation that cover fresh zonable strips without touching occupied neighboring blocks. Width follows the rectangle's local X axis; depth follows local Z; rotation is clockwise in world-view degrees. Generic residential/commercial names automatically resolve to the current map theme. Buildings grow while the simulation runs.",
+      "description": "Paint zoning inside one rotated rectangle along straight road frontage: choose a center, width, depth and rotation that cover fresh zonable strips clear of occupied neighboring blocks. Width follows the rectangle's local X axis; depth follows local Z; rotation is clockwise in world-view degrees. Generic residential/commercial names automatically resolve to the current map theme. Buildings grow while the simulation runs.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1325,7 +1326,7 @@
     },
     {
       "name": "set_road_features",
-      "description": "Set composition features on an existing road segment from list_networks: grass, trees, wideSidewalk, soundBarrier, parking, lighting, medianGrass, medianTrees. Does NOT change road prefab, width or lane layout.",
+      "description": "Set composition features on an existing road segment from list_networks: grass, trees, wideSidewalk, soundBarrier, parking, lighting, medianGrass, medianTrees. The road prefab itself changes with replace_road_type.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1380,17 +1381,25 @@
     },
     {
       "name": "replace_road_type",
-      "description": "Experimental (use only when asked): replace one simple standalone road edge with a different road prefab. Road-to-road only. Rejects intersections, chain segments, owned/fixed edges and locked target prefabs. The original edge id may change; refresh list_networks after success.",
+      "description": "Replace the road between two world points with another road prefab. Each end snaps to the nearest road, then the call follows that road: one edge, or a chain of at most 64. The two points must lie on one connected road. The game clears buildings that grow on the road and names any building needing attention. The new prefab must exist, be unlocked, and be one the game allows as a replacement. Refresh list_networks after success.",
       "parameters": {
         "type": "object",
         "properties": {
-          "index": {
-            "type": "integer",
-            "description": "Road segment entity index from list_networks"
+          "x1": {
+            "type": "number",
+            "description": "Start X (meters)"
           },
-          "version": {
-            "type": "integer",
-            "description": "Road segment entity version from list_networks"
+          "z1": {
+            "type": "number",
+            "description": "Start Z (meters)"
+          },
+          "x2": {
+            "type": "number",
+            "description": "End X (meters)"
+          },
+          "z2": {
+            "type": "number",
+            "description": "End Z (meters)"
           },
           "prefab": {
             "type": "string",
@@ -1398,20 +1407,30 @@
           }
         },
         "required": [
-          "index",
-          "version",
+          "x1",
+          "z1",
+          "x2",
+          "z2",
           "prefab"
         ]
       },
       "route": "/build/road/replace",
       "query": [
         {
-          "key": "index",
-          "arg": "index"
+          "key": "x1",
+          "arg": "x1"
         },
         {
-          "key": "version",
-          "arg": "version"
+          "key": "z1",
+          "arg": "z1"
+        },
+        {
+          "key": "x2",
+          "arg": "x2"
+        },
+        {
+          "key": "z2",
+          "arg": "z2"
         },
         {
           "key": "prefab",
@@ -1422,7 +1441,7 @@
     },
     {
       "name": "list_networks",
-      "description": "Inventory of typed network edges for one required kind (road, water, sewage, low_voltage). Not topology: use inspect_network_topology for isolation QA. Shared fields: entity, prefab, start, end, length; distanceM when x/z given. Road also returns widthM, road{roadClass, speedKmh, carLanes, highwayRules, zonable} and traffic{volumeIndex, congestionIndex, activeBottlenecks, flowPercent}. Keep flowPercent at 70 or above; roadClass is the game's road category (highway = Highways, not a width threshold). Water and sewage are geometry only. Low-voltage also returns electricity{flow, capacity, bottleneck}. Sort: distance (with x/z); traffic_volume|congestion for road; load for low_voltage. Default limit 16, max 64.",
+      "description": "Inventory of typed network edges for one required kind (road, water, sewage, low_voltage). Isolation QA lives in inspect_network_topology. Shared fields: entity, prefab, start, end, length; distanceM when x/z given. Road also returns widthM, road{roadClass, speedKmh, carLanes, highwayRules, zonable} and traffic{volumeIndex, congestionIndex, activeBottlenecks, flowPercent}. Keep flowPercent at 70 or above; roadClass is the game's road category (highway = the Highways category). Water and sewage are geometry only. Low-voltage also returns electricity{flow, capacity, bottleneck}. Sort: distance (with x/z); traffic_volume|congestion for road; load for low_voltage. Default limit 16, max 64.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1532,7 +1551,7 @@
           },
           "include_dead_ends": {
             "type": "boolean",
-            "description": "If true, also list degree-1 dead ends as facts, not as QA errors"
+            "description": "If true, also list degree-1 dead ends as facts"
           }
         },
         "required": [
@@ -1677,7 +1696,7 @@
     },
     {
       "name": "map_text",
-      "description": "Compact map text for a range. Returns a local coordinate frame, elevation/slope/water/owned/buildable summaries, connected regions, road nodes/edges, directional sectors, and omitted metadata. Road lines carry roadClass/lanes/speedKmh/highwayRules/zonable; roadClass is the game's road category (highway = Highways, not a width threshold). Use before choosing an expansion direction or placing shoreline/terrain-sensitive infrastructure. Coordinates in region and network geometry are quantized units relative to frame.origin_world; multiply by quantum_m to recover meter offsets. Spatial evidence, not construction approval. Requires x+z+radius or xMin+zMin+xMax+zMax bounds.",
+      "description": "Compact map text for a range. Returns a local coordinate frame, elevation/slope/water/owned/buildable summaries, connected regions, road nodes/edges, directional sectors, and omitted metadata. Road lines carry roadClass/lanes/speedKmh/highwayRules/zonable; roadClass is the game's road category (highway = the Highways category). Use before choosing an expansion direction or placing shoreline/terrain-sensitive infrastructure. Coordinates in region and network geometry are quantized units relative to frame.origin_world; multiply by quantum_m to recover meter offsets. Spatial evidence for planning. Give x+z+radius or xMin+zMin+xMax+zMax bounds.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1757,7 +1776,7 @@
     },
     {
       "name": "probe_layer",
-      "description": "Compact cell-map probe (landValue, pollution, groundWater, …) for a map range: value min/max/mean plus fixed 8x8 samples. Requires x+z+radius or xMin+zMin+xMax+zMax. If the range covers more than 128 cells, returns truncated=true with a warning and still only 8x8 samples. Never returns full arrays.",
+      "description": "Compact cell-map probe (landValue, pollution, groundWater, …) for a map range: value min/max/mean plus fixed 8x8 samples. Requires x+z+radius or xMin+zMin+xMax+zMax. If the range covers more than 128 cells, returns truncated=true with a warning and still only 8x8 samples.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1855,7 +1874,7 @@
     },
     {
       "name": "get_zone_counts",
-      "description": "Aggregated summary of painted zones (counts only, never per-cell rows): cells per zone type with occupied/empty split, whole-city or within an optional x/z/radius. Empty zoned cells are where buildings will grow. Whole-city counts are cheap and safe to call.",
+      "description": "Aggregated summary of painted zones (counts only): cells per zone type with occupied/empty split, whole-city or within an optional x/z/radius. Empty zoned cells are where buildings will grow. Whole-city counts are cheap and safe to call.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -2009,7 +2028,7 @@
     },
     {
       "name": "save_game",
-      "description": "Diagnostic (use only when asked): trigger a manual save when the player explicitly requires one. Do not use it as an ordinary safety step. The default name is timestamped.",
+      "description": "Trigger a manual save at the player's request. The default name is timestamped.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -2031,7 +2050,7 @@
     },
     {
       "name": "list_tiles",
-      "description": "List map tiles. filter=owned (default) or all (must be explicit); also unowned|available. Not item-capped. Tiles are 623m squares on a 23x23 grid.",
+      "description": "List map tiles. filter=owned (default), all, unowned, or available; pass filter=all to list every tile. Every matching tile is returned. Tiles are 623m squares on a 23x23 grid.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -2096,6 +2115,53 @@
         }
       ],
       "response": "json"
+    },
+    {
+      "name": "panel",
+      "description": "Operate on-screen panels: snapshot returns the pressable controls as a numbered text list; click presses one by its number; fill writes a text box or slider by its number; press sends one key such as Escape. Snapshot again when the screen changes. Covers city settings, the mod list, and saves, including deleting a save. It does not build in the city, and it will not press Send or Stop in this chat.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["snapshot", "click", "fill", "press"],
+            "description": "snapshot, click, fill, or press"
+          },
+          "ref": {
+            "type": "string",
+            "description": "A number from the latest snapshot, such as e1. Required for click and fill."
+          },
+          "text": {
+            "type": "string",
+            "description": "Text or slider value for fill."
+          },
+          "key": {
+            "type": "string",
+            "description": "One key for press, such as Escape."
+          }
+        },
+        "required": ["action"]
+      },
+      "route": "/panel",
+      "query": [
+        {
+          "key": "action",
+          "arg": "action"
+        },
+        {
+          "key": "ref",
+          "arg": "ref"
+        },
+        {
+          "key": "text",
+          "arg": "text"
+        },
+        {
+          "key": "key",
+          "arg": "key"
+        }
+      ],
+      "response": "text"
     }
   ]
 }

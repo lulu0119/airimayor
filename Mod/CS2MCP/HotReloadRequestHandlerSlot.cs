@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Reflection;
-using airimayor;
 using airimayor.Host;
 
 namespace CS2MCP
@@ -44,21 +43,6 @@ namespace CS2MCP
 
         private void TryReload()
         {
-            // Hot-reload is a development path; players never pay the disk
-            // check. The check itself is throttled to turn boundaries in
-            // practice (one tool round issues at most one check per 2s).
-            if (!Setting.StaticEnableDevelopmentTools)
-            {
-                if (m_OverrideActive)
-                {
-                    m_Current = m_Builtin;
-                    m_OverrideActive = false;
-                    m_LastWriteUtc = default;
-                    m_LastLength = -1;
-                    AgentTimeline.Info("hot-reload", "development tools off; restored built-in handlers");
-                }
-                return;
-            }
             DateTime now = DateTime.UtcNow;
             if (now - m_LastCheckUtc < ReloadCheckInterval)
             {

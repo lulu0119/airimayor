@@ -33,6 +33,7 @@ namespace airimayor.Host
         {
             new AgentChoice(BuiltIn, "Built-in", "内置", null, null),
             new AgentChoice("opencode", "OpenCode", "OpenCode", "opencode", "acp"),
+            new AgentChoice("codex", "Codex", "Codex", "codex-acp", null),
         };
 
         public static AgentChoice Find(string id)

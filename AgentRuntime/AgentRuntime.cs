@@ -41,6 +41,9 @@ namespace AgentRuntime
         /// <summary>UI-only image preview (data URI) for image tool results.</summary>
         public string Image;
 
+        /// <summary>JSON array of pointed places on a player message. Absent otherwise.</summary>
+        public string Places;
+
         public string ToJsonString()
         {
             var obj = new JsonObject
@@ -69,6 +72,14 @@ namespace AgentRuntime
             {
                 obj["image"] = Image;
             }
+            if (!string.IsNullOrEmpty(Places))
+            {
+                JsonNode places = JsonNode.Parse(Places);
+                if (places != null)
+                {
+                    obj["places"] = places;
+                }
+            }
             return obj.ToJsonString();
         }
     }
@@ -77,6 +88,14 @@ namespace AgentRuntime
     {
         public string Text;
         public bool Report;
+        public string DisplayText;
+        public string PlacesJson;
+    }
+
+    internal sealed class PlaceNote
+    {
+        public string DisplayText;
+        public string PlacesJson;
     }
 
     /// <summary>
@@ -116,6 +135,8 @@ or timeline notes. Keep each list item short and concrete.";
 
         private readonly Channel<AgentInput> m_Pending = Channel.CreateUnbounded<AgentInput>();
         private readonly List<ChatMessage> m_History = new List<ChatMessage>();
+        private readonly Dictionary<ChatMessage, PlaceNote> m_PlaceNotes =
+            new Dictionary<ChatMessage, PlaceNote>();
         private readonly object m_Lock = new object();
         private readonly AgentObservability m_Observability;
         private readonly AgentToolSurface m_ToolSurface;
@@ -202,18 +223,29 @@ or timeline notes. Keep each list item short and concrete.";
         /// </summary>
         public void Prompt(string text)
         {
+            Prompt(text, null, null);
+        }
+
+        public void Prompt(string modelText, string displayText, string placesJson)
+        {
             if (m_Disposed)
             {
                 throw new ObjectDisposedException(nameof(AgentRuntime));
             }
-            string safe = text ?? "";
+            string safe = modelText ?? "";
+            string shown = displayText ?? safe;
             bool thinking = Status == AgentStatus.Thinking;
-            m_Pending.Writer.TryWrite(new AgentInput { Text = safe });
+            m_Pending.Writer.TryWrite(new AgentInput
+            {
+                Text = safe,
+                DisplayText = displayText,
+                PlacesJson = placesJson,
+            });
             if (thinking)
             {
                 CancelGeneration();
             }
-            Emit(new SessionUpdate { Kind = "user", Text = safe });
+            Emit(new SessionUpdate { Kind = "user", Text = shown, Places = placesJson });
             EnsureLoop();
         }
 
@@ -243,6 +275,7 @@ or timeline notes. Keep each list item short and concrete.";
         {
             lock (m_Lock)
             {
+                PrunePlaceNotes();
                 // Tool results only carry CallId; resolve names from prior calls.
                 var callNames = new Dictionary<string, string>(StringComparer.Ordinal);
                 foreach (ChatMessage message in m_History)
@@ -323,6 +356,15 @@ or timeline notes. Keep each list item short and concrete.";
                         ["text"] = text,
                         ["tool"] = tool,
                     };
+                    if (role == "user" && m_PlaceNotes.TryGetValue(message, out PlaceNote note))
+                    {
+                        entry["text"] = note.DisplayText ?? "";
+                        JsonNode places = JsonNode.Parse(note.PlacesJson);
+                        if (places != null)
+                        {
+                            entry["places"] = places;
+                        }
+                    }
                     messages.Add(entry);
                 }
                 AgentModelProfile profile = m_ClientFactory.GetProfile();
@@ -346,6 +388,27 @@ or timeline notes. Keep each list item short and concrete.";
                     ["messages"] = messages,
                 };
                 return state.ToJsonString();
+            }
+        }
+
+        private void PrunePlaceNotes()
+        {
+            if (m_PlaceNotes.Count == 0)
+            {
+                return;
+            }
+            var live = new HashSet<ChatMessage>(m_History);
+            var stale = new List<ChatMessage>();
+            foreach (ChatMessage key in m_PlaceNotes.Keys)
+            {
+                if (!live.Contains(key))
+                {
+                    stale.Add(key);
+                }
+            }
+            for (int i = 0; i < stale.Count; i++)
+            {
+                m_PlaceNotes.Remove(stale[i]);
             }
         }
 
@@ -428,6 +491,14 @@ or timeline notes. Keep each list item short and concrete.";
                     }
                     lock (m_Lock)
                     {
+                        if (!string.IsNullOrEmpty(input.PlacesJson))
+                        {
+                            m_PlaceNotes[message] = new PlaceNote
+                            {
+                                DisplayText = input.DisplayText ?? "",
+                                PlacesJson = input.PlacesJson,
+                            };
+                        }
                         m_History.Add(message);
                     }
                     m_Observability.TurnStart(m_TurnId, input.Text);
@@ -577,13 +648,10 @@ or timeline notes. Keep each list item short and concrete.";
             }
 
             AgentModelProfile profile = m_ClientFactory.GetProfile();
-            var options = new ChatOptions
-            {
-                ModelId = ReadModel().Model,
-                MaxOutputTokens = (int)Math.Min(int.MaxValue, profile.OutputReserveTokens),
-                Tools = m_ToolSurface.Build(profile),
-                ToolMode = ChatToolMode.Auto,
-            };
+            ChatOptions options = ModelRequest.Options(
+                ReadModel().Model,
+                profile,
+                m_ToolSurface.Build(profile));
 
             var updates = new List<ChatResponseUpdate>();
             var pendingDelta = new StringBuilder();
@@ -757,14 +825,10 @@ or timeline notes. Keep each list item short and concrete.";
                 var summaryBuilder = new StringBuilder();
                 await foreach (ChatResponseUpdate update in client.GetStreamingResponseAsync(
                     summaryInput,
-                    new ChatOptions
-                    {
-                        ModelId = ReadModel().Model,
-                        MaxOutputTokens = (int)Math.Min(int.MaxValue, profile.OutputReserveTokens),
-                        Tools = m_ToolSurface.Build(profile),
-                        // Console Go gateway only supports tool_choice=auto; None is rejected (400).
-                        ToolMode = ChatToolMode.Auto,
-                    },
+                    ModelRequest.Options(
+                        ReadModel().Model,
+                        profile,
+                        m_ToolSurface.Build(profile)),
                     cancellationToken))
                 {
                     if (!string.IsNullOrEmpty(update.Text))
@@ -995,39 +1059,19 @@ or timeline notes. Keep each list item short and concrete.";
         {
             var child = new AgentRuntime(
                 m_Tools, m_SystemPrompt, ChildModel, m_LogDirectory, m_ChatClient, m_Warn, enableTasks: false);
-            var done = new TaskCompletionSource<string>();
-            var text = new StringBuilder();
             var relay = new ChildToolRelay();
-            child.Updated += update =>
+            try
             {
-                if (update.Kind == "delta")
-                {
-                    text.Append(update.Text ?? "");
-                }
-                else if (update.Kind == "tool")
-                {
-                    relay.On(this, sessionId, update);
-                }
-                else if (update.Kind == "turn" || update.Kind == "error")
-                {
-                    done.TrySetResult(text.ToString());
-                }
-                else if (update.Kind == "status" && update.Status == AgentStatus.Interrupted)
-                {
-                    done.TrySetCanceled();
-                }
-            };
-            using (cancellationToken.Register(() => child.Cancel()))
+                SessionTurnResult result = await SessionTurn.RunAsync(
+                    child,
+                    message,
+                    update => relay.On(this, sessionId, update),
+                    cancellationToken).ConfigureAwait(false);
+                return result.Reply ?? "";
+            }
+            finally
             {
-                child.Prompt(message);
-                try
-                {
-                    return await done.Task.ConfigureAwait(false);
-                }
-                finally
-                {
-                    child.Dispose();
-                }
+                child.Dispose();
             }
         }
 

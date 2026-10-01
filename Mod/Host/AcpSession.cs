@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -36,6 +37,7 @@ namespace airimayor.Host
         private readonly string m_Continuation;
         private readonly CancellationTokenSource m_Life = new CancellationTokenSource();
         private readonly string m_SessionId;
+        private readonly StringBuilder m_Stderr = new StringBuilder();
         private readonly Dictionary<string, string> m_ChildText =
             new Dictionary<string, string>(StringComparer.Ordinal);
         private readonly HashSet<string> m_OwnedSessions = new HashSet<string>(StringComparer.Ordinal);
@@ -47,6 +49,7 @@ namespace airimayor.Host
         private SessionId m_AcpSessionId;
         private CancellationTokenSource m_Turn;
         private string m_PlanJson = "";
+        private string m_Command = "";
         private string m_McpExecutable;
         private string m_WorkingDirectory;
         private bool m_Disposed;
@@ -82,21 +85,32 @@ namespace airimayor.Host
 
         public void Prompt(string text)
         {
+            Prompt(text, null, null);
+        }
+
+        public void Prompt(string modelText, string displayText, string placesJson)
+        {
             if (m_Disposed)
             {
                 throw new ObjectDisposedException(nameof(AcpSession));
             }
-            string safe = text ?? "";
+            string safe = modelText ?? "";
+            string shown = displayText ?? safe;
             lock (m_Lock)
             {
-                m_Messages.Add(new SnapshotMessage { Role = "user", Text = safe });
+                m_Messages.Add(new SnapshotMessage
+                {
+                    Role = "user",
+                    Text = shown,
+                    Places = placesJson,
+                });
             }
             m_Pending.Writer.TryWrite(safe);
             if (Status == AgentStatus.Thinking || Status == AgentStatus.Working)
             {
                 CancelTurn();
             }
-            Emit(new ChatUpdate { Kind = "user", Text = safe });
+            Emit(new ChatUpdate { Kind = "user", Text = shown, Places = placesJson });
         }
 
         public void Cancel()
@@ -117,12 +131,21 @@ namespace airimayor.Host
                 var messages = new JsonArray();
                 foreach (SnapshotMessage message in m_Messages)
                 {
-                    messages.Add(new JsonObject
+                    var entry = new JsonObject
                     {
                         ["role"] = message.Role,
                         ["text"] = message.Text ?? "",
                         ["tool"] = message.Tool,
-                    });
+                    };
+                    if (!string.IsNullOrEmpty(message.Places))
+                    {
+                        JsonNode places = JsonNode.Parse(message.Places);
+                        if (places != null)
+                        {
+                            entry["places"] = places;
+                        }
+                    }
+                    messages.Add(entry);
                 }
                 var state = new JsonObject
                 {
@@ -290,6 +313,7 @@ namespace airimayor.Host
         {
             try
             {
+                m_Command = command ?? "";
                 if (string.IsNullOrWhiteSpace(mcpExecutable) || !File.Exists(mcpExecutable))
                 {
                     Fail("The city tool server is not installed.");
@@ -324,7 +348,7 @@ namespace airimayor.Host
             {
                 if (!m_Disposed)
                 {
-                    Fail(e.Message);
+                    Fail(FailureText(e));
                 }
             }
         }
@@ -354,9 +378,17 @@ namespace airimayor.Host
             var process = new Process { StartInfo = start, EnableRaisingEvents = true };
             process.ErrorDataReceived += (sender, args) =>
             {
-                if (!string.IsNullOrEmpty(args.Data))
+                if (string.IsNullOrEmpty(args.Data))
                 {
-                    m_Timeline.System("acp", args.Data);
+                    return;
+                }
+                m_Timeline.System("acp", args.Data);
+                lock (m_Stderr)
+                {
+                    if (m_Stderr.Length < 2000)
+                    {
+                        m_Stderr.AppendLine(args.Data);
+                    }
                 }
             };
             if (!process.Start())
@@ -400,7 +432,7 @@ namespace airimayor.Host
                     }
                     catch (Exception e)
                     {
-                        Fail(e.Message);
+                        Fail(FailureText(e));
                         return;
                     }
                     if (response.StopReason == StopReason.Cancelled || m_Turn.IsCancellationRequested)
@@ -775,6 +807,55 @@ namespace airimayor.Host
             }
         }
 
+        private string FailureText(Exception error)
+        {
+            if (error is Win32Exception missing && (missing.NativeErrorCode == 2 || missing.NativeErrorCode == 3))
+            {
+                return "Command not found: " + m_Command + ".";
+            }
+            if (m_Process != null && m_Process.HasExited)
+            {
+                string stderr;
+                lock (m_Stderr)
+                {
+                    stderr = m_Stderr.ToString().Trim();
+                }
+                if (stderr.Length == 0)
+                {
+                    return "The agent process exited.";
+                }
+                return "The agent process exited. " + stderr;
+            }
+            string message = error.Message ?? "";
+            if (!IsAuth(message))
+            {
+                return message;
+            }
+            string text = message.Trim();
+            if (text.StartsWith("Not signed in", StringComparison.OrdinalIgnoreCase))
+            {
+                return text;
+            }
+            return text.Length == 0 ? "Not signed in." : "Not signed in. " + text;
+        }
+
+        private static bool IsAuth(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return false;
+            }
+            string lower = text.ToLowerInvariant();
+            return lower.Contains("sign in")
+                || lower.Contains("signin")
+                || lower.Contains("log in")
+                || lower.Contains("login")
+                || lower.Contains("not logged")
+                || lower.Contains("authenticate")
+                || lower.Contains("authentication")
+                || lower.Contains("unauthorized");
+        }
+
         private void Fail(string message)
         {
             string text = message ?? "";
@@ -795,6 +876,7 @@ namespace airimayor.Host
             public string Text;
             public string Tool;
             public string CallId;
+            public string Places;
         }
     }
 }

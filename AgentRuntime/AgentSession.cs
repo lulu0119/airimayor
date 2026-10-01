@@ -14,6 +14,8 @@ namespace AgentRuntime
 
         void Prompt(string text);
 
+        void Prompt(string modelText, string displayText, string placesJson);
+
         void Cancel();
 
         string ChatStateJson();
