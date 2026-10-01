@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIRI Mayor — chat panel preview</title>
+<style>
+  /* Standalone preview of src/mods/chat (chat.module.scss, rem -> px).
+     Fake data, no bindings: open directly in a browser.
+     Backdrop: official CS2 zoning screenshot (cities-skylines-ii-Zoning.webp,
+     same folder). */
+
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    overflow: hidden;
+    color: #eef2f9;
+    font-family: "Segoe UI", "Noto Sans SC", sans-serif;
+  }
+
+  /* Official Cities: Skylines II zoning screenshot as the game backdrop. */
+  .backdrop {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .previewCaption {
+    position: fixed;
+    left: 12px;
+    bottom: 10px;
+    font-size: 11px;
+    color: #dfe6f2;
+    opacity: 0.75;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    user-select: none;
+  }
+
+  /* Dock geometry matches .dock in chat.module.scss. */
+  .dock {
+    position: absolute;
+    width: 330px;
+    top: 60px;
+    right: 10px;
+    bottom: 179px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .panelColumn {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    background-color: rgba(16, 20, 28, 0.94);
+    backdrop-filter: blur(8px);
+    border-radius: 6px;
+    overflow: hidden;
+    animation: panelEntry 0.2s;
+  }
+
+  @keyframes panelEntry {
+    0% { opacity: 0; transform: translateX(10px); }
+    100% { opacity: 1; transform: none; }
+  }
+
+  /* Stand-in for the cs2/ui Panel chrome. */
+  .panelHeader {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background-color: rgba(10, 13, 18, 0.94);
+    border-bottom: 1px solid rgba(70, 120, 200, 0.5);
+    font-size: 14px;
+    font-weight: 600;
+    color: #f2f5fa;
+    letter-spacing: 0.02em;
+    flex: 0 0 auto;
+  }
+
+  .panelClose {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 4px;
+    border: none;
+    border-radius: 4px;
+    background-color: transparent;
+    color: #cfd6e4;
+    cursor: pointer;
+  }
+
+  .panelClose:hover { color: #ffffff; }
+  .panelClose:active { color: #9dc0f0; }
+
+  .statusBar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    color: #cfd6e4;
+    background-color: rgba(10, 13, 18, 0.94);
+    border-bottom: 1px solid rgba(70, 120, 200, 0.5);
+    flex: 0 0 auto;
+  }
+
+  .statusDot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #8a93a6;
+  }
+
+  .statusText {
+    text-transform: uppercase;
+    font-size: 12px;
+    color: #7ea6e0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .statusMeta {
+    flex: 0 0 auto;
+    color: #cfd6e4;
+    opacity: 0.7;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .planStrip {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 6px 10px;
+    font-size: 12px;
+    color: #cfd6e4;
+    background-color: rgba(10, 13, 18, 0.94);
+    border-bottom: 1px solid rgba(70, 120, 200, 0.5);
+    flex: 0 0 auto;
+  }
+
+  .planEntry {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .planContent {
+    display: block;
+    flex: 1 1 0%;
+    width: 0;
+    color: #eef2f9;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .planStatus {
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+  }
+
+  .planStatus svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .planPending { color: #9aa3b5; }
+  .planActive { color: #e0a63c; }
+  .planDone { color: #4caf6d; }
+
+  .messageList {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    margin: 6px 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  }
+
+  .messageList::-webkit-scrollbar { width: 8px; }
+  .messageList::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 4px;
+  }
+
+  .messageRow {
+    margin: 4px 10px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .roleLabel {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #9aa3b5;
+    margin-bottom: 2px;
+  }
+
+  .messageText {
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #eef2f9;
+  }
+
+  .messageFlow {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    width: 100%;
+  }
+
+  .inlineRun {
+    flex: 0 0 auto;
+    white-space: pre;
+  }
+
+  .lineBreak {
+    flex: 0 0 100%;
+    width: 100%;
+    height: 0;
+  }
+
+  .lineBreak + .lineBreak {
+    height: 1.4em;
+  }
+
+  .historyPlaces {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    margin: 0 0 2px 0;
+  }
+
+  .placeCards {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .placeCards .clipInline { margin-bottom: 4px; }
+
+  .placeChipRemove {
+    margin-left: 4px;
+    opacity: 0.6;
+    cursor: pointer;
+  }
+
+  .clipInline {
+    display: inline-flex;
+    flex-direction: row;
+    flex: 0 0 auto;
+    align-self: center;
+    align-items: center;
+    margin: 0 4px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background-color: #e0a63c;
+    color: #20180a;
+    font-size: 11px;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+
+  .userRow { background-color: rgba(46, 79, 134, 0.85); }
+  .assistantRow { background-color: rgba(255, 255, 255, 0.07); }
+  .errorRow { background-color: rgba(200, 60, 60, 0.25); }
+
+  .toolRow {
+    margin: 4px 10px;
+    border-radius: 4px;
+    background-color: rgba(255, 255, 255, 0.07);
+    font-size: 12px;
+  }
+
+  .toolHeader {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.15s;
+  }
+
+  .toolHeader:hover { background-color: rgba(255, 255, 255, 0.1); }
+
+  .toolDot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .dotRunning {
+    background-color: #e0a63c;
+    animation: toolPulse 1s infinite;
+  }
+
+  .dotThinking { background-color: #e0a63c; }
+  .dotDone { background-color: #4caf6d; }
+  .dotError { background-color: #d65454; }
+  .dotInterrupted { background-color: #8a93a6; }
+
+  @keyframes toolPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
+  .toolName {
+    font-family: monospace;
+    color: #eef2f9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .toolState {
+    margin-left: auto;
+    flex: 0 0 auto;
+    color: #9aa3b5;
+    text-transform: uppercase;
+    font-size: 11px;
+  }
+
+  .toolChevron {
+    flex: 0 0 auto;
+    display: inline-flex;
+    width: 16px;
+    height: 16px;
+    color: #9aa3b5;
+    transition: transform 0.15s;
+  }
+
+  .toolChevron svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .toolRow:not(.expanded) .toolChevron { transform: rotate(-90deg); }
+  .toolRow:not(.expanded) .toolBody { display: none; }
+
+  .toolBody { padding: 0 8px 6px 8px; }
+
+  .toolSectionLabel {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #9aa3b5;
+    margin: 4px 0 2px 0;
+  }
+
+  .toolPre {
+    margin: 0;
+    padding: 4px 6px;
+    max-height: 120px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: monospace;
+    font-size: 11px;
+    background-color: rgba(0, 0, 0, 0.35);
+    border-radius: 3px;
+    color: #dfe6f2;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  }
+
+  .toolPre::-webkit-scrollbar { width: 8px; height: 8px; }
+  .toolPre::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 4px;
+  }
+
+  .toolImage {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    border-radius: 3px;
+    margin-bottom: 4px;
+  }
+
+  .composer {
+    position: relative;
+    padding: 8px 10px 10px 10px;
+    background-color: rgba(10, 13, 18, 0.94);
+    border-top: 1px solid rgba(70, 120, 200, 0.5);
+    flex: 0 0 auto;
+  }
+
+  .composerInput {
+    width: 100%;
+    box-sizing: border-box;
+    resize: none;
+    padding: 8px 12px 44px 12px;
+    line-height: 1.35em;
+    font-size: 13px;
+    font-family: inherit;
+    color: #f2f5fa;
+    background-color: rgba(255, 255, 255, 0.08);
+    border-width: 1px;
+    border-radius: 4px;
+    border-style: solid;
+    border-color: rgba(255, 255, 255, 0.22);
+  }
+
+  .composerInput::placeholder {
+    color: #9aa3b5;
+    opacity: 0.8;
+  }
+
+  .composerInput:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.32);
+  }
+
+  .composerInput:active,
+  .composerInput:focus {
+    background-color: rgba(255, 255, 255, 0.14);
+    border-color: #4bc3f1;
+    outline: none;
+  }
+
+  .composerActions {
+    position: absolute;
+    right: 18px;
+    bottom: 18px;
+    display: flex;
+  }
+
+  .placeButtonWrap {
+    position: absolute;
+    left: 18px;
+    bottom: 18px;
+    display: flex;
+  }
+
+  .placeButtonOn .actionIcon { color: #4bc3f1; }
+
+  .actionButton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border: none;
+    border-radius: 4px;
+    background-color: transparent;
+    color: inherit;
+    font: inherit;
+    line-height: 0;
+    cursor: pointer;
+    appearance: none;
+  }
+
+  .actionButton:hover .actionIcon { color: #ffffff; }
+  .actionButton:active .actionIcon { color: #9dc0f0; }
+
+  .sendButton:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  .sendButton:disabled .actionIcon { color: #8a93a6; }
+  .stopButton:hover .actionIcon { color: #ff8a8a; }
+
+  .actionIcon {
+    display: inline-flex;
+    width: 20px;
+    height: 20px;
+    color: #cfd6e4;
+  }
+
+  .actionIcon svg {
+    width: 100%;
+    height: 100%;
+  }
+</style>
+</head>
+<body>
+  <img class="backdrop" src="cities-skylines-ii-Zoning.webp" alt="">
+
+  <div class="dock">
+    <div class="panelColumn">
+
+      <div class="panelHeader">
+        AIRI Mayor
+        <button class="panelClose" type="button" title="Close" aria-label="Close">
+          <svg viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+
+      <div class="statusBar">
+        <span class="statusDot dotRunning"></span>
+        <span class="statusText">Working</span>
+        <span class="statusMeta">1 queued</span>
+        <span class="statusMeta">ctx 48k/200k · vision</span>
+      </div>
+
+      <div class="planStrip">
+        <div class="planEntry">
+          <span class="planStatus planDone" title="Completed">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="m8 12.2 2.8 2.8 5.6-5.8"/></svg>
+          </span>
+          <div class="planContent">Inspect road layout around the industrial district</div>
+        </div>
+        <div class="planEntry">
+          <span class="planStatus planActive" title="In progress">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path fill="currentColor" d="M10 8.6c0-.8.85-1.25 1.5-.85l4.6 2.9c.65.4.65 1.35 0 1.75l-4.6 2.9c-.65.4-1.5-.05-1.5-.85z"/></svg>
+          </span>
+          <div class="planContent">Add avenue connection to the highway ramp</div>
+        </div>
+        <div class="planEntry">
+          <span class="planStatus planPending" title="Pending">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 7.5V12l3 2"/></svg>
+          </span>
+          <div class="planContent">Advance the clock and re-check traffic flow</div>
+        </div>
+      </div>
+
+      <div class="messageList">
+
+        <div class="messageRow userRow">
+          <span class="roleLabel">You</span>
+          <span class="historyPlaces">
+            <span class="clipInline">ElementarySchool01</span>
+          </span>
+          <span class="messageText">What is this, briefly?</span>
+        </div>
+
+        <div class="messageRow assistantRow">
+          <span class="roleLabel">AIRI</span>
+          <span class="messageText messageFlow">
+            <span class="inlineRun">The </span><span class="inlineRun">one </span><span class="inlineRun">you </span><span class="inlineRun">mean </span>
+            <span class="clipInline">ElementarySchool01</span>
+            <span class="inlineRun"> is </span><span class="inlineRun">the </span><span class="inlineRun">city's </span><span class="inlineRun">elementary </span><span class="inlineRun">school, </span><span class="inlineRun">on </span><span class="inlineRun">a </span><span class="inlineRun">144 m </span><span class="inlineRun">lot, </span><span class="inlineRun">with </span><span class="inlineRun">11 </span><span class="inlineRun">workers.</span>
+            <span class="lineBreak"></span>
+            <span class="inlineRun">It </span><span class="inlineRun">is </span><span class="inlineRun">an </span><span class="inlineRun">education </span><span class="inlineRun">building. </span><span class="inlineRun">I </span><span class="inlineRun">should </span><span class="inlineRun">check </span><span class="inlineRun">whether </span><span class="inlineRun">the </span><span class="inlineRun">roads </span><span class="inlineRun">around </span><span class="inlineRun">it </span><span class="inlineRun">are </span><span class="inlineRun">in </span><span class="inlineRun">place.</span>
+          </span>
+        </div>
+
+        <div class="messageRow userRow">
+          <span class="roleLabel">You</span>
+          <span class="messageText">The industrial district gridlocks every morning. Can you fix the traffic there?</span>
+        </div>
+
+        <div class="messageRow assistantRow">
+          <span class="roleLabel">AIRI</span>
+          <span class="messageText">I'll pull up the district on the map and check the road layout, then add capacity where the queues are worst.</span>
+        </div>
+
+        <div class="toolRow expanded">
+          <div class="toolHeader">
+            <span class="toolDot dotDone"></span>
+            <span class="toolName">map_image</span>
+            <span class="toolState">Done</span>
+            <span class="toolChevron">
+              <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 15.7 5.3 9a1.35 1.35 0 0 1 1.9-1.9L12 11.9l4.8-4.8A1.35 1.35 0 0 1 18.7 9z"/></svg>
+            </span>
+          </div>
+          <div class="toolBody">
+            <div class="toolSectionLabel">Arguments</div>
+            <pre class="toolPre">{ "x": -1420, "z": 980, "radius": 450 }</pre>
+            <div class="toolSectionLabel">Result</div>
+            <svg class="toolImage" viewBox="0 0 300 190" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="City map around the industrial district">
+              <rect width="300" height="190" fill="#f2efe9"/>
+              <path d="M252 0h48v190h-70c14-60 10-130 22-190z" fill="#aad3df"/>
+              <rect x="176" y="16" width="54" height="42" rx="4" fill="#c8facc"/>
+              <g fill="#d9d0c9">
+                <rect x="10" y="12" width="16" height="10"/><rect x="34" y="12" width="12" height="10"/>
+                <rect x="52" y="12" width="18" height="10"/><rect x="10" y="30" width="16" height="12"/>
+                <rect x="34" y="30" width="12" height="12"/><rect x="78" y="14" width="14" height="10"/>
+                <rect x="100" y="14" width="16" height="10"/><rect x="80" y="32" width="12" height="12"/>
+                <rect x="12" y="84" width="14" height="10"/><rect x="34" y="84" width="12" height="10"/>
+                <rect x="12" y="102" width="14" height="12"/><rect x="58" y="86" width="14" height="10"/>
+                <rect x="96" y="86" width="16" height="10"/><rect x="122" y="84" width="12" height="12"/>
+              </g>
+              <g stroke="#c6c1ba" stroke-width="9" fill="none">
+                <path d="M0 60h238"/><path d="M40 0v150"/><path d="M0 140h234"/>
+              </g>
+              <g stroke="#ffffff" stroke-width="6" fill="none">
+                <path d="M0 60h238"/><path d="M40 0v150"/><path d="M0 140h234"/>
+              </g>
+              <path d="M244 0 236 190" stroke="#dc2a67" stroke-width="8" fill="none"/>
+              <path d="M244 0 236 190" stroke="#e892a2" stroke-width="5" fill="none"/>
+              <path d="M56 140h96" stroke="#e05252" stroke-width="5" stroke-dasharray="9 5" fill="none"/>
+            </svg>
+            <pre class="toolPre">{ "bounds": { "xMin": -1870, "xMax": -970, "zMin": 530, "zMax": 1430 }, "note": "one congested road segment inside bounds" }</pre>
+          </div>
+        </div>
+
+        <div class="toolRow">
+          <div class="toolHeader">
+            <span class="toolDot dotDone"></span>
+            <span class="toolName">list_networks</span>
+            <span class="toolState">Done</span>
+            <span class="toolChevron">
+              <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 15.7 5.3 9a1.35 1.35 0 0 1 1.9-1.9L12 11.9l4.8-4.8A1.35 1.35 0 0 1 18.7 9z"/></svg>
+            </span>
+          </div>
+          <div class="toolBody">
+            <div class="toolSectionLabel">Arguments</div>
+            <pre class="toolPre">{ "kind": "road", "x": -1420, "z": 980, "radius": 500, "sort": "congestion", "limit": 8 }</pre>
+            <div class="toolSectionLabel">Result</div>
+            <pre class="toolPre">[
+  {
+    "entity": 189447,
+    "prefab": "Industrial Road",
+    "start": { "x": -1780, "z": 1402 },
+    "end": { "x": -1160, "z": 1298 },
+    "length": 624,
+    "distanceM": 88,
+    "widthM": 14,
+    "road": { "roadClass": "Roads", "speedKmh": 50, "carLanes": 2 },
+    "traffic": { "volumeIndex": 0.93, "congestionIndex": 0.88, "activeBottlenecks": 1, "flowPercent": 31 }
+  },
+  {
+    "entity": 190102,
+    "prefab": "Highway Ramp",
+    "start": { "x": -1042, "z": 1360 },
+    "end": { "x": -980, "z": 1440 },
+    "length": 118,
+    "distanceM": 415,
+    "widthM": 20,
+    "road": { "roadClass": "Highways", "speedKmh": 100, "carLanes": 1 },
+    "traffic": { "volumeIndex": 0.97, "congestionIndex": 0.81, "activeBottlenecks": 1, "flowPercent": 38 }
+  }
+]</pre>
+          </div>
+        </div>
+
+        <div class="toolRow expanded">
+          <div class="toolHeader">
+            <span class="toolDot dotError"></span>
+            <span class="toolName">build_network</span>
+            <span class="toolState">Error</span>
+            <span class="toolChevron">
+              <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 15.7 5.3 9a1.35 1.35 0 0 1 1.9-1.9L12 11.9l4.8-4.8A1.35 1.35 0 0 1 18.7 9z"/></svg>
+            </span>
+          </div>
+          <div class="toolBody">
+            <div class="toolSectionLabel">Arguments</div>
+            <pre class="toolPre">{ "prefab": "Medium Avenue", "x1": -1460, "z1": 1390, "x2": -1020, "z2": 1330 }</pre>
+            <div class="toolSectionLabel">Result</div>
+            <pre class="toolPre">{
+  "error": "Route rejected: local grade 12.4% exceeds the 10% limit near x=-1240, z=1365",
+  "hint": "Change the route; ground mode never promotes to bridge or tunnel"
+}</pre>
+          </div>
+        </div>
+
+        <div class="messageRow assistantRow">
+          <span class="roleLabel">AIRI</span>
+          <span class="messageText">The direct route over the ridge is too steep for native validation — no silent bridges. I'll go around the slope instead.</span>
+        </div>
+
+        <div class="toolRow">
+          <div class="toolHeader">
+            <span class="toolDot dotDone"></span>
+            <span class="toolName">build_network</span>
+            <span class="toolState">Done</span>
+            <span class="toolChevron">
+              <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 15.7 5.3 9a1.35 1.35 0 0 1 1.9-1.9L12 11.9l4.8-4.8A1.35 1.35 0 0 1 18.7 9z"/></svg>
+            </span>
+          </div>
+          <div class="toolBody">
+            <div class="toolSectionLabel">Arguments</div>
+            <pre class="toolPre">{ "prefab": "Medium Avenue", "x1": -1490, "z1": 1240, "x2": -1020, "z2": 1385 }</pre>
+            <div class="toolSectionLabel">Result</div>
+            <pre class="toolPre">{ "entity": 199453, "prefab": "Medium Avenue", "length": 492, "connectedEnds": 2, "note": "District edge linked to the highway ramp" }</pre>
+          </div>
+        </div>
+
+        <div class="toolRow">
+          <div class="toolHeader">
+            <span class="toolDot dotRunning"></span>
+            <span class="toolName">get_simulation</span>
+            <span class="toolState">Running</span>
+            <span class="toolChevron">
+              <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 15.7 5.3 9a1.35 1.35 0 0 1 1.9-1.9L12 11.9l4.8-4.8A1.35 1.35 0 0 1 18.7 9z"/></svg>
+            </span>
+          </div>
+          <div class="toolBody">
+            <div class="toolSectionLabel">Result</div>
+            <pre class="toolPre">No result yet.</pre>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="statusBar">
+        <span class="statusText">1 queued · And zone medium residential along the new avenue</span>
+      </div>
+
+      <div class="composer">
+        <div class="placeCards">
+          <span class="clipInline"><span>ElementarySchool01</span><span class="placeChipRemove">×</span></span>
+        </div>
+        <textarea class="composerInput" rows="3" placeholder="Message AIRI…"></textarea>
+        <div class="placeButtonWrap">
+          <button type="button" class="actionButton" title="Select place or building" aria-label="Select place or building">
+            <span class="actionIcon">
+              <svg viewBox="0 0 24 24"><g fill="currentColor"><path d="M12 2C7.58172 2 4 6.00258 4 10.5C4 14.9622 6.55332 19.8124 10.5371 21.6744C11.4657 22.1085 12.5343 22.1085 13.4629 21.6744C17.4467 19.8124 20 14.9622 20 10.5C20 6.00258 16.4183 2 12 2Z" opacity=".5"/><path d="M12 12.5C13.3807 12.5 14.5 11.3807 14.5 10C14.5 8.61929 13.3807 7.5 12 7.5C10.6193 7.5 9.5 8.61929 9.5 10C9.5 11.3807 10.6193 12.5 12 12.5Z"/></g></svg>
+            </span>
+          </button>
+        </div>
+        <div class="composerActions">
+          <button type="button" class="actionButton stopButton" title="Stop" aria-label="Stop">
+            <span class="actionIcon">
+              <svg viewBox="0 0 24 24"><g fill="currentColor"><path d="M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z" opacity=".5"/><path d="M8.58579 8.58579C8 9.17157 8 10.1144 8 12C8 13.8856 8 14.8284 8.58579 15.4142C9.17157 16 10.1144 16 12 16C13.8856 16 14.8284 16 15.4142 15.4142C16 14.8284 16 13.8856 16 12C16 10.1144 16 9.17157 15.4142 8.58579C14.8284 8 13.8856 8 12 8C10.1144 8 9.17157 8 8.58579 8.58579Z"/></g></svg>
+            </span>
+          </button>
+          <button type="button" class="actionButton sendButton" title="Send" aria-label="Send">
+            <span class="actionIcon">
+              <svg viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="m16.245 7.76l5.172-5.171l-.003-.003c-1.187-1.187-3.436-.438-7.935 1.062L8.33 5.364C4.7 6.574 2.885 7.18 2.37 8.067a2.72 2.72 0 0 0 0 2.73c.515.888 2.33 1.493 5.96 2.704c.45.15.957.042 1.294-.291l5.506-5.455a.79.79 0 0 1 1.116.005" clip-rule="evenodd"/><path fill="currentColor" d="m18.635 15.67l1.717-5.15c1.498-4.495 2.248-6.744 1.064-7.932l-5.172 5.171a.79.79 0 0 1-.005 1.117l-5.416 5.367a1.4 1.4 0 0 0-.324 1.426c1.21 3.631 1.815 5.446 2.703 5.962a2.71 2.71 0 0 0 2.73 0c.888-.516 1.493-2.33 2.703-5.962" opacity=".5"/></svg>
+            </span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="previewCaption">chat-panel preview · fake data</div>
+
+  <script>
+    // Tool rows expand and collapse like the React ToolRow.
+    document.querySelectorAll(".toolHeader").forEach((header) => {
+      header.addEventListener("click", () => {
+        header.closest(".toolRow").classList.toggle("expanded");
+      });
+    });
+  </script>
+</body>
+</html>

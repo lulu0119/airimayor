@@ -60,9 +60,11 @@ namespace CS2MCP
         private OperationKind m_PendingKind;
         private Entity m_PendingPrefabEntity;
         private Entity m_PendingTarget;
+        private Entity[] m_PendingReplaceEdges = Array.Empty<Entity>();
         private PrefabBase m_PendingPrefab;
         private string m_PendingLabel;
         private float3 m_PendingPosition;
+        private Entity m_PendingAttachParent;
         private float3 m_PendingEnd;
         private RoadBuildMode? m_PendingRoadMode;
         private readonly List<NetworkCourseSegment> m_PendingCourses = new List<NetworkCourseSegment>();
@@ -173,7 +175,8 @@ namespace CS2MCP
             float3 autoConnectStart = default,
             float3 autoConnectEnd = default,
             Entity autoConnectTargetEdge = default,
-            float autoConnectTargetSplit = 0f)
+            float autoConnectTargetSplit = 0f,
+            Entity attachParent = default)
         {
             if (m_Stage != Stage.Idle)
             {
@@ -184,6 +187,7 @@ namespace CS2MCP
             m_PendingPrefab = prefab;
             m_PendingPosition = position;
             m_PendingRotation = rotation;
+            m_PendingAttachParent = attachParent;
             m_PendingRequest = request;
             SetAutoConnect(
                 autoConnectPrefabEntity,
@@ -394,28 +398,43 @@ namespace CS2MCP
         }
 
         /// <summary>
-        /// Queues replacement of one simple standalone network edge with a new
-        /// prefab. The handler owns the restricted-topology safety checks.
+        /// Queues native replacement of each selected road edge in one operation.
+        /// The handler has already chosen the edges.
         /// </summary>
         public bool TryQueueRoadReplacement(
-            Entity target,
+            IReadOnlyList<Entity> targets,
             string previousPrefab,
             Entity prefabEntity,
             PrefabBase prefab,
             BridgeRequest request)
         {
-            if (m_Stage != Stage.Idle)
+            if (m_Stage != Stage.Idle || targets == null || targets.Count == 0)
             {
                 return false;
             }
             m_PendingKind = OperationKind.ReplaceNet;
-            m_PendingTarget = target;
+            m_PendingReplaceEdges = new Entity[targets.Count];
+            for (int i = 0; i < targets.Count; i++)
+            {
+                m_PendingReplaceEdges[i] = targets[i];
+            }
+            m_PendingTarget = targets[0];
             m_PendingLabel = previousPrefab;
             m_PendingPrefabEntity = prefabEntity;
             m_PendingPrefab = prefab;
-            Game.Net.Curve curve = EntityManager.GetComponentData<Game.Net.Curve>(target);
-            m_PendingPosition = curve.m_Bezier.a;
-            m_PendingEnd = curve.m_Bezier.d;
+            Game.Net.Curve first = EntityManager.GetComponentData<Game.Net.Curve>(targets[0]);
+            Game.Net.Curve last = EntityManager.GetComponentData<Game.Net.Curve>(targets[targets.Count - 1]);
+            m_PendingPosition = first.m_Bezier.a;
+            m_PendingEnd = last.m_Bezier.d;
+            m_PendingCourses.Clear();
+            for (int i = 0; i < targets.Count; i++)
+            {
+                Bezier4x3 bezier = EntityManager.GetComponentData<Game.Net.Curve>(targets[i]).m_Bezier;
+                m_PendingCourses.Add(new NetworkCourseSegment
+                {
+                    Path = new RoadPath(bezier.a, bezier.b, bezier.c, bezier.d),
+                });
+            }
             m_PendingRequest = request;
             Activate();
             return true;
@@ -452,6 +471,10 @@ namespace CS2MCP
         {
             m_Stage = Stage.CreateDefinitions;
             m_PreviousTool = m_ToolSystem.activeTool;
+            if (m_PreviousTool != null && m_PreviousTool.toolID == "airimayor.PointedPlace")
+            {
+                m_PreviousTool = m_DefaultToolSystem;
+            }
             m_ToolSystem.activeTool = this;
         }
 
@@ -776,7 +799,7 @@ namespace CS2MCP
                         canonicalTool = "set_road_features",
                         prefab = m_PendingLabel,
                         entity = new { index = m_PendingTarget.Index, version = m_PendingTarget.Version },
-                        note = "road features applied; this does not change the road prefab, width or lane layout",
+                        note = "road features applied to the segment",
                     });
                 case OperationKind.FacilityUpgrade:
                     return BridgeResponse.Json(new
@@ -806,11 +829,12 @@ namespace CS2MCP
                     return BridgeResponse.Json(new
                     {
                         replaced = true,
+                        edgeCount = m_PendingReplaceEdges.Length,
                         previousPrefab = m_PendingLabel,
                         prefab = m_PendingPrefab != null ? m_PendingPrefab.name : null,
                         start = new { x = m_PendingPosition.x, z = m_PendingPosition.z },
                         end = new { x = m_PendingEnd.x, z = m_PendingEnd.z },
-                        note = "road type replaced; the original edge id may change, so refresh list_networks and verify lanes, zoning and traffic",
+                        note = "road type replaced; the original edge ids may change, so refresh list_networks and verify lanes, zoning and traffic",
                     });
                 case OperationKind.Net:
                     float? widthM = null;
@@ -994,13 +1018,14 @@ namespace CS2MCP
                 message.Append(" (no ErrorType icons on temp entities)");
             }
 
+            if ((m_PendingKind == OperationKind.Net || m_PendingKind == OperationKind.ReplaceNet)
+                && reasons.Exists(reason => reason.StartsWith("OverlapExisting", StringComparison.Ordinal))
+                && TryNameCourseBlocker(out string blocker))
+            {
+                message.Append("; blocked by ").Append(blocker);
+            }
             if (m_PendingKind == OperationKind.Net)
             {
-                if (reasons.Exists(reason => reason.StartsWith("OverlapExisting", StringComparison.Ordinal))
-                    && TryNameCourseBlocker(out string blocker))
-                {
-                    message.Append("; blocked by ").Append(blocker);
-                }
                 float length = math.distance(
                     new float2(m_PendingPosition.x, m_PendingPosition.z),
                     new float2(m_PendingEnd.x, m_PendingEnd.z));
@@ -1023,7 +1048,7 @@ namespace CS2MCP
                         "e1/e2 are elevation meters (-30..60), not entity indexes");
                 }
             }
-            else
+            else if (m_PendingKind != OperationKind.ReplaceNet)
             {
                 message.Append("; try a different position or target");
             }
@@ -1224,6 +1249,7 @@ namespace CS2MCP
             m_PendingRequest = null;
             m_PendingPrefab = null;
             m_PendingPrefabEntity = Entity.Null;
+            m_PendingAttachParent = Entity.Null;
             m_PendingOwner = Entity.Null;
             m_PendingOperationalAreaNodes = null;
             m_PendingOperationalAreaKind = null;
@@ -1333,37 +1359,39 @@ namespace CS2MCP
         /// </summary>
         private void CreateRoadReplacementDefinition()
         {
-            Entity target = m_PendingTarget;
-            Game.Net.Edge edge = EntityManager.GetComponentData<Game.Net.Edge>(target);
-            Game.Net.Curve curve = EntityManager.GetComponentData<Game.Net.Curve>(target);
-
             EntityCommandBuffer commandBuffer = m_ToolOutputBarrier.CreateCommandBuffer();
-            Entity definitionEntity = commandBuffer.CreateEntity();
-            commandBuffer.AddComponent(definitionEntity, new CreationDefinition
+            for (int i = 0; i < m_PendingReplaceEdges.Length; i++)
             {
-                m_Original = target,
-                m_Prefab = m_PendingPrefabEntity,
-                m_Flags = CreationFlags.Align | CreationFlags.SubElevation,
-            });
-            commandBuffer.AddComponent(definitionEntity, default(Updated));
+                Entity target = m_PendingReplaceEdges[i];
+                Game.Net.Edge edge = EntityManager.GetComponentData<Game.Net.Edge>(target);
+                Game.Net.Curve curve = EntityManager.GetComponentData<Game.Net.Curve>(target);
+                Entity definitionEntity = commandBuffer.CreateEntity();
+                commandBuffer.AddComponent(definitionEntity, new CreationDefinition
+                {
+                    m_Original = target,
+                    m_Prefab = m_PendingPrefabEntity,
+                    m_Flags = CreationFlags.Align | CreationFlags.SubElevation,
+                });
+                commandBuffer.AddComponent(definitionEntity, default(Updated));
 
-            NetCourse course = default;
-            course.m_Curve = curve.m_Bezier;
-            course.m_Length = curve.m_Length;
-            course.m_FixedIndex = -1;
-            course.m_StartPosition.m_Entity = edge.m_Start;
-            course.m_StartPosition.m_Position = curve.m_Bezier.a;
-            course.m_StartPosition.m_Rotation = NetUtils.GetNodeRotation(MathUtils.StartTangent(curve.m_Bezier));
-            course.m_StartPosition.m_CourseDelta = 0f;
-            course.m_StartPosition.m_ParentMesh = -1;
-            course.m_StartPosition.m_Flags = CoursePosFlags.IsFirst;
-            course.m_EndPosition.m_Entity = edge.m_End;
-            course.m_EndPosition.m_Position = curve.m_Bezier.d;
-            course.m_EndPosition.m_Rotation = NetUtils.GetNodeRotation(MathUtils.EndTangent(curve.m_Bezier));
-            course.m_EndPosition.m_CourseDelta = 1f;
-            course.m_EndPosition.m_ParentMesh = -1;
-            course.m_EndPosition.m_Flags = CoursePosFlags.IsLast;
-            commandBuffer.AddComponent(definitionEntity, course);
+                NetCourse course = default;
+                course.m_Curve = curve.m_Bezier;
+                course.m_Length = curve.m_Length;
+                course.m_FixedIndex = -1;
+                course.m_StartPosition.m_Entity = edge.m_Start;
+                course.m_StartPosition.m_Position = curve.m_Bezier.a;
+                course.m_StartPosition.m_Rotation = NetUtils.GetNodeRotation(MathUtils.StartTangent(curve.m_Bezier));
+                course.m_StartPosition.m_CourseDelta = 0f;
+                course.m_StartPosition.m_ParentMesh = -1;
+                course.m_StartPosition.m_Flags = CoursePosFlags.IsFirst;
+                course.m_EndPosition.m_Entity = edge.m_End;
+                course.m_EndPosition.m_Position = curve.m_Bezier.d;
+                course.m_EndPosition.m_Rotation = NetUtils.GetNodeRotation(MathUtils.EndTangent(curve.m_Bezier));
+                course.m_EndPosition.m_CourseDelta = 1f;
+                course.m_EndPosition.m_ParentMesh = -1;
+                course.m_EndPosition.m_Flags = CoursePosFlags.IsLast;
+                commandBuffer.AddComponent(definitionEntity, course);
+            }
         }
 
         /// <summary>
@@ -1712,7 +1740,9 @@ namespace CS2MCP
             definitions.m_ControlPoint = new ControlPoint
             {
                 m_Position = m_PendingPosition,
+                m_HitPosition = m_PendingPosition,
                 m_Rotation = m_PendingRotation,
+                m_OriginalEntity = m_PendingAttachParent,
             };
             definitions.m_AttachmentPrefab = default;
             definitions.m_OwnerData = GetComponentLookup<Owner>(true);

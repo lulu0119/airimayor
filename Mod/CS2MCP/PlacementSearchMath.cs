@@ -47,6 +47,36 @@ namespace CS2MCP
     }
 
     /// <summary>
+    /// One side of a road or track, sampled along the curb. Outward points
+    /// away from the center at each sample.
+    /// </summary>
+    internal readonly struct CurbSide
+    {
+        public CurbSide(float3[] points, float3[] outward)
+        {
+            Points = points;
+            Outward = outward;
+        }
+
+        public float3[] Points { get; }
+        public float3[] Outward { get; }
+    }
+
+    internal readonly struct CurbSnap
+    {
+        public CurbSnap(int edgeIndex, float3 position, float rotationDegrees)
+        {
+            EdgeIndex = edgeIndex;
+            Position = position;
+            RotationDegrees = rotationDegrees;
+        }
+
+        public int EdgeIndex { get; }
+        public float3 Position { get; }
+        public float RotationDegrees { get; }
+    }
+
+    /// <summary>
     /// Pure geometry used by building-placement preflight. Keeping these
     /// calculations free of ECS state makes the placement seam deterministic
     /// and lets them be checked without a running city.
@@ -161,6 +191,73 @@ namespace CS2MCP
             return math.distancesq(
                 point,
                 ClosestPointOnSegment(point, segmentStart, segmentEnd));
+        }
+
+        /// <summary>
+        /// Picks the curb point nearest the request, on the side that point
+        /// already faces. Rotation faces away from the road center.
+        /// </summary>
+        public static bool TrySnapCurb(
+            float2 request,
+            float radius,
+            IReadOnlyList<CurbSide> left,
+            IReadOnlyList<CurbSide> right,
+            out CurbSnap snap)
+        {
+            snap = default;
+            if (left == null || right == null || left.Count != right.Count || radius < 0f)
+            {
+                return false;
+            }
+
+            float bestDistanceSquared = radius * radius;
+            bool found = false;
+            for (int edge = 0; edge < left.Count; edge++)
+            {
+                ConsiderCurbSide(request, edge, left[edge], ref bestDistanceSquared, ref found, ref snap);
+                ConsiderCurbSide(request, edge, right[edge], ref bestDistanceSquared, ref found, ref snap);
+            }
+            return found;
+        }
+
+        private static void ConsiderCurbSide(
+            float2 request,
+            int edge,
+            CurbSide side,
+            ref float bestDistanceSquared,
+            ref bool found,
+            ref CurbSnap snap)
+        {
+            if (side.Points == null
+                || side.Outward == null
+                || side.Points.Length < 2
+                || side.Outward.Length != side.Points.Length)
+            {
+                return;
+            }
+
+            for (int i = 1; i < side.Points.Length; i++)
+            {
+                float amount = ClosestPointAmount(
+                    request,
+                    side.Points[i - 1].xz,
+                    side.Points[i].xz);
+                float3 position = math.lerp(side.Points[i - 1], side.Points[i], amount);
+                float distanceSquared = math.distancesq(request, position.xz);
+                if (found ? distanceSquared >= bestDistanceSquared : distanceSquared > bestDistanceSquared)
+                {
+                    continue;
+                }
+
+                float3 outward = math.normalizesafe(
+                    math.lerp(side.Outward[i - 1], side.Outward[i], amount));
+                bestDistanceSquared = distanceSquared;
+                snap = new CurbSnap(
+                    edge,
+                    position,
+                    math.degrees(math.atan2(outward.x, outward.z)));
+                found = true;
+            }
         }
 
         public static bool TryFindNearestUtilityPoint(

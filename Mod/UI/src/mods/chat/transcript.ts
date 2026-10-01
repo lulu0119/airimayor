@@ -4,6 +4,7 @@
 // ACP row. A tool event without one still closes the last running row.
 
 import type { AgentWireEvent, ChatLine, StateMessage, ToolRowState } from "./chat-types";
+import { readPlaces } from "./place";
 
 export interface Transcript {
   lines: ChatLine[];
@@ -40,6 +41,7 @@ export function hydrateTranscript(messages: StateMessage[]): Transcript {
   const lines: ChatLine[] = [];
   messages.forEach((message) => {
     const text = (message.text ?? "").trim();
+    const places = readPlaces(message.places);
     if (message.role === "tool") {
       lines.push({
         id: lines.length,
@@ -53,11 +55,11 @@ export function hydrateTranscript(messages: StateMessage[]): Transcript {
       });
       return;
     }
-    if (text.length === 0) {
+    if (text.length === 0 && places.length === 0) {
       return;
     }
     if (message.role === "user") {
-      lines.push({ id: lines.length, kind: "user", text });
+      lines.push({ id: lines.length, kind: "user", text, places });
     } else if (message.role === "error") {
       lines.push({ id: lines.length, kind: "error", text });
     } else {
@@ -124,10 +126,16 @@ export function applyWireEvent(
   const text = event.text ?? "";
   switch (event.kind) {
     case "user": {
-      if (text.trim().length === 0) {
+      const places = readPlaces(event.places);
+      if (text.trim().length === 0 && places.length === 0) {
         return transcript;
       }
-      return push(transcript, finalizeStreaming(transcript.lines), (id) => ({ id, kind: "user", text }));
+      return push(transcript, finalizeStreaming(transcript.lines), (id) => ({
+        id,
+        kind: "user",
+        text: text.trim(),
+        places,
+      }));
     }
     case "delta": {
       if (text.length === 0) {

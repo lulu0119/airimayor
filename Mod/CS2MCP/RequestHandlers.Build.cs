@@ -22,6 +22,8 @@ namespace CS2MCP
         private const float kMapTileSize = 623.304347826f;
         private const float kPlacementWaterDepth = 0.05f;
         private const int kMaximumPlacementSeeds = 1024;
+        private const float kCurbSnapDefaultRadius = 48f;
+        private const int kCurbSamplesPerSegment = 4;
 
         private sealed class RoadSurfaceSampler : IRoadSurfaceSampler
         {
@@ -59,6 +61,8 @@ namespace CS2MCP
         private bool m_NetPrefabQueryCreated;
         private EntityQuery m_TreePrefabQuery;
         private bool m_TreePrefabQueryCreated;
+        private EntityQuery m_CurbObjectPrefabQuery;
+        private bool m_CurbObjectPrefabQueryCreated;
 
         private EntityQuery NetPrefabQuery
         {
@@ -87,6 +91,33 @@ namespace CS2MCP
                     m_TreePrefabQueryCreated = true;
                 }
                 return m_TreePrefabQuery;
+            }
+        }
+
+        private EntityQuery CurbObjectPrefabQuery
+        {
+            get
+            {
+                if (!m_CurbObjectPrefabQueryCreated)
+                {
+                    m_CurbObjectPrefabQuery = EntityManager.CreateEntityQuery(new EntityQueryDesc
+                    {
+                        All = new[]
+                        {
+                            ComponentType.ReadOnly<PrefabData>(),
+                            ComponentType.ReadOnly<NetObjectData>(),
+                            ComponentType.ReadOnly<PlaceableObjectData>(),
+                            ComponentType.ReadOnly<UIObjectData>(),
+                        },
+                        None = new[]
+                        {
+                            ComponentType.ReadOnly<BuildingData>(),
+                            ComponentType.ReadOnly<ServiceUpgradeData>(),
+                        },
+                    });
+                    m_CurbObjectPrefabQueryCreated = true;
+                }
+                return m_CurbObjectPrefabQuery;
             }
         }
 
@@ -183,28 +214,39 @@ namespace CS2MCP
             string category = request.Query.TryGetValue("category", out string rawCategory)
                 ? rawCategory.ToLowerInvariant()
                 : "building";
-            EntityQuery query;
-            switch (category)
-            {
-                case "building":
-                    query = BuildingPrefabQuery;
-                    break;
-                case "road":
-                    query = RoadPrefabQuery;
-                    break;
-                case "net":
-                    query = NetPrefabQuery;
-                    break;
-                case "tree":
-                    query = TreePrefabQuery;
-                    break;
-                default:
-                    return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "category must be 'building', 'road', 'net' (all networks incl. pipes/power/tracks/paths) or 'tree'");
-            }
-
             request.Query.TryGetValue("query", out string search);
             request.Query.TryGetValue("role", out string requestedRole);
             requestedRole = requestedRole?.Trim().ToLowerInvariant();
+            var queries = new List<EntityQuery>(2);
+            bool primaryIsCurb = false;
+            switch (category)
+            {
+                case "building":
+                    queries.Add(BuildingPrefabQuery);
+                    break;
+                case "road":
+                    queries.Add(RoadPrefabQuery);
+                    break;
+                case "net":
+                    queries.Add(NetPrefabQuery);
+                    break;
+                case "tree":
+                    queries.Add(TreePrefabQuery);
+                    break;
+                case "object":
+                    queries.Add(CurbObjectPrefabQuery);
+                    primaryIsCurb = true;
+                    break;
+                default:
+                    return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "category must be 'building', 'road', 'net' (all networks incl. pipes/power/tracks/paths), 'tree', or 'object' (roadside objects)");
+            }
+            if (!primaryIsCurb
+                && category == "building"
+                && (requestedRole == "transport" || requestedRole == "post"))
+            {
+                queries.Add(CurbObjectPrefabQuery);
+            }
+
             if (string.IsNullOrEmpty(search) && string.IsNullOrEmpty(requestedRole))
             {
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments,
@@ -221,82 +263,93 @@ namespace CS2MCP
             var operationalAreas = new PrefabOperationalAreaClassifier(EntityManager);
             var results = new List<object>();
             int total = 0;
-            using (NativeArray<Entity> entities = query.ToEntityArray(Allocator.Temp))
+            for (int batch = 0; batch < queries.Count; batch++)
             {
-                foreach (Entity entity in entities)
+                bool curbBatch = primaryIsCurb || batch > 0;
+                using (NativeArray<Entity> entities = queries[batch].ToEntityArray(Allocator.Temp))
                 {
-                    if (category == "building" && !IsIndependentBuildingPrefab(entity))
+                    foreach (Entity entity in entities)
                     {
-                        continue;
-                    }
-                    PrefabBase prefab = prefabSystem.GetPrefab<PrefabBase>(entity);
-                    if (prefab == null)
-                    {
-                        continue;
-                    }
-                    if (!string.IsNullOrEmpty(search)
-                        && prefab.name.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0)
-                    {
-                        continue;
-                    }
-                    List<string> roles = GetPrefabRoles(entity, operationalAreas);
-                    if (!string.IsNullOrEmpty(requestedRole) && !roles.Contains(requestedRole))
-                    {
-                        continue;
-                    }
-                    total++;
-                    if (results.Count < limit)
-                    {
-                        object lotSize = null;
-                        object footprintMeters = null;
-                        float? widthM = null;
-                        if (EntityManager.HasComponent<BuildingData>(entity))
+                        if (curbBatch)
                         {
-                            int2 lot = EntityManager.GetComponentData<BuildingData>(entity).m_LotSize;
-                            lotSize = new { x = lot.x, z = lot.y };
-                            footprintMeters = new
+                            if (!IsMenuCurbObject(entity))
                             {
-                                x = (float)Math.Round(lot.x * kFootprintCellSize, 1),
-                                z = (float)Math.Round(lot.y * kFootprintCellSize, 1),
-                            };
+                                continue;
+                            }
                         }
-                        else if (EntityManager.HasComponent<ObjectGeometryData>(entity))
+                        else if (category == "building" && !IsIndependentBuildingPrefab(entity))
                         {
-                            float3 size = EntityManager.GetComponentData<ObjectGeometryData>(entity).m_Size;
-                            footprintMeters = new
+                            continue;
+                        }
+                        PrefabBase prefab = prefabSystem.GetPrefab<PrefabBase>(entity);
+                        if (prefab == null)
+                        {
+                            continue;
+                        }
+                        if (!string.IsNullOrEmpty(search)
+                            && prefab.name.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0)
+                        {
+                            continue;
+                        }
+                        List<string> roles = GetPrefabRoles(entity, operationalAreas);
+                        if (!string.IsNullOrEmpty(requestedRole) && !roles.Contains(requestedRole))
+                        {
+                            continue;
+                        }
+                        total++;
+                        if (results.Count < limit)
+                        {
+                            object lotSize = null;
+                            object footprintMeters = null;
+                            float? widthM = null;
+                            if (EntityManager.HasComponent<BuildingData>(entity))
                             {
-                                x = (float)Math.Round(size.x, 1),
-                                z = (float)Math.Round(size.z, 1),
-                            };
-                        }
-                        if (EntityManager.HasComponent<NetGeometryData>(entity))
-                        {
-                            widthM = EntityManager.GetComponentData<NetGeometryData>(entity).m_DefaultWidth;
-                        }
-                        object road = null;
-                        if (EntityManager.HasComponent<RoadData>(entity))
-                        {
-                            RoadPrefabFacts facts = ReadRoadPrefabFacts(entity, prefabSystem, prefab.name);
-                            road = new
+                                int2 lot = EntityManager.GetComponentData<BuildingData>(entity).m_LotSize;
+                                lotSize = new { x = lot.x, z = lot.y };
+                                footprintMeters = new
+                                {
+                                    x = (float)Math.Round(lot.x * kFootprintCellSize, 1),
+                                    z = (float)Math.Round(lot.y * kFootprintCellSize, 1),
+                                };
+                            }
+                            else if (EntityManager.HasComponent<ObjectGeometryData>(entity))
                             {
-                                roadClass = facts.RoadClass,
-                                speedKmh = facts.SpeedKmh,
-                                carLanes = facts.CarLanes,
-                                highwayRules = facts.HighwayRules,
-                                zonable = facts.Zonable,
-                            };
+                                float3 size = EntityManager.GetComponentData<ObjectGeometryData>(entity).m_Size;
+                                footprintMeters = new
+                                {
+                                    x = (float)Math.Round(size.x, 1),
+                                    z = (float)Math.Round(size.z, 1),
+                                };
+                            }
+                            if (EntityManager.HasComponent<NetGeometryData>(entity))
+                            {
+                                widthM = EntityManager.GetComponentData<NetGeometryData>(entity).m_DefaultWidth;
+                            }
+                            object road = null;
+                            if (EntityManager.HasComponent<RoadData>(entity))
+                            {
+                                RoadPrefabFacts facts = ReadRoadPrefabFacts(entity, prefabSystem, prefab.name);
+                                road = new
+                                {
+                                    roadClass = facts.RoadClass,
+                                    speedKmh = facts.SpeedKmh,
+                                    carLanes = facts.CarLanes,
+                                    highwayRules = facts.HighwayRules,
+                                    zonable = facts.Zonable,
+                                };
+                            }
+                            results.Add(new
+                            {
+                                name = prefab.name,
+                                type = prefab.GetType().Name,
+                                roles,
+                                locked = IsLocked(entity),
+                                lotSize,
+                                footprintMeters,
+                                widthM,
+                                road,
+                            });
                         }
-                        results.Add(new
-                        {
-                            name = prefab.name,
-                            type = prefab.GetType().Name,
-                            roles,
-                            locked = IsLocked(entity),
-                            lotSize,
-                            footprintMeters,
-                            widthM,
-                            road,
-                        });
                     }
                 }
             }
@@ -347,6 +400,14 @@ namespace CS2MCP
             AddPrefabRole<SchoolData>(prefab, "education", roles);
             AddPrefabRole<TransportDepotData>(prefab, "transport", roles);
             AddPrefabRole<TransportStationData>(prefab, "transport", roles);
+            if (EntityManager.HasComponent<TransportStopData>(prefab))
+            {
+                TransportType stopType =
+                    EntityManager.GetComponentData<TransportStopData>(prefab).m_TransportType;
+                AddRole(
+                    stopType == TransportType.Post ? "post" : "transport",
+                    roles);
+            }
             AddPrefabRole<PostFacilityData>(prefab, "post", roles);
             AddPrefabRole<TelecomFacilityData>(prefab, "telecom", roles);
             if (operationalAreas.DeclaresExtractorArea(prefab))
@@ -359,7 +420,15 @@ namespace CS2MCP
         private void AddPrefabRole<T>(Entity prefab, string role, List<string> roles)
             where T : unmanaged, IComponentData
         {
-            if (EntityManager.HasComponent<T>(prefab) && !roles.Contains(role))
+            if (EntityManager.HasComponent<T>(prefab))
+            {
+                AddRole(role, roles);
+            }
+        }
+
+        private static void AddRole(string role, List<string> roles)
+        {
+            if (!roles.Contains(role))
             {
                 roles.Add(role);
             }
@@ -398,6 +467,21 @@ namespace CS2MCP
             if (IsLocked(prefabEntity))
             {
                 return BridgeResponse.Error(BridgeErrorKind.Conflict, $"prefab '{prefab.name}' is locked (milestone not reached)");
+            }
+            if (IsMenuCurbObject(prefabEntity))
+            {
+                float reach = request.TryGetFloat("radius", out float curbRadius)
+                    ? math.clamp(curbRadius, 8f, 300f)
+                    : kCurbSnapDefaultRadius;
+                bool hasCurbRotation = request.Query.ContainsKey("rotation");
+                return PlaceCurbObject(
+                    request,
+                    prefabEntity,
+                    prefab,
+                    new float2(x, z),
+                    reach,
+                    hasCurbRotation,
+                    rotationDegrees);
             }
 
             PlacementCapabilities capabilities = GetPlacementCapabilities(prefabEntity);
@@ -1492,44 +1576,18 @@ namespace CS2MCP
             {
                 return error;
             }
-            if (!request.TryGetInt("index", out int index)
-                || !request.TryGetInt("version", out int version))
+            if (!request.TryGetFloat("x1", out float x1) || !request.TryGetFloat("z1", out float z1)
+                || !request.TryGetFloat("x2", out float x2) || !request.TryGetFloat("z2", out float z2))
             {
-                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments,
-                    "provide ?index=&version= of a standalone road segment from list_networks");
+                return BridgeResponse.Error(
+                    BridgeErrorKind.InvalidArguments,
+                    "provide ?x1=&z1=&x2=&z2= world coordinates for both ends of the road");
             }
             if (!request.Query.TryGetValue("prefab", out string prefabName)
                 || string.IsNullOrWhiteSpace(prefabName))
             {
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments,
                     "provide ?prefab=<exact road prefab name from list_prefabs(category=road)>");
-            }
-
-            if (!TryResolveExistingEntity(index, version, out Entity target)
-                || !EntityManager.HasComponent<Game.Net.Edge>(target)
-                || !EntityManager.HasComponent<Game.Net.Curve>(target)
-                || !EntityManager.HasComponent<PrefabRef>(target))
-            {
-                return BridgeResponse.Error(BridgeErrorKind.NotFound,
-                    $"entity {index}:{version} is not an existing road edge");
-            }
-            Entity oldPrefabEntity = EntityManager.GetComponentData<PrefabRef>(target).m_Prefab;
-            if (!EntityManager.HasComponent<RoadData>(oldPrefabEntity))
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Conflict, "target edge is not a road");
-            }
-            if (EntityManager.HasComponent<Game.Common.Owner>(target)
-                || EntityManager.HasComponent<Game.Net.Fixed>(target))
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Conflict,
-                    "v0 replacement only accepts ownerless, non-fixed road edges");
-            }
-
-            Game.Net.Edge edge = EntityManager.GetComponentData<Game.Net.Edge>(target);
-            if (!IsStandaloneRoadEndpoint(edge.m_Start) || !IsStandaloneRoadEndpoint(edge.m_End))
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Conflict,
-                    "v0 replacement only accepts a standalone edge whose endpoints each connect to exactly one edge; intersections and chain segments are not yet supported");
             }
 
             if (!TryFindPrefabByName(
@@ -1541,10 +1599,9 @@ namespace CS2MCP
                 return BridgeResponse.Error(BridgeErrorKind.NotFound,
                     $"unknown road prefab '{prefabName}'; search via list_prefabs(category=road)");
             }
-            if (newPrefabEntity == oldPrefabEntity)
+            if (!EntityManager.HasComponent<RoadData>(newPrefabEntity))
             {
-                return BridgeResponse.Error(BridgeErrorKind.Conflict,
-                    $"road already uses prefab '{newPrefab.name}'");
+                return BridgeResponse.Error(BridgeErrorKind.Conflict, $"prefab '{newPrefab.name}' is not a road");
             }
             if (IsLocked(newPrefabEntity))
             {
@@ -1559,12 +1616,54 @@ namespace CS2MCP
                     $"the game marks road prefab '{newPrefab.name}' as not replaceable in game mode");
             }
 
-            PrefabSystem prefabSystem = World.GetOrCreateSystemManaged<PrefabSystem>();
-            PrefabBase oldPrefab = prefabSystem.GetPrefab<PrefabBase>(oldPrefabEntity);
+            if (!NetworkCourseBuilder.TrySelectRoadEdges(
+                    World,
+                    EntityManager,
+                    newPrefabEntity,
+                    x1,
+                    z1,
+                    x2,
+                    z2,
+                    out List<Entity> edges,
+                    out string walkError))
+            {
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, walkError);
+            }
+
+            var names = new List<string>();
+            PrefabSystem namesSystem = World.GetOrCreateSystemManaged<PrefabSystem>();
+            for (int i = 0; i < edges.Count; i++)
+            {
+                Entity target = edges[i];
+                if (!EntityManager.Exists(target)
+                    || !EntityManager.HasComponent<Game.Net.Edge>(target)
+                    || !EntityManager.HasComponent<Game.Net.Curve>(target)
+                    || !EntityManager.HasComponent<PrefabRef>(target))
+                {
+                    return BridgeResponse.Error(BridgeErrorKind.NotFound, "a selected edge is no longer a road");
+                }
+                Entity oldPrefabEntity = EntityManager.GetComponentData<PrefabRef>(target).m_Prefab;
+                if (!EntityManager.HasComponent<RoadData>(oldPrefabEntity))
+                {
+                    return BridgeResponse.Error(BridgeErrorKind.Conflict, "a selected edge is not a road");
+                }
+                if (newPrefabEntity == oldPrefabEntity)
+                {
+                    return BridgeResponse.Error(BridgeErrorKind.Conflict,
+                        $"road already uses prefab '{newPrefab.name}'");
+                }
+                PrefabBase oldPrefab = namesSystem.GetPrefab<PrefabBase>(oldPrefabEntity);
+                string oldName = oldPrefab != null ? oldPrefab.name : null;
+                if (!string.IsNullOrEmpty(oldName) && !names.Contains(oldName))
+                {
+                    names.Add(oldName);
+                }
+            }
+
             BridgeToolSystem tool = World.GetOrCreateSystemManaged<BridgeToolSystem>();
             if (!tool.TryQueueRoadReplacement(
-                    target,
-                    oldPrefab != null ? oldPrefab.name : null,
+                    edges,
+                    string.Join(", ", names),
                     newPrefabEntity,
                     newPrefab,
                     request))
@@ -1573,15 +1672,6 @@ namespace CS2MCP
                     "another build operation is in progress, retry shortly");
             }
             return null;
-        }
-
-        private bool IsStandaloneRoadEndpoint(Entity node)
-        {
-            return node != Entity.Null
-                && EntityManager.Exists(node)
-                && !EntityManager.HasComponent<Game.Objects.OutsideConnection>(node)
-                && EntityManager.HasBuffer<Game.Net.ConnectedEdge>(node)
-                && EntityManager.GetBuffer<Game.Net.ConnectedEdge>(node, isReadOnly: true).Length == 1;
         }
 
         private BridgeResponse ListBuildings(BridgeRequest request)
@@ -2781,6 +2871,231 @@ namespace CS2MCP
             return false;
         }
 
+        private BridgeResponse PlaceCurbObject(
+            BridgeRequest request,
+            Entity prefabEntity,
+            PrefabBase prefab,
+            float2 requested,
+            float reach,
+            bool hasExplicitRotation,
+            float rotationDegrees)
+        {
+            NetObjectData netObject = EntityManager.GetComponentData<NetObjectData>(prefabEntity);
+            PlaceableObjectData placeable =
+                EntityManager.GetComponentData<PlaceableObjectData>(prefabEntity);
+            var edges = new List<Entity>();
+            var left = new List<CurbSide>();
+            var right = new List<CurbSide>();
+            using (NativeArray<Entity> candidates = PlacedRoadQuery.ToEntityArray(Allocator.Temp))
+            {
+                foreach (Entity edge in candidates)
+                {
+                    if (!EdgeAcceptsCurbObject(edge, netObject, placeable))
+                    {
+                        continue;
+                    }
+                    Game.Net.Curve curve = EntityManager.GetComponentData<Game.Net.Curve>(edge);
+                    float maximumDistance = reach + curve.m_Length;
+                    if (math.distancesq(CurveCenter(curve.m_Bezier).xz, requested)
+                        > maximumDistance * maximumDistance)
+                    {
+                        continue;
+                    }
+                    if (!TrySampleCurbSides(edge, out CurbSide edgeLeft, out CurbSide edgeRight))
+                    {
+                        continue;
+                    }
+                    edges.Add(edge);
+                    left.Add(edgeLeft);
+                    right.Add(edgeRight);
+                }
+            }
+            if (!PlacementSearchMath.TrySnapCurb(requested, reach, left, right, out CurbSnap snap))
+            {
+                return BridgeResponse.Error(
+                    BridgeErrorKind.NotFound,
+                    $"no roadside for '{prefab.name}' within {reach:F0}m of ({requested.x:F0},{requested.y:F0}). " +
+                    "Retry with a larger radius beside a road or track that can hold it.");
+            }
+
+            float yaw = hasExplicitRotation ? rotationDegrees : snap.RotationDegrees;
+            BridgeToolSystem tool = World.GetOrCreateSystemManaged<BridgeToolSystem>();
+            if (!tool.TryQueuePlacement(
+                    prefabEntity,
+                    prefab,
+                    snap.Position,
+                    quaternion.RotateY(math.radians(yaw)),
+                    request,
+                    attachParent: edges[snap.EdgeIndex]))
+            {
+                return BridgeResponse.Error(
+                    BridgeErrorKind.Conflict,
+                    "another build operation is in progress, retry shortly");
+            }
+            return null;
+        }
+
+        private bool IsMenuCurbObject(Entity prefab)
+        {
+            if (!EntityManager.HasComponent<NetObjectData>(prefab)
+                || !EntityManager.HasComponent<PlaceableObjectData>(prefab)
+                || !EntityManager.HasComponent<UIObjectData>(prefab)
+                || EntityManager.HasComponent<BuildingData>(prefab)
+                || EntityManager.HasComponent<ServiceUpgradeData>(prefab))
+            {
+                return false;
+            }
+            PlaceableObjectData placeable =
+                EntityManager.GetComponentData<PlaceableObjectData>(prefab);
+            if (placeable.m_SubReplacementType != Game.Net.SubReplacementType.None)
+            {
+                return false;
+            }
+            Game.Objects.PlacementFlags roadside =
+                Game.Objects.PlacementFlags.RoadEdge | Game.Objects.PlacementFlags.RoadSide;
+            return (placeable.m_Flags & roadside) != 0;
+        }
+
+        private bool EdgeAcceptsCurbObject(
+            Entity edge,
+            NetObjectData netObject,
+            PlaceableObjectData placeable)
+        {
+            if (!EntityManager.HasBuffer<Game.Net.SubLane>(edge))
+            {
+                return false;
+            }
+            DynamicBuffer<Game.Net.SubLane> lanes =
+                EntityManager.GetBuffer<Game.Net.SubLane>(edge, isReadOnly: true);
+            Game.Net.RoadTypes missing = netObject.m_RequireRoad;
+            Game.Net.TrackTypes tracks = Game.Net.TrackTypes.None;
+            bool pedestrian = false;
+            bool street = false;
+            for (int i = 0; i < lanes.Length; i++)
+            {
+                Entity lane = lanes[i].m_SubLane;
+                if (!EntityManager.HasComponent<PrefabRef>(lane))
+                {
+                    continue;
+                }
+                Entity lanePrefab = EntityManager.GetComponentData<PrefabRef>(lane).m_Prefab;
+                if (EntityManager.HasComponent<Game.Net.CarLane>(lane)
+                    && EntityManager.HasComponent<CarLaneData>(lanePrefab))
+                {
+                    street = true;
+                    missing &= ~EntityManager.GetComponentData<CarLaneData>(lanePrefab).m_RoadTypes;
+                }
+                if (EntityManager.HasComponent<Game.Net.PedestrianLane>(lane))
+                {
+                    pedestrian = true;
+                }
+                if (EntityManager.HasComponent<Game.Net.TrackLane>(lane)
+                    && EntityManager.HasComponent<TrackLaneData>(lanePrefab))
+                {
+                    street = true;
+                    tracks |= EntityManager.GetComponentData<TrackLaneData>(lanePrefab).m_TrackTypes;
+                }
+            }
+            if (missing != Game.Net.RoadTypes.None)
+            {
+                return false;
+            }
+            if ((placeable.m_Flags & Game.Objects.PlacementFlags.RequirePedestrian) != 0
+                && !pedestrian)
+            {
+                return false;
+            }
+            if (netObject.m_TrackPassThrough != Game.Net.TrackTypes.None
+                && (tracks & netObject.m_TrackPassThrough) == Game.Net.TrackTypes.None)
+            {
+                return false;
+            }
+            if (netObject.m_RequireRoad == Game.Net.RoadTypes.None
+                && netObject.m_TrackPassThrough == Game.Net.TrackTypes.None
+                && !street
+                && !pedestrian)
+            {
+                return false;
+            }
+            return true;
+        }
+
+        private bool TrySampleCurbSides(Entity edge, out CurbSide left, out CurbSide right)
+        {
+            if (EntityManager.HasComponent<Game.Net.EdgeGeometry>(edge))
+            {
+                Game.Net.EdgeGeometry geometry =
+                    EntityManager.GetComponentData<Game.Net.EdgeGeometry>(edge);
+                var leftPoints = new List<float3>();
+                var leftOutward = new List<float3>();
+                var rightPoints = new List<float3>();
+                var rightOutward = new List<float3>();
+                AppendCurbSegment(geometry.m_Start, leftPoints, leftOutward, rightPoints, rightOutward);
+                AppendCurbSegment(geometry.m_End, leftPoints, leftOutward, rightPoints, rightOutward);
+                left = new CurbSide(leftPoints.ToArray(), leftOutward.ToArray());
+                right = new CurbSide(rightPoints.ToArray(), rightOutward.ToArray());
+                return left.Points.Length >= 2 && right.Points.Length >= 2;
+            }
+            if (!EntityManager.HasComponent<Game.Net.Curve>(edge))
+            {
+                left = default;
+                right = default;
+                return false;
+            }
+            Game.Net.Curve curve = EntityManager.GetComponentData<Game.Net.Curve>(edge);
+            float halfWidth = 0f;
+            if (EntityManager.HasComponent<PrefabRef>(edge))
+            {
+                Entity netPrefab = EntityManager.GetComponentData<PrefabRef>(edge).m_Prefab;
+                if (EntityManager.HasComponent<NetGeometryData>(netPrefab))
+                {
+                    halfWidth = EntityManager.GetComponentData<NetGeometryData>(netPrefab).m_DefaultWidth * 0.5f;
+                }
+            }
+            float3[] center = SamplePlacementPath(curve);
+            var fallbackLeft = new float3[center.Length];
+            var fallbackRight = new float3[center.Length];
+            var fallbackLeftOut = new float3[center.Length];
+            var fallbackRightOut = new float3[center.Length];
+            for (int i = 0; i < center.Length; i++)
+            {
+                float3 tangent = i + 1 < center.Length
+                    ? center[i + 1] - center[i]
+                    : center[i] - center[i - 1];
+                tangent.y = 0f;
+                float3 leftDirection = math.normalizesafe(new float3(-tangent.z, 0f, tangent.x));
+                fallbackLeft[i] = center[i] + leftDirection * halfWidth;
+                fallbackRight[i] = center[i] - leftDirection * halfWidth;
+                fallbackLeftOut[i] = leftDirection;
+                fallbackRightOut[i] = -leftDirection;
+            }
+            left = new CurbSide(fallbackLeft, fallbackLeftOut);
+            right = new CurbSide(fallbackRight, fallbackRightOut);
+            return center.Length >= 2;
+        }
+
+        private static void AppendCurbSegment(
+            Game.Net.Segment segment,
+            List<float3> leftPoints,
+            List<float3> leftOutward,
+            List<float3> rightPoints,
+            List<float3> rightOutward)
+        {
+            for (int i = 0; i <= kCurbSamplesPerSegment; i++)
+            {
+                float t = i / (float)kCurbSamplesPerSegment;
+                float3 left = BezierPoint(segment.m_Left, t);
+                float3 right = BezierPoint(segment.m_Right, t);
+                float3 away = left - right;
+                away.y = 0f;
+                float3 outward = math.normalizesafe(away);
+                leftPoints.Add(left);
+                rightPoints.Add(right);
+                leftOutward.Add(outward);
+                rightOutward.Add(-outward);
+            }
+        }
+
         /// <summary>
         /// Resolves an object that the standalone placement pipeline owns.
         /// Service upgrades share BuildingData/PlaceableObjectData with real
@@ -2793,14 +3108,30 @@ namespace CS2MCP
             out PrefabBase prefab,
             out BridgeResponse error)
         {
+            bool curb = false;
             if (!TryFindPrefabByName(BuildingPrefabQuery, name, out prefabEntity, out prefab)
                 && !TryFindPrefabByName(TreePrefabQuery, name, out prefabEntity, out prefab))
             {
-                error = BridgeResponse.Error(BridgeErrorKind.NotFound,
-                    $"unknown building/tree prefab '{name}'; search via /prefabs?category=building|tree&query=...");
-                return false;
+                if (!TryFindPrefabByName(CurbObjectPrefabQuery, name, out prefabEntity, out prefab))
+                {
+                    error = BridgeResponse.Error(BridgeErrorKind.NotFound,
+                        $"unknown building, tree, or roadside prefab '{name}'; search via /prefabs?category=building|tree|object&query=...");
+                    return false;
+                }
+                curb = true;
             }
-            if (!IsIndependentBuildingPrefab(prefabEntity))
+            if (curb)
+            {
+                if (!IsMenuCurbObject(prefabEntity))
+                {
+                    error = BridgeResponse.Error(BridgeErrorKind.InvalidArguments,
+                        $"prefab '{prefab.name}' is not a roadside object that can be placed on its own");
+                    prefabEntity = Entity.Null;
+                    prefab = null;
+                    return false;
+                }
+            }
+            else if (!IsIndependentBuildingPrefab(prefabEntity))
             {
                 error = BridgeResponse.Error(BridgeErrorKind.InvalidArguments,
                     $"prefab '{prefab.name}' is a building upgrade and cannot be placed independently; install it through its owning service building");

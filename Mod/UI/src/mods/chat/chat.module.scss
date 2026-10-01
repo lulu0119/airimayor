@@ -266,6 +266,31 @@
   color: #eef2f9;
 }
 
+// A span is a row in Gameface, so a chip in the text stretches to the
+// message height. These runs wrap like words and the chip stays inline.
+.messageFlow {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  width: 100%;
+}
+
+.inlineRun {
+  flex: 0 0 auto;
+  white-space: pre;
+}
+
+.lineBreak {
+  flex: 0 0 100%;
+  width: 100%;
+  height: 0;
+}
+
+.lineBreak + .lineBreak {
+  height: 1.4em;
+}
+
 .userRow {
   background-color: rgba(46, 79, 134, 0.85);
 }
@@ -485,6 +510,85 @@
   right: 18rem;
   bottom: 18rem;
   display: flex;
+}
+
+.placeButtonWrap {
+  position: absolute;
+  left: 18rem;
+  bottom: 18rem;
+  display: flex;
+}
+
+.placeButtonOn .actionIcon {
+  color: #4bc3f1;
+}
+
+.placeButtonOn:hover .actionIcon {
+  color: #4bc3f1;
+}
+
+.placeCards {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 6rem;
+}
+
+.placeCards .clipInline {
+  margin-bottom: 4rem;
+}
+
+.placeChipRemove {
+  margin-left: 4rem;
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.placeChipRemove:hover {
+  opacity: 1;
+}
+
+.placeNotice {
+  margin-bottom: 6rem;
+  color: #e0a63c;
+  font-size: 12rem;
+}
+
+.historyPlaces {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0 0 2rem 0;
+}
+
+.clipInline {
+  display: inline-flex;
+  flex-direction: row;
+  flex: 0 0 auto;
+  align-self: center;
+  align-items: center;
+  margin: 0 4rem;
+  padding: 1rem 6rem;
+  border: none;
+  border-radius: 8rem;
+  background-color: #e0a63c;
+  color: #20180a;
+  font-size: 11rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.clipInline:hover {
+  background-color: #ecb453;
+}
+
+.pickHint {
+  margin-bottom: 6rem;
+  color: #9aa3b5;
+  font-size: 12rem;
 }
 
 // Close-button recipe: no box, bare glyph, hover tint only.

@@ -72,6 +72,7 @@ namespace CS2MCP
                 prefabEntity,
                 new float2(x1, z1),
                 snapRadius,
+                false,
                 ref heightData);
             ResolvedEnd end = Resolve(
                 world,
@@ -79,6 +80,7 @@ namespace CS2MCP
                 prefabEntity,
                 new float2(x2, z2),
                 snapRadius,
+                false,
                 ref heightData);
 
             if (arguments.Shape == NetworkCourseShape.Parallel)
@@ -177,17 +179,15 @@ namespace CS2MCP
             segments = null;
             length = 0f;
             steepestGrade = 0f;
-            if (!ResolveParallelNode(entityManager, start, requestedStart, out Entity startNode, out error)
-                || !ResolveParallelNode(entityManager, end, requestedEnd, out Entity endNode, out error))
-            {
-                return false;
-            }
-            if (startNode == endNode)
-            {
-                error = "parallel needs two different points of the road to copy";
-                return false;
-            }
-            if (!TryFindPath(entityManager, startNode, endNode, out List<PathEdge> path, out error))
+            if (!TryWalk(
+                entityManager,
+                start,
+                end,
+                requestedStart,
+                requestedEnd,
+                "parallel needs two different points of the road to copy",
+                out List<PathEdge> path,
+                out error))
             {
                 return false;
             }
@@ -242,6 +242,87 @@ namespace CS2MCP
 
             segments = built;
             return true;
+        }
+
+        /// <summary>
+        /// The road edges between two world points: the same snap and
+        /// shortest-path walk a parallel frontage uses, limited to roads.
+        /// </summary>
+        internal static bool TrySelectRoadEdges(
+            World world,
+            EntityManager entityManager,
+            Entity snapPrefab,
+            float x1,
+            float z1,
+            float x2,
+            float z2,
+            out List<Entity> edges,
+            out string error)
+        {
+            edges = null;
+            error = null;
+            TerrainHeightData heightData = world
+                .GetOrCreateSystemManaged<TerrainSystem>()
+                .GetHeightData();
+            float snapRadius = SnapRadius(entityManager, snapPrefab);
+            ResolvedEnd start = Resolve(
+                world,
+                entityManager,
+                snapPrefab,
+                new float2(x1, z1),
+                snapRadius,
+                true,
+                ref heightData);
+            ResolvedEnd end = Resolve(
+                world,
+                entityManager,
+                snapPrefab,
+                new float2(x2, z2),
+                snapRadius,
+                true,
+                ref heightData);
+            if (!TryWalk(
+                entityManager,
+                start,
+                end,
+                new float2(x1, z1),
+                new float2(x2, z2),
+                "choose two different points on the road",
+                out List<PathEdge> path,
+                out error))
+            {
+                return false;
+            }
+            edges = new List<Entity>(path.Count);
+            for (int i = 0; i < path.Count; i++)
+            {
+                edges.Add(path[i].Edge);
+            }
+            return true;
+        }
+
+        private static bool TryWalk(
+            EntityManager entityManager,
+            ResolvedEnd start,
+            ResolvedEnd end,
+            float2 requestedStart,
+            float2 requestedEnd,
+            string samePointError,
+            out List<PathEdge> path,
+            out string error)
+        {
+            path = null;
+            if (!ResolveParallelNode(entityManager, start, requestedStart, out Entity startNode, out error)
+                || !ResolveParallelNode(entityManager, end, requestedEnd, out Entity endNode, out error))
+            {
+                return false;
+            }
+            if (startNode == endNode)
+            {
+                error = samePointError;
+                return false;
+            }
+            return TryFindPath(entityManager, startNode, endNode, out path, out error);
         }
 
         private static NetworkCourseSegment Finish(
@@ -336,11 +417,12 @@ namespace CS2MCP
             Entity prefabEntity,
             float2 point,
             float snapRadius,
+            bool anyRoad,
             ref TerrainHeightData heightData)
         {
             var hits = new List<Hit>();
             var candidates = new List<CourseSnapCandidate>();
-            CollectHits(world, entityManager, prefabEntity, point, snapRadius, hits, candidates);
+            CollectHits(world, entityManager, prefabEntity, point, snapRadius, anyRoad, hits, candidates);
             float3 terrain = new float3(point.x, 0f, point.y);
             terrain.y = TerrainUtils.SampleHeight(ref heightData, terrain);
             if (!NetworkCourseMath.TryPickSnap(candidates, snapRadius, out CourseSnapCandidate picked))
@@ -391,6 +473,7 @@ namespace CS2MCP
             Entity prefabEntity,
             float2 point,
             float snapRadius,
+            bool anyRoad,
             List<Hit> hits,
             List<CourseSnapCandidate> candidates)
         {
@@ -409,7 +492,7 @@ namespace CS2MCP
                 tree.Iterate(ref iterator);
                 for (int i = 0; i < found.Length; i++)
                 {
-                    ConsiderEntity(entityManager, prefabEntity, point, found[i], hits, candidates);
+                    ConsiderEntity(entityManager, prefabEntity, point, found[i], anyRoad, hits, candidates);
                 }
             }
         }
@@ -419,6 +502,7 @@ namespace CS2MCP
             Entity prefabEntity,
             float2 point,
             Entity entity,
+            bool anyRoad,
             List<Hit> hits,
             List<CourseSnapCandidate> candidates)
         {
@@ -426,10 +510,20 @@ namespace CS2MCP
             {
                 return;
             }
-            Entity netPrefab = entityManager.GetComponentData<PrefabRef>(entity).m_Prefab;
-            if (!Compatible(entityManager, prefabEntity, netPrefab))
+            if (anyRoad)
             {
-                return;
+                if (!IsRoadHit(entityManager, entity))
+                {
+                    return;
+                }
+            }
+            else
+            {
+                Entity netPrefab = entityManager.GetComponentData<PrefabRef>(entity).m_Prefab;
+                if (!Compatible(entityManager, prefabEntity, netPrefab))
+                {
+                    return;
+                }
             }
 
             if (entityManager.HasComponent<Node>(entity))
@@ -456,11 +550,11 @@ namespace CS2MCP
             float3 positionOnCurve = MathUtils.Position(curve.m_Bezier, curveT);
             if (curveT <= 0.001f || math.distance(curve.m_Bezier.a.xz, point) <= distance)
             {
-                AddNode(entityManager, edge.m_Start, prefabEntity, point, hits, candidates);
+                AddNode(entityManager, edge.m_Start, prefabEntity, point, anyRoad, hits, candidates);
             }
             if (curveT >= 0.999f || math.distance(curve.m_Bezier.d.xz, point) <= distance)
             {
-                AddNode(entityManager, edge.m_End, prefabEntity, point, hits, candidates);
+                AddNode(entityManager, edge.m_End, prefabEntity, point, anyRoad, hits, candidates);
             }
             if (curveT <= 0.001f || curveT >= 0.999f)
             {
@@ -482,6 +576,7 @@ namespace CS2MCP
             Entity node,
             Entity prefabEntity,
             float2 point,
+            bool anyRoad,
             List<Hit> hits,
             List<CourseSnapCandidate> candidates)
         {
@@ -489,7 +584,14 @@ namespace CS2MCP
             {
                 return;
             }
-            if (entityManager.HasComponent<PrefabRef>(node))
+            if (anyRoad)
+            {
+                if (!IsRoadHit(entityManager, node))
+                {
+                    return;
+                }
+            }
+            else if (entityManager.HasComponent<PrefabRef>(node))
             {
                 Entity netPrefab = entityManager.GetComponentData<PrefabRef>(node).m_Prefab;
                 if (!Compatible(entityManager, prefabEntity, netPrefab))
@@ -712,11 +814,11 @@ namespace CS2MCP
                 RoadPath oriented = edge.m_Start == from
                     ? new RoadPath(bezier.a, bezier.b, bezier.c, bezier.d)
                     : new RoadPath(bezier.d, bezier.c, bezier.b, bezier.a);
-                reversed.Add(new PathEdge(from, cursor, oriented));
+                reversed.Add(new PathEdge(from, cursor, oriented, edgeEntity));
                 cursor = from;
                 if (reversed.Count > kMaximumParallelEdges)
                 {
-                    error = "that road is too long to copy in one call; choose closer points";
+                    error = "that road is too long for one call; choose closer points";
                     return false;
                 }
             }
@@ -798,18 +900,41 @@ namespace CS2MCP
             public float2 Into;
         }
 
+        private static bool IsRoadHit(EntityManager entityManager, Entity entity)
+        {
+            if (entityManager.HasComponent<Road>(entity))
+            {
+                return true;
+            }
+            if (!entityManager.HasComponent<Node>(entity) || !entityManager.HasBuffer<ConnectedEdge>(entity))
+            {
+                return false;
+            }
+            DynamicBuffer<ConnectedEdge> connected = entityManager.GetBuffer<ConnectedEdge>(entity, true);
+            for (int i = 0; i < connected.Length; i++)
+            {
+                if (entityManager.HasComponent<Road>(connected[i].m_Edge))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private readonly struct PathEdge
         {
-            public PathEdge(Entity from, Entity to, RoadPath oriented)
+            public PathEdge(Entity from, Entity to, RoadPath oriented, Entity edge)
             {
                 From = from;
                 To = to;
                 Oriented = oriented;
+                Edge = edge;
             }
 
             public Entity From { get; }
             public Entity To { get; }
             public RoadPath Oriented { get; }
+            public Entity Edge { get; }
         }
 
         private struct NearbyNetIterator : INativeQuadTreeIterator<Entity, QuadTreeBoundsXZ>,

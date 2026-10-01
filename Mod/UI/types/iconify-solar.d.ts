@@ -37,3 +37,9 @@ declare module "@iconify-icons/solar/check-circle-bold-duotone" {
   const icon: IconifyIcon;
   export default icon;
 }
+
+declare module "@iconify-icons/solar/map-point-bold-duotone" {
+  import type { IconifyIcon } from "@iconify/react";
+  const icon: IconifyIcon;
+  export default icon;
+}

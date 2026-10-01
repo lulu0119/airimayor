@@ -56,3 +56,19 @@ if (closed.kind === "tool") {
   assert.equal(closed.result, "placed");
   assert.equal(closed.state, "done");
 }
+
+let pointed = emptyTranscript;
+pointed = applyWireEvent(pointed, {
+  kind: "user",
+  text: "",
+  places: [{ id: "p1", kind: "point", name: "Point 1", x: 455, z: -70, index: 0, version: 0 }],
+});
+assert.equal(pointed.lines.length, 1);
+const pointedLine = pointed.lines[0];
+assert.equal(pointedLine.kind, "user");
+if (pointedLine.kind === "user") {
+  assert.equal(pointedLine.text, "");
+  assert.equal(pointedLine.places.length, 1);
+  assert.equal(pointedLine.places[0].name, "Point 1");
+  assert.equal(pointedLine.places[0].x, 455);
+}

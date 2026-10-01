@@ -36,6 +36,7 @@ namespace airimayor
             updateSystem.UpdateAt<ToolQueueSystem>(SystemUpdatePhase.UIUpdate);
             updateSystem.UpdateAt<CS2MCP.BridgeSystem>(SystemUpdatePhase.UIUpdate);
             updateSystem.UpdateAt<CS2MCP.BridgeToolSystem>(SystemUpdatePhase.ToolUpdate);
+            updateSystem.UpdateAt<CS2MCP.PointedPlaceToolSystem>(SystemUpdatePhase.ToolUpdate);
             updateSystem.UpdateAt<AgentUISystem>(SystemUpdatePhase.UIUpdate);
         }
 

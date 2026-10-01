@@ -26,6 +26,9 @@ namespace airimayor.Host
         private readonly ConcurrentQueue<SessionUpdate> m_Events =
             new ConcurrentQueue<SessionUpdate>();
         private ValueBinding<string> m_StateBinding;
+        private ValueBinding<string> m_PlacesBinding;
+        private ValueBinding<string> m_PointModeBinding;
+        private ValueBinding<string> m_PlaceNoticeBinding;
         private EventBinding<string> m_EventBinding;
         private int m_StateDirty;
         private IAgentSession m_Session;
@@ -51,6 +54,28 @@ namespace airimayor.Host
                 System.Collections.Generic.EqualityComparer<string>.Default);
             AddBinding(m_StateBinding);
 
+            m_PlacesBinding = new ValueBinding<string>(
+                Group,
+                "places",
+                "[]",
+                ValueWriters.Create<string>(),
+                System.Collections.Generic.EqualityComparer<string>.Default);
+            AddBinding(m_PlacesBinding);
+            m_PointModeBinding = new ValueBinding<string>(
+                Group,
+                "pointMode",
+                "",
+                ValueWriters.Create<string>(),
+                System.Collections.Generic.EqualityComparer<string>.Default);
+            AddBinding(m_PointModeBinding);
+            m_PlaceNoticeBinding = new ValueBinding<string>(
+                Group,
+                "placeNotice",
+                "",
+                ValueWriters.Create<string>(),
+                System.Collections.Generic.EqualityComparer<string>.Default);
+            AddBinding(m_PlaceNoticeBinding);
+
             m_EventBinding = new EventBinding<string>(Group, "event", ValueWriters.Create<string>());
             AddBinding(m_EventBinding);
 
@@ -60,6 +85,21 @@ namespace airimayor.Host
                 OnSend,
                 ValueReaders.Create<string>()));
             AddBinding(new TriggerBinding(Group, "interrupt", OnInterrupt));
+            AddBinding(new TriggerBinding<string>(
+                Group,
+                "pointMode",
+                OnPointMode,
+                ValueReaders.Create<string>()));
+            AddBinding(new TriggerBinding<string>(
+                Group,
+                "removePlace",
+                OnRemovePlace,
+                ValueReaders.Create<string>()));
+            AddBinding(new TriggerBinding<string>(
+                Group,
+                "framePlace",
+                OnFramePlace,
+                ValueReaders.Create<string>()));
 
             Setting.HeadApplied += OnHeadApplied;
             PushState();
@@ -75,6 +115,7 @@ namespace airimayor.Host
                 return;
             }
 
+            ClearPointedPlaces();
             CloseSession();
             OpenSession();
             ResetSessionState();
@@ -83,6 +124,7 @@ namespace airimayor.Host
 
         private void LeaveGameSession()
         {
+            ClearPointedPlaces();
             CloseSession();
             ResetSessionState();
             PushState();
@@ -98,11 +140,82 @@ namespace airimayor.Host
 
         private void OnSend(string text)
         {
-            if (string.IsNullOrWhiteSpace(text) || !IsInLoadedCity())
+            if (!IsInLoadedCity() || m_Session == null)
             {
                 return;
             }
-            m_Session?.Prompt(text);
+            System.Collections.Generic.List<PointedPlace> places = PointedPlaces().TakeDraft();
+            string words = text ?? "";
+            if (string.IsNullOrWhiteSpace(words) && places.Count == 0)
+            {
+                return;
+            }
+            if (places.Count == 0)
+            {
+                m_Session.Prompt(words);
+                return;
+            }
+            m_Session.Prompt(
+                PointedPlaceText.Compose(words, places),
+                words.Trim(),
+                PointedPlaceText.ToJson(places));
+        }
+
+        private void OnPointMode(string mode)
+        {
+            if (!IsInLoadedCity())
+            {
+                return;
+            }
+            PointedPlaces().Begin(mode ?? "");
+        }
+
+        private void OnRemovePlace(string id)
+        {
+            if (!IsInLoadedCity())
+            {
+                return;
+            }
+            PointedPlaces().Remove(id);
+        }
+
+        private void OnFramePlace(string json)
+        {
+            if (!IsInLoadedCity() || !PointedPlaceText.TryParse(json, out PointedPlace place))
+            {
+                return;
+            }
+            PointedPlaces().Frame(place);
+        }
+
+        private CS2MCP.PointedPlaceToolSystem PointedPlaces()
+        {
+            return World.GetOrCreateSystemManaged<CS2MCP.PointedPlaceToolSystem>();
+        }
+
+        private void ClearPointedPlaces()
+        {
+            PointedPlaces().ClearDraft();
+        }
+
+        private void PublishPointedPlaces()
+        {
+            CS2MCP.PointedPlaceToolSystem places = PointedPlaces();
+            string draft = places.DraftJson();
+            if (m_PlacesBinding.value != draft)
+            {
+                m_PlacesBinding.Update(draft);
+            }
+            string mode = places.Mode ?? "";
+            if (m_PointModeBinding.value != mode)
+            {
+                m_PointModeBinding.Update(mode);
+            }
+            string notice = places.Notice ?? "";
+            if (m_PlaceNoticeBinding.value != notice)
+            {
+                m_PlaceNoticeBinding.Update(notice);
+            }
         }
 
         private void OnInterrupt()
@@ -116,7 +229,7 @@ namespace airimayor.Host
 
         private void OpenSession()
         {
-            m_Session = AgentSessionHost.Current = OpenHead();
+            m_Session = AgentSessionHost.Current = AgentHead.Open();
             m_Session.Updated += OnAgentEvent;
             Mod.log.Info("agent session opened " + m_Session.Timeline.SessionId);
         }
@@ -127,53 +240,6 @@ namespace airimayor.Host
             m_DeferredEvent = null;
             m_AutoStartSent = false;
             Interlocked.Exchange(ref m_StateDirty, 1);
-        }
-
-        private static IAgentSession OpenHead()
-        {
-            var tools = new Cs2AgentTools();
-            AgentChoice choice = AgentChoices.Find(Setting.StaticHead);
-            if (!choice.IsBuiltIn)
-            {
-                string root = Mod.InstallDirectory;
-                string mcp = string.IsNullOrEmpty(root)
-                    ? null
-                    : Path.Combine(root, "mcp", "airimayor-mcp.exe");
-                return new AcpSession(
-                    tools,
-                    AgentSystemPrompt.Text,
-                    () => Setting.StaticVisionToolMode == VisionToolMode.On,
-                    () => Setting.StaticContinuous,
-                    Setting.StaticStartupPrompt,
-                    choice.Command,
-                    choice.Arguments,
-                    mcp,
-                    string.IsNullOrEmpty(root) ? Directory.GetCurrentDirectory() : root,
-                    ModPaths.LogsDirectory,
-                    message => Mod.log.Warn(message));
-            }
-            return new AgentRuntime.AgentRuntime(
-                tools,
-                AgentSystemPrompt.Text,
-                ReadModel,
-                ModPaths.LogsDirectory,
-                message => Mod.log.Warn(message));
-        }
-
-        private static ModelSettings ReadModel()
-        {
-            return new ModelSettings
-            {
-                Endpoint = Setting.StaticEndpoint,
-                ApiKey = Setting.StaticApiKey,
-                Model = Setting.StaticModel,
-                WindowTokens = Setting.StaticWindowTokens,
-                Vision = Setting.StaticVisionToolMode == VisionToolMode.On,
-                ContinueWhenIdle = Setting.StaticContinuous,
-                Wire = Setting.StaticApiKind == ApiKind.Responses
-                    ? ModelWire.Responses
-                    : ModelWire.ChatCompletions,
-            };
         }
 
         private void CloseSession()
@@ -247,6 +313,7 @@ namespace airimayor.Host
             {
                 PushState();
             }
+            PublishPointedPlaces();
         }
 
         private void TryAutoStart()

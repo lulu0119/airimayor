@@ -1,3 +1,5 @@
+import type { PointedPlace } from "./place";
+
 // Wire shapes from AgentUISystem plus the UI-side transcript model.
 // The transcript is a flat append-only log; snapshots only hydrate it on
 // session switch, live events append to it. See transcript.ts.
@@ -8,6 +10,7 @@ export interface StateMessage {
   role: string;
   text: string;
   tool: string | null;
+  places?: unknown;
 }
 
 export interface AgentContextInfo {
@@ -57,12 +60,13 @@ export interface AgentWireEvent {
   callId?: string;
   result?: string;
   output?: string;
+  places?: unknown;
 }
 
 export type ToolRowState = "running" | "done" | "error" | "interrupted";
 
 export type ChatLine =
-  | { id: number; kind: "user"; text: string }
+  | { id: number; kind: "user"; text: string; places: PointedPlace[] }
   | { id: number; kind: "assistant"; text: string; streaming: boolean }
   | {
       id: number;

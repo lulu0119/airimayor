@@ -4,6 +4,9 @@ import { Icon } from "@iconify/react";
 import altArrowDownBoldDuotone from "@iconify-icons/solar/alt-arrow-down-bold-duotone";
 import { useChatText } from "./locale";
 import { jpegPixelSize } from "./jpeg-size";
+import { parseMessageClips, splitInlineRuns } from "./clips";
+import { framePointedPlace } from "mods/bindings";
+import type { PointedPlace } from "./place";
 import styles from "./chat.module.scss";
 
 const toolDotClass = (state: ToolRowState): string => {
@@ -18,6 +21,17 @@ const toolDotClass = (state: ToolRowState): string => {
       return styles.dotInterrupted;
   }
 };
+
+const inlineRuns = (text: string, key: string) =>
+  splitInlineRuns(text).map((run, index) =>
+    run.kind === "break" ? (
+      <span key={`${key}:${index}`} className={styles.lineBreak} />
+    ) : (
+      <span key={`${key}:${index}`} className={styles.inlineRun}>
+        {run.text}
+      </span>
+    ),
+  );
 
 const roleClass = (kind: ChatLine["kind"]): string => {
   switch (kind) {
@@ -122,13 +136,50 @@ export const MessageRow = ({ line }: { line: ChatLine }) => {
       : line.kind === "error"
         ? text("Role.Error", "Error")
         : text("Role.Mayor", "AIRI");
+  const frame = (place: PointedPlace) => {
+    framePointedPlace(JSON.stringify(place));
+  };
   return (
     <div className={`${styles.messageRow} ${roleClass(line.kind)}`}>
       <span className={styles.roleLabel}>{roleName}</span>
-      <span className={styles.messageText}>
-        {line.text}
-        {line.kind === "assistant" && line.streaming ? "…" : ""}
-      </span>
+      {line.kind === "user" && line.places.length > 0 ? (
+        <span className={styles.historyPlaces}>
+          {line.places.map((place) => (
+            <span
+              key={place.id}
+              role="button"
+              className={styles.clipInline}
+              onClick={() => frame(place)}
+            >
+              {place.name}
+            </span>
+          ))}
+        </span>
+      ) : null}
+      {line.kind === "user" && line.text.length > 0 ? (
+        <span className={styles.messageText}>{line.text}</span>
+      ) : null}
+      {line.kind !== "user" ? (
+        <span className={`${styles.messageText} ${styles.messageFlow}`}>
+          {parseMessageClips(line.text).map((segment, index) =>
+            segment.kind === "text" ? (
+              inlineRuns(segment.text, String(index))
+            ) : (
+              <span
+                key={segment.place.id}
+                role="button"
+                className={styles.clipInline}
+                onClick={() => frame(segment.place)}
+              >
+                {segment.place.name}
+              </span>
+            ),
+          )}
+          {line.kind === "assistant" && line.streaming ? (
+            <span className={styles.inlineRun}>…</span>
+          ) : null}
+        </span>
+      ) : null}
     </div>
   );
 };

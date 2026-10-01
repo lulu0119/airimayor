@@ -194,6 +194,7 @@ export const ChatPanel = ({ children }: { children?: ReactNode }) => {
         <div
           ref={dockRef}
           className={styles.dock}
+          data-airimayor-chat=""
           style={frameStyle}
           onMouseDown={onDockMouseDown}
         >

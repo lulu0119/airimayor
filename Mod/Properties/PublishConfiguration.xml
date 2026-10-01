@@ -4,7 +4,7 @@
 	<!--Name of the mod to display to players. Brand first, then the words people search.-->
 	<DisplayName Value="AIRI Mayor: In-Game AI Mayor" />
 	<!--Short description of the mod. Shown with the title; say what the player can do.-->
-	<ShortDescription Value="Talk to an in-game AI. It can zone, build roads, place services, and handle city problems. Add an API key in the mod settings. No other program required." />
+	<ShortDescription Value="Talk to an in-game AI. It can zone, build roads, place services, and handle city problems. Add an API key in the mod settings. Works standalone." />
 	<!--Long description of the mod. Single line or multi line. Supports minimal markdown subset. Body lines stay at column 0 or Paradox drops the formatting.-->
 	<!--LongDescription Value="This is a long description" /-->
 	<LongDescription>
@@ -20,7 +20,7 @@ The AI can:
 * Place public buildings such as schools, hospitals, fire stations, police stations, power plants, water facilities, and garbage facilities
 * Buy tiles, adjust taxes and service budgets, and add transit lines
 
-The player controls simulation speed. The AI can advance time for a while to observe construction results, then restore the previous speed. Demolition and Development Points are off by default and can be enabled in the mod settings.
+The player controls simulation speed. The AI can advance time for a while to observe construction results, then restore the previous speed. Demolition and Development Points stay optional and can be enabled in the mod settings.
 
 ## Setup
 
@@ -28,7 +28,7 @@ The player controls simulation speed. The AI can advance time for a while to obs
 * Enter the endpoint, API key, and model in the mod settings
 * After loading a city, use the chat at the bottom-right
 
-Bring your own model and API key. No other program is required.
+Bring your own model and API key. Works standalone.
 
 ## Models
 

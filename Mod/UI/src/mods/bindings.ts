@@ -13,3 +13,19 @@ export const sendChatMessage = (text: string): void => {
 export const interruptTurn = (): void => {
   trigger(mod.id, "interrupt");
 };
+
+export const pointedPlaces$ = bindValue<string>(mod.id, "places", "[]");
+export const pointedMode$ = bindValue<string>(mod.id, "pointMode", "");
+export const placeNotice$ = bindValue<string>(mod.id, "placeNotice", "");
+
+export const beginPoint = (mode: string): void => {
+  trigger(mod.id, "pointMode", mode);
+};
+
+export const removePointedPlace = (id: string): void => {
+  trigger(mod.id, "removePlace", id);
+};
+
+export const framePointedPlace = (placeJson: string): void => {
+  trigger(mod.id, "framePlace", placeJson);
+};
