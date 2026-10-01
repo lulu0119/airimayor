@@ -9,6 +9,7 @@ Code still missing.
 - AIRI plugin
 - `map_image` hillshade
 - `build_network` parallel handle rescaling (scale copied bezier handles by the offset length ratio so bends keep their roundness)
+- Conflict errors name the blocker (return the conflicting `index:version` + prefab from `build_network` and `place_building` so demolish can target it)
 - `map_image` POI icon set
 - Pedestrian/cycle-specific map classes
 - Zoning-cell landuse fills (volume)
