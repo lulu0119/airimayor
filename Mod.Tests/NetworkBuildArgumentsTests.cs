@@ -12,7 +12,7 @@ namespace CS2MCP
 
             Assert.True(parsed);
             Assert.Equal(RoadBuildMode.Ground, arguments.RoadMode);
-            Assert.False(arguments.HasControlPoint);
+            Assert.Equal(NetworkCourseShape.Straight, arguments.Shape);
             Assert.False(arguments.HasElevation);
         }
 
@@ -67,40 +67,127 @@ namespace CS2MCP
         [Theory]
         [InlineData("cx", "10")]
         [InlineData("cz", "10")]
-        public void Control_point_requires_both_coordinates(string key, string value)
+        public void Removed_control_point_is_rejected(string key, string value)
         {
             bool parsed = Parse(true, Query((key, value)), out _, out string error);
 
             Assert.False(parsed);
-            Assert.Contains("both cx and cz", error);
+            Assert.Contains("shape=simple", error);
+            Assert.Contains("shape=complex", error);
         }
 
         [Fact]
-        public void Malformed_control_point_is_not_silently_treated_as_straight()
+        public void Straight_rejects_a_curve_field()
         {
-            bool parsed = Parse(
-                true,
-                Query(("cx", "not-a-number"), ("cz", "also-not-a-number")),
-                out _,
-                out string error);
+            bool parsed = Parse(true, Query(("departure", "0.4")), out _, out string error);
 
             Assert.False(parsed);
-            Assert.Contains("finite world coordinates", error);
+            Assert.Contains("departure", error);
         }
 
         [Fact]
-        public void Valid_control_point_is_preserved()
+        public void Simple_preserves_departure_and_arrival()
         {
             bool parsed = Parse(
                 true,
-                Query(("cx", "12.5"), ("cz", "-7.25")),
+                Query(("shape", "simple"), ("departure", "0.4"), ("arrival", "0.2")),
                 out NetworkBuildArguments arguments,
-                out _);
+                out string error);
 
-            Assert.True(parsed);
-            Assert.True(arguments.HasControlPoint);
-            Assert.Equal(12.5f, arguments.ControlX);
-            Assert.Equal(-7.25f, arguments.ControlZ);
+            Assert.True(parsed, error);
+            Assert.Equal(NetworkCourseShape.Simple, arguments.Shape);
+            Assert.Equal(0.4f, arguments.Departure);
+            Assert.Equal(0.2f, arguments.Arrival);
+        }
+
+        [Fact]
+        public void Complex_preserves_a_midpoint_and_rejects_one_coordinate()
+        {
+            bool parsed = Parse(
+                true,
+                Query(("shape", "complex"), ("mx", "12.5"), ("mz", "-7.25")),
+                out NetworkBuildArguments arguments,
+                out string error);
+
+            Assert.True(parsed, error);
+            Assert.True(arguments.HasMidpoint);
+            Assert.Equal(12.5f, arguments.MidX);
+            Assert.Equal(-7.25f, arguments.MidZ);
+
+            bool half = Parse(true, Query(("shape", "complex"), ("mx", "1")), out _, out string halfError);
+            Assert.False(half);
+            Assert.Contains("both mx and mz", halfError);
+        }
+
+        [Fact]
+        public void Parallel_requires_offset_and_rejects_mode_and_curve_fields()
+        {
+            bool missing = Parse(true, Query(("shape", "parallel")), out _, out string missingError);
+            Assert.False(missing);
+            Assert.Contains("offset", missingError);
+
+            bool parsed = Parse(
+                true,
+                Query(("shape", "parallel"), ("offset", "20"), ("raise", "-4")),
+                out NetworkBuildArguments arguments,
+                out string error);
+            Assert.True(parsed, error);
+            Assert.Equal(20f, arguments.Offset);
+            Assert.Equal(-4f, arguments.Raise);
+            Assert.Null(arguments.RoadMode);
+
+            bool mode = Parse(
+                true,
+                Query(("shape", "parallel"), ("offset", "20"), ("mode", "ground")),
+                out _,
+                out string modeError);
+            Assert.False(mode);
+            Assert.Contains("does not take mode", modeError);
+        }
+
+        [Fact]
+        public void Utility_rejects_parallel()
+        {
+            bool parsed = Parse(false, Query(("shape", "parallel"), ("offset", "10")), out _, out string error);
+
+            Assert.False(parsed);
+            Assert.Contains("parallel copies a road", error);
+        }
+
+        [Fact]
+        public void Ease_and_arch_require_grade_separated()
+        {
+            bool ground = Parse(true, Query(("profile", "ease")), out _, out string groundError);
+            Assert.False(ground);
+            Assert.Contains("grade-separated", groundError);
+
+            bool ease = Parse(
+                true,
+                Query(
+                    ("mode", "grade-separated"),
+                    ("e1", "0"),
+                    ("e2", "8"),
+                    ("profile", "ease"),
+                    ("easeStart", "0.2"),
+                    ("easeEnd", "0.25")),
+                out NetworkBuildArguments arguments,
+                out string error);
+            Assert.True(ease, error);
+            Assert.Equal(NetworkElevationProfile.Ease, arguments.Profile);
+            Assert.Equal(0.2f, arguments.EaseStart);
+            Assert.Equal(0.25f, arguments.EaseEnd);
+
+            bool arch = Parse(
+                true,
+                Query(
+                    ("mode", "grade-separated"),
+                    ("e1", "0"),
+                    ("e2", "8"),
+                    ("profile", "arch")),
+                out _,
+                out string archError);
+            Assert.False(arch);
+            Assert.Contains("archHeight", archError);
         }
 
         [Fact]
