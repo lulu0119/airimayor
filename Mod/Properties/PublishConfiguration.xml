@@ -35,7 +35,7 @@ Bring your own model and API key. Works standalone.
 DeepSeek V4.1 and Muse Spark 1.3 are the models tested so far. Please try the mod, and try other models as well.
 
 Report problems in the comments, or on GitHub:
-https://github.com/lulu0119/airimayor
+https://github.com/proj-airi/airimayor
 
 ## Credits
 
@@ -68,7 +68,7 @@ The AIRI plugin is still in development.
 	<!--<ChangeLog>
 	</ChangeLog>-->
 	<!--External link, can be set multiple times. supported types are "discord", "github", "youtube", "twitch", "x", "paypal", "patreon", "buymeacoffee", "kofi", "crowdin", "gitlab", "gofundme"-->
-	<ExternalLink Type="github" Url="https://github.com/lulu0119/airimayor" />
+	<ExternalLink Type="github" Url="https://github.com/proj-airi/airimayor" />
 	<!--Supported values Public, Private, Unlisted-->
 	<AccessLevel Value="Public" />
 </Publish>
