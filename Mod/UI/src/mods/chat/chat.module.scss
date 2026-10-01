@@ -391,6 +391,7 @@
 }
 
 .toolBody {
+  display: block;
   padding: 0 8rem 6rem 8rem;
 }
 
@@ -416,13 +417,16 @@
   color: #dfe6f2;
 }
 
+.toolImageFrame {
+  display: block;
+  width: 100%;
+  margin-bottom: 4rem;
+}
+
 .toolImage {
   display: block;
   width: 100%;
-  max-width: 100%;
-  height: auto;
   border-radius: 3rem;
-  margin-bottom: 4rem;
 }
 
 .composer {

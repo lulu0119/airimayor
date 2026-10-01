@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using airimayor.Host;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 
 namespace CS2MCP
 {
@@ -72,7 +73,16 @@ namespace CS2MCP
 
                 if (!skipEncode)
                 {
-                    byte[] png = ImageConversion.EncodeToPNG(output);
+                    // CaptureScreenshotAsTexture is one gamma too bright in a
+                    // linear project. Encode those bytes directly and the file
+                    // stays washed; undo that curve and write the array as-is.
+                    byte[] display = ToDisplayBytes(output.GetPixels32());
+                    byte[] png = ImageConversion.EncodeArrayToPNG(
+                        display,
+                        GraphicsFormat.R8G8B8A8_UNorm,
+                        (uint)output.width,
+                        (uint)output.height,
+                        0u);
                     if (png == null || png.Length == 0)
                     {
                         request.Complete(BridgeResponse.Error(BridgeErrorKind.Internal, "PNG encode failed"));
@@ -80,7 +90,7 @@ namespace CS2MCP
                     else
                     {
                         SaveScreenshot(png);
-                        request.Complete(BridgeResponse.Png(png, ToolPreview.EncodeThumbnail(output)));
+                        request.Complete(BridgeResponse.Png(png, ThumbnailJpeg(display, output.width, output.height)));
                     }
                 }
             }
@@ -115,6 +125,88 @@ namespace CS2MCP
             {
                 AgentTimeline.Warn("screenshot", $"save failed: {e.GetType().Name}: {e.Message}");
             }
+        }
+
+        private static byte[] ToDisplayBytes(Color32[] pixels)
+        {
+            var bytes = new byte[pixels.Length * 4];
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                Color32 pixel = pixels[i];
+                int offset = i * 4;
+                bytes[offset] = UndoGamma(pixel.r);
+                bytes[offset + 1] = UndoGamma(pixel.g);
+                bytes[offset + 2] = UndoGamma(pixel.b);
+                bytes[offset + 3] = 255;
+            }
+            return bytes;
+        }
+
+        private static byte UndoGamma(byte encoded)
+        {
+            float value = encoded / 255f;
+            float linear = value <= 0.04045f
+                ? value / 12.92f
+                : Mathf.Pow((value + 0.055f) / 1.055f, 2.4f);
+            return (byte)Mathf.Clamp(Mathf.RoundToInt(linear * 255f), 0, 255);
+        }
+
+        private static byte[] ThumbnailJpeg(byte[] display, int width, int height)
+        {
+            const int maxWidth = 480;
+            byte[] pixels = display;
+            int targetWidth = width;
+            int targetHeight = height;
+            if (width > maxWidth)
+            {
+                targetWidth = maxWidth;
+                targetHeight = Math.Max(1, (int)Math.Round(height * (double)maxWidth / width));
+                pixels = BoxDownscale(display, width, height, targetWidth, targetHeight);
+            }
+            return ImageConversion.EncodeArrayToJPG(
+                pixels,
+                GraphicsFormat.R8G8B8A8_UNorm,
+                (uint)targetWidth,
+                (uint)targetHeight,
+                0u,
+                60);
+        }
+
+        private static byte[] BoxDownscale(byte[] source, int width, int height, int targetWidth, int targetHeight)
+        {
+            var destination = new byte[targetWidth * targetHeight * 4];
+            for (int y = 0; y < targetHeight; y++)
+            {
+                int y0 = y * height / targetHeight;
+                int y1 = Math.Max(y0 + 1, (y + 1) * height / targetHeight);
+                for (int x = 0; x < targetWidth; x++)
+                {
+                    int x0 = x * width / targetWidth;
+                    int x1 = Math.Max(x0 + 1, (x + 1) * width / targetWidth);
+                    int red = 0;
+                    int green = 0;
+                    int blue = 0;
+                    int count = 0;
+                    for (int yy = y0; yy < y1; yy++)
+                    {
+                        int row = yy * width;
+                        for (int xx = x0; xx < x1; xx++)
+                        {
+                            int index = (row + xx) * 4;
+                            red += source[index];
+                            green += source[index + 1];
+                            blue += source[index + 2];
+                            count++;
+                        }
+                    }
+                    int offset = (y * targetWidth + x) * 4;
+                    destination[offset] = (byte)(red / count);
+                    destination[offset + 1] = (byte)(green / count);
+                    destination[offset + 2] = (byte)(blue / count);
+                    destination[offset + 3] = 255;
+                }
+            }
+            return destination;
         }
 
         private static Texture2D Downscale(Texture2D source, int targetWidth)

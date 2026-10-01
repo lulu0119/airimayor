@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { ChatLine, ToolRowState } from "./chat-types";
 import { Icon } from "@iconify/react";
 import altArrowDownBoldDuotone from "@iconify-icons/solar/alt-arrow-down-bold-duotone";
@@ -30,24 +30,38 @@ const roleClass = (kind: ChatLine["kind"]): string => {
   }
 };
 
-// Gameface img exposes no natural size and ignores object-fit, so CSS alone
-// cannot keep the aspect. The preview JPEG carries its pixel size in the
-// file header; pin an explicit height from the laid-out width.
+// Gameface percentage height follows the content box. A padding ratio box
+// leaves that box at 0, so the image lays out 0px tall. Pin a pixel height
+// from the frame width and the JPEG ratio.
 const ToolImage = ({ src, alt }: { src: string; alt: string }) => {
-  const ref = useRef<HTMLImageElement>(null);
-  const fit = () => {
-    const img = ref.current;
-    if (!img) {
+  const frameRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const size = jpegPixelSize(src);
+  useLayoutEffect(() => {
+    const frame = frameRef.current;
+    const img = imgRef.current;
+    if (!frame || !img) {
       return;
     }
-    const size = jpegPixelSize(src);
-    const laidWidth = img.clientWidth;
-    if (size && laidWidth > 0) {
-      img.style.height = `${Math.round((laidWidth * size.height) / size.width)}px`;
+    const apply = () => {
+      const width = frame.clientWidth;
+      const appliedHeight = size && width > 0 ? Math.round((width * size.height) / size.width) : 0;
+      if (appliedHeight > 0 && img.style.height !== `${appliedHeight}px`) {
+        img.style.height = `${appliedHeight}px`;
+      }
+    };
+    apply();
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver === "function") {
+      observer = new ResizeObserver(apply);
+      observer.observe(frame);
     }
-  };
+    return () => observer?.disconnect();
+  }, [src, size?.width, size?.height]);
   return (
-    <img ref={ref} className={styles.toolImage} src={src} alt={alt} onLoad={fit} />
+    <div ref={frameRef} className={styles.toolImageFrame}>
+      <img ref={imgRef} className={styles.toolImage} src={src} alt={alt} />
+    </div>
   );
 };
 
