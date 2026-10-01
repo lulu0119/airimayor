@@ -932,7 +932,7 @@
     },
     {
       "name": "build_network",
-      "description": "Build a road or utility-network segment between two world coordinates. Use SHORT segments (50-250m) on OWNED map tiles and connect roads near EXISTING road nodes. Small streets may join a highway where native validation allows, but prefer a ramp/collector/arterial path for highway access and verify flowPercent stays at 70 or above via list_networks. For ROAD prefabs, omitting mode selects ground: the route is sampled at roughly 4m or finer intervals for water and local grade, rejecting detected water crossings or grades above 10% (or a stricter prefab limit) instead of silently becoming a bridge or tunnel. Use mode=grade-separated only for an intentional bridge, elevated road or tunnel; provide both e1 and e2, with at least one nonzero. Do not pass mode for pipes, cables or other non-road networks. Pipes and Ground Cables remain UNDERGROUND by default (auto -10m buried), so omit e1/e2 to accept that burial. If the call fails, change the route or use shorter segments; do NOT repeat the same coordinates.",
+      "description": "Build a road or utility-network connection between two world coordinates. Omit shape for one straight segment. shape=simple is one ramp curve that leaves and joins along the roads at the two ends (departure and arrival, each 0..1 of the end-to-end distance). shape=complex is two segments with a smooth joint; mx and mz move that joint sideways. shape=parallel copies the road between the two given points as a frontage road: each end snaps to the nearest road, offset is required (-80..80 m, positive is to the right walking from start to end) and raise is optional meters up or down (at most 64 road edges per call). A field that does not belong to the chosen shape is rejected. Use SHORT segments (50-250m) on OWNED map tiles. An end that hits a compatible node or road edge joins it; a miss starts a new node. The result reports shape, lengthM, steepestGrade, segmentCount and joins. Small streets may join a highway where native validation allows, but prefer a ramp/collector/arterial path and verify flowPercent stays at 70 or above via list_networks. For ROAD prefabs, omitting mode selects ground: the route is sampled at roughly 4m or finer intervals for water and local grade, rejecting detected water crossings or grades above 10% (or a stricter prefab limit) instead of silently becoming a bridge or tunnel. Use mode=grade-separated only for an intentional bridge, elevated road or tunnel; provide both e1 and e2, with at least one nonzero. On a grade-separated road, profile=ease keeps the ends flat (easeStart and easeEnd, each 0..0.5) and profile=arch adds a crest (archHeight, archAt). Do not pass mode, profile or parallel for pipes, cables or other non-road networks. Pipes and Ground Cables remain UNDERGROUND by default (auto -10m buried), so omit e1/e2 to accept that burial. If the call fails, change the route or use shorter segments; do NOT repeat the same coordinates.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -956,13 +956,80 @@
             "type": "number",
             "description": "End Z (meters)"
           },
-          "cx": {
-            "type": "number",
-            "description": "Curve control point X. Provide together with cz to build a curve through that point; omit both for a straight segment."
+          "shape": {
+            "type": "string",
+            "enum": [
+              "straight",
+              "simple",
+              "complex",
+              "parallel"
+            ],
+            "description": "How the two ends connect. Omit or straight: one straight segment. simple: one curve that follows the road it leaves and the road it joins. complex: two segments meeting at a smooth joint. parallel: a frontage road copied from the road through the two given points. A field for another shape is rejected."
           },
-          "cz": {
+          "departure": {
             "type": "number",
-            "description": "Curve control point Z. Provide together with cx to build a curve through that point; omit both for a straight segment."
+            "minimum": 0,
+            "maximum": 1,
+            "description": "simple or complex only. How long the curve follows the road it leaves, as a fraction of the end-to-end distance. Omit to choose from how opposed the two roads are."
+          },
+          "arrival": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "simple or complex only. How long the curve follows the road it joins, as a fraction of the end-to-end distance. Omit to choose from how opposed the two roads are."
+          },
+          "mx": {
+            "type": "number",
+            "description": "complex only. World X of the smooth joint. Provide together with mz; omit both to place the joint halfway along the ramp curve."
+          },
+          "mz": {
+            "type": "number",
+            "description": "complex only. World Z of the smooth joint. Provide together with mx."
+          },
+          "offset": {
+            "type": "number",
+            "minimum": -80,
+            "maximum": 80,
+            "description": "parallel only, required. Meters to the side of the copied road. Positive is to the right walking from the start to the end."
+          },
+          "raise": {
+            "type": "number",
+            "minimum": -80,
+            "maximum": 80,
+            "description": "parallel only. Meters up or down from the copied road. Omit for the same height."
+          },
+          "profile": {
+            "type": "string",
+            "enum": [
+              "linear",
+              "ease",
+              "arch"
+            ],
+            "description": "Grade-separated roads only. Omit or linear: height blends from e1 to e2. ease: the ramp stays flat at each end. arch: a crest above that blend."
+          },
+          "easeStart": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 0.5,
+            "description": "profile=ease only. Fraction of the ramp that stays flat at the start. Default 0.1."
+          },
+          "easeEnd": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 0.5,
+            "description": "profile=ease only. Fraction of the ramp that stays flat at the end. Default 0.1."
+          },
+          "archHeight": {
+            "type": "number",
+            "minimum": -80,
+            "maximum": 80,
+            "description": "profile=arch only, required. Crest height in meters above the blend from e1 to e2."
+          },
+          "archAt": {
+            "type": "number",
+            "minimum": 0.1,
+            "maximum": 0.9,
+            "description": "profile=arch only. Where the crest sits along the ramp, 0.1 to 0.9. Default 0.5."
           },
           "mode": {
             "type": "string",
@@ -1016,12 +1083,52 @@
           "arg": "z2"
         },
         {
-          "key": "cx",
-          "arg": "cx"
+          "key": "shape",
+          "arg": "shape"
         },
         {
-          "key": "cz",
-          "arg": "cz"
+          "key": "departure",
+          "arg": "departure"
+        },
+        {
+          "key": "arrival",
+          "arg": "arrival"
+        },
+        {
+          "key": "mx",
+          "arg": "mx"
+        },
+        {
+          "key": "mz",
+          "arg": "mz"
+        },
+        {
+          "key": "offset",
+          "arg": "offset"
+        },
+        {
+          "key": "raise",
+          "arg": "raise"
+        },
+        {
+          "key": "profile",
+          "arg": "profile"
+        },
+        {
+          "key": "easeStart",
+          "arg": "easeStart"
+        },
+        {
+          "key": "easeEnd",
+          "arg": "easeEnd"
+        },
+        {
+          "key": "archHeight",
+          "arg": "archHeight"
+        },
+        {
+          "key": "archAt",
+          "arg": "archAt"
         },
         {
           "key": "mode",

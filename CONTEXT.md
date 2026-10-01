@@ -57,8 +57,8 @@ The write that places one standalone prefab and pose.
 _Avoid_: `find_placement`, `find_infrastructure_candidate`, preview-then-commit
 
 **build_network**:
-The write that constructs a linear network between endpoints. Distinct from placing a building.
-_Avoid_: `build_road`, `place_road`, `build_bridge` as a current tool
+The write that constructs one linear connection: a straight segment, a curve that leaves and joins along existing roads, a two-part bend, or a frontage copy beside an existing road.
+_Avoid_: `build_road`, `place_road`, `build_bridge`, a separate curve or parallel tool, a control point on a straight segment
 
 **Ground**:
 Default road mode: follow terrain; reject water and steep grades instead of rewriting the route.

@@ -536,13 +536,17 @@ namespace CS2MCP
 
         private sealed class PlacementPath
         {
+            public Entity Entity;
             public Entity PrefabEntity;
+            public string PrefabName;
             public float HalfWidth;
             public float3[] Points;
         }
 
         private struct PlacementFootprint
         {
+            public Entity Entity;
+            public string PrefabName;
             public float2 Center;
             public float2 HalfExtents;
             public float2 Right;
@@ -850,6 +854,7 @@ namespace CS2MCP
             float contextRadius = radius
                 + math.max(capabilities.ShorelineRadius, BuildingRadius(capabilities.Building))
                 + 180f;
+            PrefabSystem prefabSystem = World.GetOrCreateSystemManaged<PrefabSystem>();
             using (NativeArray<Entity> entities = PlacedRoadQuery.ToEntityArray(Allocator.Temp))
             {
                 foreach (Entity entity in entities)
@@ -868,7 +873,9 @@ namespace CS2MCP
                         : 0f;
                     var path = new PlacementPath
                     {
+                        Entity = entity,
                         PrefabEntity = prefabRef.m_Prefab,
+                        PrefabName = PrefabDisplayName(prefabSystem, prefabRef.m_Prefab),
                         HalfWidth = halfWidth,
                         Points = SamplePlacementPath(curve),
                     };
@@ -953,6 +960,8 @@ namespace CS2MCP
                         EntityManager.GetComponentData<BuildingData>(prefabRef.m_Prefab),
                         transform.m_Position,
                         transform.m_Rotation);
+                    footprint.Entity = entity;
+                    footprint.PrefabName = PrefabDisplayName(prefabSystem, prefabRef.m_Prefab);
                     float maximumDistance = contextRadius + footprint.Radius;
                     if (math.distancesq(footprint.Center, center)
                         <= maximumDistance * maximumDistance)
@@ -1252,16 +1261,6 @@ namespace CS2MCP
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "provide ?x1=&z1=&x2=&z2= world coordinates for both endpoints");
             }
 
-            float length = math.distance(new float2(x1, z1), new float2(x2, z2));
-            if (length < 8f)
-            {
-                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, $"segment too short ({length:F1}m); minimum ~8m");
-            }
-            if (length > 1500f)
-            {
-                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, $"segment too long ({length:F0}m); split into segments of <=1500m");
-            }
-
             if (!TryFindPrefabByName(NetPrefabQuery, prefabName, out Entity prefabEntity, out PrefabBase prefab))
             {
                 return BridgeResponse.Error(BridgeErrorKind.NotFound, $"unknown network prefab '{prefabName}'; search via /prefabs?category=road|net&query=...");
@@ -1282,26 +1281,11 @@ namespace CS2MCP
                     BridgeErrorKind.InvalidArguments,
                     argumentError);
             }
-            RoadBuildMode? roadMode = arguments.RoadMode;
-
-            TerrainSystem terrain = World.GetOrCreateSystemManaged<TerrainSystem>();
-            TerrainHeightData heightData = terrain.GetHeightData();
-            float3 start = new float3(x1, 0f, z1);
-            start.y = TerrainUtils.SampleHeight(ref heightData, start);
-            float3 end = new float3(x2, 0f, z2);
-            end.y = TerrainUtils.SampleHeight(ref heightData, end);
-
-            bool hasMid = arguments.HasControlPoint;
-            float3 mid = default;
-            if (hasMid)
-            {
-                mid = new float3(arguments.ControlX, 0f, arguments.ControlZ);
-                mid.y = TerrainUtils.SampleHeight(ref heightData, mid);
-            }
 
             float e1 = arguments.StartElevation;
             float e2 = arguments.EndElevation;
             if (!arguments.HasElevation
+                && arguments.Shape != NetworkCourseShape.Parallel
                 && IsBuriedNetPrefab(prefab.name))
             {
                 // Pipes and ground cables are underground networks: default to
@@ -1310,100 +1294,121 @@ namespace CS2MCP
                 e1 = -10f;
                 e2 = -10f;
             }
-            var elevations = new float2(e1, e2);
 
-            RoadPath roadPath = default;
-            if (isRoad)
+            if (!NetworkCourseBuilder.TryBuild(
+                    World,
+                    EntityManager,
+                    prefabEntity,
+                    isRoad,
+                    arguments,
+                    x1,
+                    z1,
+                    x2,
+                    z2,
+                    e1,
+                    e2,
+                    out List<NetworkCourseSegment> courses,
+                    out float courseLength,
+                    out float steepestGrade,
+                    out string courseError))
             {
-                RoadPath requestedPath = hasMid
-                    ? RoadPath.WithControlPoint(start, mid, end)
-                    : RoadPath.Straight(start, end);
-                Game.Net.Curve rawCurve = new Game.Net.Curve
-                {
-                    m_Bezier = new Bezier4x3(
-                        requestedPath.A,
-                        requestedPath.B,
-                        requestedPath.C,
-                        requestedPath.D),
-                };
-                Bezier4x3 adjusted = Game.Net.NetUtils.AdjustPosition(
-                    rawCurve,
-                    fixedStart: false,
-                    linearMiddle: false,
-                    fixedEnd: false,
-                    ref heightData).m_Bezier;
-                roadPath = new RoadPath(adjusted.a, adjusted.b, adjusted.c, adjusted.d);
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, courseError);
             }
 
-            if (roadMode == RoadBuildMode.Ground)
+            RoadBuildMode? roadMode = arguments.RoadMode;
+            if (roadMode == RoadBuildMode.Ground
+                && !TryPreflightGround(prefabEntity, prefab.name, courses, out BridgeResponse groundError))
             {
-                if (!EntityManager.HasComponent<NetGeometryData>(prefabEntity)
-                    || !EntityManager.HasComponent<PlaceableNetData>(prefabEntity))
-                {
-                    return BridgeResponse.Error(
-                        BridgeErrorKind.Conflict,
-                        $"road prefab '{prefab.name}' lacks the native geometry or placement data required for ground-path validation");
-                }
-
-                PlaceableNetData placeable = EntityManager.GetComponentData<PlaceableNetData>(prefabEntity);
-                if ((placeable.m_PlacementFlags & Game.Net.PlacementFlags.OnGround) == 0)
-                {
-                    return BridgeResponse.Error(
-                        BridgeErrorKind.InvalidArguments,
-                        $"road prefab '{prefab.name}' does not support mode=ground; use mode=grade-separated with both e1/e2 if appropriate");
-                }
-
-                WaterSystem water = World.GetOrCreateSystemManaged<WaterSystem>();
-                WaterSurfaceData<SurfaceWater> waterData =
-                    water.GetSurfaceData(out JobHandle waterDependencies);
-                waterDependencies.Complete();
-                NetGeometryData geometry = EntityManager.GetComponentData<NetGeometryData>(prefabEntity);
-                RoadGroundPreflightResult preflight = RoadGroundPreflight.Evaluate(
-                    roadPath,
-                    geometry.m_DefaultWidth * 0.5f,
-                    geometry.m_MaxSlopeSteepness,
-                    geometry.m_DefaultHeightRange.min,
-                    new RoadSurfaceSampler(heightData, waterData));
-                if (!preflight.Allowed)
-                {
-                    if (preflight.Block == RoadGroundBlock.Water)
-                    {
-                        return BridgeResponse.Error(
-                            BridgeErrorKind.Conflict,
-                            $"mode=ground route crosses water near ({preflight.Position.x:F1}, {preflight.Position.z:F1}) " +
-                            $"(depth {preflight.WaterDepth:F2}m); choose a dry route, or explicitly use mode=grade-separated with both e1/e2 for an intentional crossing");
-                    }
-                    if (preflight.Block == RoadGroundBlock.InvalidPath)
-                    {
-                        return BridgeResponse.Error(
-                            BridgeErrorKind.InvalidArguments,
-                            "mode=ground route is too long or non-finite to validate; move cx/cz closer to the endpoints or split the road into shorter segments");
-                    }
-                    return BridgeResponse.Error(
-                        BridgeErrorKind.Conflict,
-                        $"mode=ground route is too steep near ({preflight.Position.x:F1}, {preflight.Position.z:F1}): " +
-                        $"observed {preflight.Grade * 100f:F1}%, allowed {preflight.MaximumGrade * 100f:F1}% " +
-                        "(10% product ceiling or a stricter prefab limit); " +
-                        "choose a gentler route, or explicitly use mode=grade-separated with both e1/e2");
-                }
+                return groundError;
             }
 
             BridgeToolSystem tool = World.GetOrCreateSystemManaged<BridgeToolSystem>();
             if (!tool.TryQueueRoad(
                     prefabEntity,
                     prefab,
-                    start,
-                    end,
-                    mid,
-                    hasMid,
-                    elevations,
+                    courses[0].Path.A,
+                    courses[courses.Count - 1].Path.D,
+                    new float2(e1, e2),
                     roadMode,
-                    roadPath,
+                    arguments.Shape,
+                    courses,
+                    courseLength,
+                    steepestGrade,
                     request))
             {
                 return BridgeResponse.Error(BridgeErrorKind.Conflict, "another build operation is in progress, retry shortly");
             }
             return null;
+        }
+
+        private bool TryPreflightGround(
+            Entity prefabEntity,
+            string prefabName,
+            List<NetworkCourseSegment> courses,
+            out BridgeResponse error)
+        {
+            error = null;
+            if (!EntityManager.HasComponent<NetGeometryData>(prefabEntity)
+                || !EntityManager.HasComponent<PlaceableNetData>(prefabEntity))
+            {
+                error = BridgeResponse.Error(
+                    BridgeErrorKind.Conflict,
+                    $"road prefab '{prefabName}' lacks the native geometry or placement data required for ground-path validation");
+                return false;
+            }
+
+            PlaceableNetData placeable = EntityManager.GetComponentData<PlaceableNetData>(prefabEntity);
+            if ((placeable.m_PlacementFlags & Game.Net.PlacementFlags.OnGround) == 0)
+            {
+                error = BridgeResponse.Error(
+                    BridgeErrorKind.InvalidArguments,
+                    $"road prefab '{prefabName}' does not support mode=ground; use mode=grade-separated with both e1/e2 if appropriate");
+                return false;
+            }
+
+            TerrainHeightData heightData = World.GetOrCreateSystemManaged<TerrainSystem>().GetHeightData();
+            WaterSystem water = World.GetOrCreateSystemManaged<WaterSystem>();
+            WaterSurfaceData<SurfaceWater> waterData =
+                water.GetSurfaceData(out JobHandle waterDependencies);
+            waterDependencies.Complete();
+            NetGeometryData geometry = EntityManager.GetComponentData<NetGeometryData>(prefabEntity);
+            var sampler = new RoadSurfaceSampler(heightData, waterData);
+            for (int i = 0; i < courses.Count; i++)
+            {
+                RoadGroundPreflightResult preflight = RoadGroundPreflight.Evaluate(
+                    courses[i].Path,
+                    geometry.m_DefaultWidth * 0.5f,
+                    geometry.m_MaxSlopeSteepness,
+                    geometry.m_DefaultHeightRange.min,
+                    sampler);
+                if (preflight.Allowed)
+                {
+                    continue;
+                }
+                if (preflight.Block == RoadGroundBlock.Water)
+                {
+                    error = BridgeResponse.Error(
+                        BridgeErrorKind.Conflict,
+                        $"mode=ground route crosses water near ({preflight.Position.x:F1}, {preflight.Position.z:F1}) " +
+                        $"(depth {preflight.WaterDepth:F2}m); choose a dry route, or explicitly use mode=grade-separated with both e1/e2 for an intentional crossing");
+                    return false;
+                }
+                if (preflight.Block == RoadGroundBlock.InvalidPath)
+                {
+                    error = BridgeResponse.Error(
+                        BridgeErrorKind.InvalidArguments,
+                        "mode=ground route is too long or non-finite to validate; split the road into shorter segments");
+                    return false;
+                }
+                error = BridgeResponse.Error(
+                    BridgeErrorKind.Conflict,
+                    $"mode=ground route is too steep near ({preflight.Position.x:F1}, {preflight.Position.z:F1}): " +
+                    $"observed {preflight.Grade * 100f:F1}%, allowed {preflight.MaximumGrade * 100f:F1}% " +
+                    "(10% product ceiling or a stricter prefab limit); " +
+                    "choose a gentler route, or explicitly use mode=grade-separated with both e1/e2");
+                return false;
+            }
+            return true;
         }
 
         private static readonly Dictionary<string, (Game.Prefabs.CompositionFlags.General general, Game.Prefabs.CompositionFlags.Side side)> kUpgradeNames =
@@ -2315,6 +2320,12 @@ namespace CS2MCP
             return false;
         }
 
+        private static string PrefabDisplayName(PrefabSystem prefabSystem, Entity prefabEntity)
+        {
+            PrefabBase prefab = prefabSystem.GetPrefab<PrefabBase>(prefabEntity);
+            return prefab != null ? prefab.name : "<unknown>";
+        }
+
         private static PlacementFootprint CreatePlacementFootprint(
             BuildingData building,
             float3 position,
@@ -2417,15 +2428,17 @@ namespace CS2MCP
                 return false;
             }
             if (!capabilities.AllowsObjectOverlap
-                && OverlapsExistingBuilding(context, footprint))
+                && TryFindBlockingBuilding(context, footprint, out PlacementFootprint building))
             {
-                reason = "building footprint overlaps an existing building";
+                reason = $"building footprint overlaps {building.PrefabName} " +
+                    $"at entity {building.Entity.Index}:{building.Entity.Version}";
                 return false;
             }
             if (!capabilities.AllowsRoadOverlap
-                && OverlapsExistingRoad(context, footprint))
+                && TryFindBlockingRoad(context, footprint, out PlacementPath road))
             {
-                reason = "building footprint overlaps an existing road";
+                reason = $"building footprint overlaps {road.PrefabName} " +
+                    $"at entity {road.Entity.Index}:{road.Entity.Version}";
                 return false;
             }
             if (capabilities.RejectsWater
@@ -2487,9 +2500,10 @@ namespace CS2MCP
             return true;
         }
 
-        private static bool OverlapsExistingBuilding(
+        private static bool TryFindBlockingBuilding(
             PlacementSearchContext context,
-            PlacementFootprint candidate)
+            PlacementFootprint candidate,
+            out PlacementFootprint blocker)
         {
             foreach (PlacementFootprint existing in context.Buildings)
             {
@@ -2509,15 +2523,18 @@ namespace CS2MCP
                     existing.Right,
                     existing.Forward))
                 {
+                    blocker = existing;
                     return true;
                 }
             }
+            blocker = default;
             return false;
         }
 
-        private static bool OverlapsExistingRoad(
+        private static bool TryFindBlockingRoad(
             PlacementSearchContext context,
-            PlacementFootprint footprint)
+            PlacementFootprint footprint,
+            out PlacementPath blocker)
         {
             foreach (PlacementPath road in context.Roads)
             {
@@ -2532,10 +2549,12 @@ namespace CS2MCP
                             footprint.Forward,
                             road.HalfWidth))
                     {
+                        blocker = road;
                         return true;
                     }
                 }
             }
+            blocker = null;
             return false;
         }
 

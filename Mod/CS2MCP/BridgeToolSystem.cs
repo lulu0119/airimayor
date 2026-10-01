@@ -64,10 +64,11 @@ namespace CS2MCP
         private string m_PendingLabel;
         private float3 m_PendingPosition;
         private float3 m_PendingEnd;
-        private float3 m_PendingMid;
-        private bool m_PendingHasMid;
         private RoadBuildMode? m_PendingRoadMode;
-        private RoadPath m_PendingRoadPath;
+        private readonly List<NetworkCourseSegment> m_PendingCourses = new List<NetworkCourseSegment>();
+        private NetworkCourseShape m_PendingShape;
+        private float m_PendingCourseLength;
+        private float m_PendingSteepestGrade;
         private CompositionFlags m_PendingUpgradeFlags;
         private Game.Areas.Node[] m_PendingOperationalAreaNodes;
         private Entity m_PendingOwner;
@@ -100,6 +101,7 @@ namespace CS2MCP
         private float3 m_PlacedBuildingPosition;
         private Entity[] m_PendingTransitStops;
         private EntityQuery m_TempRouteQuery;
+        private EntityQuery m_BlockerBuildingQuery;
 
         private CityConfigurationSystem m_CityConfigurationSystem;
 
@@ -132,6 +134,20 @@ namespace CS2MCP
             m_TempRouteQuery = GetEntityQuery(
                 ComponentType.ReadOnly<Route>(),
                 ComponentType.ReadOnly<Temp>());
+            m_BlockerBuildingQuery = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadOnly<Game.Buildings.Building>(),
+                    ComponentType.ReadOnly<Transform>(),
+                    ComponentType.ReadOnly<PrefabRef>(),
+                },
+                None = new[]
+                {
+                    ComponentType.ReadOnly<Temp>(),
+                    ComponentType.ReadOnly<Deleted>(),
+                },
+            });
         }
 
         public override PrefabBase GetPrefab()
@@ -210,11 +226,12 @@ namespace CS2MCP
             PrefabBase prefab,
             float3 start,
             float3 end,
-            float3 mid,
-            bool hasMid,
             float2 elevations,
             RoadBuildMode? roadMode,
-            RoadPath roadPath,
+            NetworkCourseShape shape,
+            IReadOnlyList<NetworkCourseSegment> courses,
+            float length,
+            float steepestGrade,
             BridgeRequest request)
         {
             if (m_Stage != Stage.Idle)
@@ -226,11 +243,16 @@ namespace CS2MCP
             m_PendingPrefab = prefab;
             m_PendingPosition = start;
             m_PendingEnd = end;
-            m_PendingMid = mid;
-            m_PendingHasMid = hasMid;
             m_PendingElevations = elevations;
             m_PendingRoadMode = roadMode;
-            m_PendingRoadPath = roadPath;
+            m_PendingShape = shape;
+            m_PendingCourseLength = length;
+            m_PendingSteepestGrade = steepestGrade;
+            m_PendingCourses.Clear();
+            for (int i = 0; i < courses.Count; i++)
+            {
+                m_PendingCourses.Add(courses[i]);
+            }
             m_PendingRotation = quaternion.identity;
             m_PendingRequest = request;
             ClearAutoConnect();
@@ -518,13 +540,12 @@ namespace CS2MCP
                                 m_PendingPrefab = m_AutoConnectPrefab;
                                 m_PendingPosition = m_AutoConnectStart;
                                 m_PendingEnd = m_AutoConnectEnd;
-                                m_PendingMid = default;
-                                m_PendingHasMid = false;
+                                m_PendingCourses.Clear();
+                                m_PendingShape = NetworkCourseShape.Straight;
                                 // The connector prefabs selected by the placement
                                 // module are underground pipes or ground cables.
                                 m_PendingElevations = new float2(-10f, -10f);
                                 m_PendingRoadMode = null;
-                                m_PendingRoadPath = default;
                             }
                             else
                             {
@@ -814,6 +835,21 @@ namespace CS2MCP
                                 endM = (float?)m_PendingElevations.y,
                             },
                         widthM,
+                        shape = DescribeCourseShape(m_PendingShape),
+                        lengthM = (float?)Math.Round(m_PendingCourseLength, 1),
+                        steepestGrade = float.IsInfinity(m_PendingSteepestGrade)
+                            ? null
+                            : (float?)Math.Round(m_PendingSteepestGrade, 3),
+                        segmentCount = m_PendingCourses.Count,
+                        joins = new
+                        {
+                            start = DescribeJoin(m_PendingCourses.Count == 0
+                                ? NetworkJoinKind.New
+                                : m_PendingCourses[0].StartJoin),
+                            end = DescribeJoin(m_PendingCourses.Count == 0
+                                ? NetworkJoinKind.New
+                                : m_PendingCourses[m_PendingCourses.Count - 1].EndJoin),
+                        },
                         note = "built; verify with list_networks or screenshot",
                     });
                 case OperationKind.OperationalArea:
@@ -876,6 +912,34 @@ namespace CS2MCP
             }
         }
 
+        private static string DescribeCourseShape(NetworkCourseShape shape)
+        {
+            switch (shape)
+            {
+                case NetworkCourseShape.Simple:
+                    return "simple";
+                case NetworkCourseShape.Complex:
+                    return "complex";
+                case NetworkCourseShape.Parallel:
+                    return "parallel";
+                default:
+                    return "straight";
+            }
+        }
+
+        private static string DescribeJoin(NetworkJoinKind join)
+        {
+            switch (join)
+            {
+                case NetworkJoinKind.Node:
+                    return "node";
+                case NetworkJoinKind.Split:
+                    return "split";
+                default:
+                    return "new";
+            }
+        }
+
         private static string DescribeRoadMode(RoadBuildMode? mode)
         {
             if (mode == RoadBuildMode.Ground)
@@ -932,6 +996,11 @@ namespace CS2MCP
 
             if (m_PendingKind == OperationKind.Net)
             {
+                if (reasons.Exists(reason => reason.StartsWith("OverlapExisting", StringComparison.Ordinal))
+                    && TryNameCourseBlocker(out string blocker))
+                {
+                    message.Append("; blocked by ").Append(blocker);
+                }
                 float length = math.distance(
                     new float2(m_PendingPosition.x, m_PendingPosition.z),
                     new float2(m_PendingEnd.x, m_PendingEnd.z));
@@ -960,6 +1029,109 @@ namespace CS2MCP
             }
 
             return message.ToString();
+        }
+
+        /// <summary>
+        /// Names the hard building blocking a failed network course so
+        /// demolish can target it. Samples each pending segment against
+        /// placed buildings; native-clearable growables are skipped exactly
+        /// like in placement preflight.
+        /// </summary>
+        private bool TryNameCourseBlocker(out string blocker)
+        {
+            blocker = null;
+            using (NativeArray<Entity> entities = m_BlockerBuildingQuery.ToEntityArray(Allocator.Temp))
+            {
+                foreach (NetworkCourseSegment segment in m_PendingCourses)
+                {
+                    for (int step = 0; step <= 8; step++)
+                    {
+                        float3 sample = NetworkCourseMath.Point(segment.Path, step / 8f);
+                        if (TryFindBuildingAt(entities, sample.xz, out Entity building, out float3 position))
+                        {
+                            blocker = DescribeBlocker(building, position);
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        private bool TryFindBuildingAt(
+            NativeArray<Entity> entities,
+            float2 point,
+            out Entity building,
+            out float3 position)
+        {
+            building = Entity.Null;
+            position = default;
+            for (int i = 0; i < entities.Length; i++)
+            {
+                Entity candidate = entities[i];
+                PrefabRef prefabRef = EntityManager.GetComponentData<PrefabRef>(candidate);
+                if (!EntityManager.HasComponent<BuildingData>(prefabRef.m_Prefab))
+                {
+                    continue;
+                }
+                Transform transform = EntityManager.GetComponentData<Transform>(candidate);
+                float2 halfExtents = new float2(
+                    EntityManager.GetComponentData<BuildingData>(prefabRef.m_Prefab).m_LotSize) * 4f;
+                if (math.distancesq(point, transform.m_Position.xz) >= math.lengthsq(halfExtents)
+                    || !PointInFootprint(point, transform, halfExtents)
+                    || !IsHardObstacle(candidate, prefabRef.m_Prefab))
+                {
+                    continue;
+                }
+                building = candidate;
+                position = transform.m_Position;
+                return true;
+            }
+            return false;
+        }
+
+        private static bool PointInFootprint(float2 point, Transform transform, float2 halfExtents)
+        {
+            float3 right3 = math.mul(transform.m_Rotation, new float3(1f, 0f, 0f));
+            float2 right = math.normalizesafe(right3.xz, new float2(1f, 0f));
+            float2 forward = math.normalizesafe(
+                math.forward(transform.m_Rotation).xz,
+                new float2(0f, 1f));
+            float2 local = point - transform.m_Position.xz;
+            return math.abs(math.dot(local, right)) <= halfExtents.x
+                && math.abs(math.dot(local, forward)) <= halfExtents.y;
+        }
+
+        private bool IsHardObstacle(Entity building, Entity prefab)
+        {
+            Game.Objects.GeometryFlags geometryFlags =
+                EntityManager.HasComponent<ObjectGeometryData>(prefab)
+                    ? EntityManager.GetComponentData<ObjectGeometryData>(prefab).m_Flags
+                    : Game.Objects.GeometryFlags.None;
+            return PlacementObstaclePolicy.IsHardBuildingObstacle(
+                EntityManager.HasComponent<SpawnableBuildingData>(prefab),
+                EntityManager.HasComponent<SignatureBuildingData>(prefab),
+                (geometryFlags & Game.Objects.GeometryFlags.Overridable) != 0,
+                (geometryFlags & Game.Objects.GeometryFlags.DeleteOverridden) != 0,
+                EntityManager.HasComponent<Game.Objects.Attached>(building),
+                EntityManager.HasComponent<Game.Events.OnFire>(building),
+                EntityManager.HasComponent<Overridden>(building));
+        }
+
+        private string DescribeBlocker(Entity building, float3 position)
+        {
+            string name = "<unknown>";
+            if (EntityManager.HasComponent<PrefabRef>(building))
+            {
+                PrefabBase prefab = m_PrefabSystem.GetPrefab<PrefabBase>(
+                    EntityManager.GetComponentData<PrefabRef>(building).m_Prefab);
+                if (prefab != null)
+                {
+                    name = prefab.name;
+                }
+            }
+            return $"{name} at entity {building.Index}:{building.Version} " +
+                $"near ({position.x:F0}, {position.z:F0})";
         }
 
         private void CollectErrorReasons(Entity entity, List<string> reasons)
@@ -1057,7 +1229,10 @@ namespace CS2MCP
             m_PendingOperationalAreaKind = null;
             m_PendingOperationalResource = null;
             m_PendingRoadMode = null;
-            m_PendingRoadPath = default;
+            m_PendingCourses.Clear();
+            m_PendingShape = NetworkCourseShape.Straight;
+            m_PendingCourseLength = 0f;
+            m_PendingSteepestGrade = 0f;
             m_AutoConnectQueued = false;
             m_AutoConnectPrefabEntity = Entity.Null;
             m_AutoConnectPrefab = null;
@@ -1217,73 +1392,63 @@ namespace CS2MCP
         }
 
         /// <summary>
-        /// Creates a standalone straight-road course definition from the pending
-        /// start to end position, terrain-following (mirrors the standalone-net
-        /// branch of the game's net definition flow).
+        /// Emits the courses already shaped for this build. An empty list is the
+        /// utility connector queued after a building placement.
         /// </summary>
         private void CreateRoadDefinitions()
         {
+            if (m_PendingCourses.Count == 0)
+            {
+                CreateAutoConnectCourse();
+                return;
+            }
+
+            EntityCommandBuffer commandBuffer = m_ToolOutputBarrier.CreateCommandBuffer();
+            Unity.Mathematics.Random random = RandomSeed.Next().GetRandom(0);
+            for (int i = 0; i < m_PendingCourses.Count; i++)
+            {
+                EmitCourse(
+                    commandBuffer,
+                    ref random,
+                    m_PendingCourses[i],
+                    i == 0,
+                    i == m_PendingCourses.Count - 1);
+            }
+        }
+
+        /// <summary>
+        /// Utility connector queued after a building placement. One straight
+        /// buried course, with the end attached to the network the placement
+        /// search already chose.
+        /// </summary>
+        private void CreateAutoConnectCourse()
+        {
             TerrainHeightData terrainHeight = m_TerrainSystem.GetHeightData();
-
-            RoadPath path;
-            if (m_PendingRoadMode.HasValue)
+            RoadPath path = RoadPath.Straight(m_PendingPosition, m_PendingEnd);
+            Curve rawCurve = new Curve
             {
-                path = m_PendingRoadPath;
-            }
-            else
-            {
-                RoadPath requestedPath = m_PendingHasMid
-                    ? RoadPath.WithControlPoint(
-                        m_PendingPosition,
-                        m_PendingMid,
-                        m_PendingEnd)
-                    : RoadPath.Straight(m_PendingPosition, m_PendingEnd);
-                Curve rawCurve = new Curve
-                {
-                    m_Bezier = new Bezier4x3(
-                        requestedPath.A,
-                        requestedPath.B,
-                        requestedPath.C,
-                        requestedPath.D),
-                };
-                Bezier4x3 adjusted = NetUtils.AdjustPosition(
-                    rawCurve,
-                    fixedStart: false,
-                    linearMiddle: false,
-                    fixedEnd: false,
-                    ref terrainHeight).m_Bezier;
-                path = new RoadPath(adjusted.a, adjusted.b, adjusted.c, adjusted.d);
-            }
-            Bezier4x3 courseCurve = new Bezier4x3(path.A, path.B, path.C, path.D);
-
+                m_Bezier = new Bezier4x3(path.A, path.B, path.C, path.D),
+            };
+            Bezier4x3 adjusted = NetUtils.AdjustPosition(
+                rawCurve,
+                fixedStart: false,
+                linearMiddle: false,
+                fixedEnd: false,
+                ref terrainHeight).m_Bezier;
             float e1 = m_PendingElevations.x;
             float e2 = m_PendingElevations.y;
-            if (e1 != 0f || e2 != 0f)
+            adjusted.a.y += e1;
+            adjusted.b.y += math.lerp(e1, e2, 1f / 3f);
+            adjusted.c.y += math.lerp(e1, e2, 2f / 3f);
+            adjusted.d.y += e2;
+            var segment = new NetworkCourseSegment
             {
-                // Lift the terrain-following curve by linearly interpolated
-                // elevation; the pipeline turns nonzero course elevations into
-                // bridge/elevated segments with pillars.
-                courseCurve.a.y += e1;
-                courseCurve.b.y += math.lerp(e1, e2, 1f / 3f);
-                courseCurve.c.y += math.lerp(e1, e2, 2f / 3f);
-                courseCurve.d.y += e2;
-            }
-
-            NetCourse course = default;
-            course.m_Curve = courseCurve;
-            course.m_Elevation = new float2(math.min(e1, e2), math.max(e1, e2));
-            course.m_StartPosition.m_Position = course.m_Curve.a;
-            course.m_StartPosition.m_Rotation = NetUtils.GetNodeRotation(MathUtils.StartTangent(course.m_Curve));
-            course.m_StartPosition.m_CourseDelta = 0f;
-            course.m_StartPosition.m_ParentMesh = -1;
-            course.m_StartPosition.m_Elevation = e1;
-            course.m_StartPosition.m_Flags = CoursePosFlags.IsFirst | CoursePosFlags.FreeHeight;
-            course.m_EndPosition.m_Position = course.m_Curve.d;
-            course.m_EndPosition.m_Rotation = NetUtils.GetNodeRotation(MathUtils.EndTangent(course.m_Curve));
-            course.m_EndPosition.m_CourseDelta = 1f;
-            course.m_EndPosition.m_ParentMesh = -1;
-            course.m_EndPosition.m_Elevation = e2;
-            course.m_EndPosition.m_Flags = CoursePosFlags.IsLast | CoursePosFlags.FreeHeight;
+                Path = new RoadPath(adjusted.a, adjusted.b, adjusted.c, adjusted.d),
+                StartElevation = e1,
+                EndElevation = e2,
+                StartJoin = NetworkJoinKind.New,
+                EndJoin = NetworkJoinKind.New,
+            };
             if (m_AutoConnectQueued)
             {
                 Game.Net.Edge targetEdge =
@@ -1293,14 +1458,65 @@ namespace CS2MCP
                     targetEdge.m_Start,
                     targetEdge.m_End,
                     m_AutoConnectTargetSplit,
-                    out course.m_EndPosition.m_Entity,
-                    out course.m_EndPosition.m_SplitPosition);
+                    out segment.EndEntity,
+                    out segment.EndSplit);
+                segment.EndJoin = segment.EndSplit > 0f && segment.EndSplit < 1f
+                    ? NetworkJoinKind.Split
+                    : NetworkJoinKind.Node;
+            }
+
+            EntityCommandBuffer commandBuffer = m_ToolOutputBarrier.CreateCommandBuffer();
+            Unity.Mathematics.Random random = RandomSeed.Next().GetRandom(0);
+            EmitCourse(commandBuffer, ref random, segment, true, true);
+            m_PendingCourseLength = NetworkCourseMath.Length(segment.Path);
+            m_PendingSteepestGrade = NetworkCourseMath.SteepestGrade(segment.Path);
+            m_PendingCourses.Add(segment);
+        }
+
+        private void EmitCourse(
+            EntityCommandBuffer commandBuffer,
+            ref Unity.Mathematics.Random random,
+            NetworkCourseSegment segment,
+            bool first,
+            bool last)
+        {
+            Bezier4x3 courseCurve = new Bezier4x3(
+                segment.Path.A,
+                segment.Path.B,
+                segment.Path.C,
+                segment.Path.D);
+            float e1 = segment.StartElevation;
+            float e2 = segment.EndElevation;
+            NetCourse course = default;
+            course.m_Curve = courseCurve;
+            course.m_Elevation = new float2(math.min(e1, e2), math.max(e1, e2));
+            course.m_StartPosition.m_Position = course.m_Curve.a;
+            course.m_StartPosition.m_Rotation = NetUtils.GetNodeRotation(MathUtils.StartTangent(course.m_Curve));
+            course.m_StartPosition.m_CourseDelta = 0f;
+            course.m_StartPosition.m_ParentMesh = -1;
+            course.m_StartPosition.m_Elevation = e1;
+            course.m_StartPosition.m_Entity = segment.StartEntity;
+            course.m_StartPosition.m_SplitPosition = segment.StartSplit;
+            course.m_StartPosition.m_Flags = CoursePosFlags.FreeHeight;
+            course.m_EndPosition.m_Position = course.m_Curve.d;
+            course.m_EndPosition.m_Rotation = NetUtils.GetNodeRotation(MathUtils.EndTangent(course.m_Curve));
+            course.m_EndPosition.m_CourseDelta = 1f;
+            course.m_EndPosition.m_ParentMesh = -1;
+            course.m_EndPosition.m_Elevation = e2;
+            course.m_EndPosition.m_Entity = segment.EndEntity;
+            course.m_EndPosition.m_SplitPosition = segment.EndSplit;
+            course.m_EndPosition.m_Flags = CoursePosFlags.FreeHeight;
+            if (first)
+            {
+                course.m_StartPosition.m_Flags |= CoursePosFlags.IsFirst;
+            }
+            if (last)
+            {
+                course.m_EndPosition.m_Flags |= CoursePosFlags.IsLast;
             }
             course.m_Length = MathUtils.Length(course.m_Curve);
             course.m_FixedIndex = -1;
 
-            Unity.Mathematics.Random random = RandomSeed.Next().GetRandom(0);
-            EntityCommandBuffer commandBuffer = m_ToolOutputBarrier.CreateCommandBuffer();
             Entity entity = commandBuffer.CreateEntity();
             commandBuffer.AddComponent(entity, new CreationDefinition
             {

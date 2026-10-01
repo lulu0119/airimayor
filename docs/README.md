@@ -46,6 +46,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0038-one-task-tool.md](./adr/0038-one-task-tool.md) | One `task` tool; the report is the root agent's next turn; Stop leaves it running |
 | [0039-acp-tool-preview.md](./adr/0039-acp-tool-preview.md) | External tool rows use the same in-game JPEG thumbnail, paired to the ACP tool call |
 | [0040-advance-hands-over-on-pause.md](./adr/0040-advance-hands-over-on-pause.md) | An advance hands over only on pause; a lower positive speed keeps waiting |
+| [0041-network-connection-shapes.md](./adr/0041-network-connection-shapes.md) | `build_network` shape is a straight segment, a tangent-locked curve, a smooth bend, or a frontage copy |
 
 ## Guide
 
