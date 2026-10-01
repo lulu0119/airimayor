@@ -8,6 +8,7 @@ Code still missing.
 
 - AIRI plugin
 - `map_image` hillshade
+- `build_network` parallel handle rescaling (scale copied bezier handles by the offset length ratio so bends keep their roundness)
 - `map_image` POI icon set
 - Pedestrian/cycle-specific map classes
 - Zoning-cell landuse fills (volume)
