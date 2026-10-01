@@ -100,15 +100,27 @@ _Avoid_: district, a standalone area with no owner
 An independently placeable building prefab that declares an extractor Operational area.
 _Avoid_: extractor facility, decorative or animated equipment inside an extraction site
 
+**Roadside object**:
+A small object that sits on the side of a road or track, such as a stop, mailbox, or bicycle rack.
+_Avoid_: a road feature, a station building, a station sub-stop
+
 **Transit stop**:
-An existing passenger or cargo boarding object (station sub-stop or roadside stop). Listed for line tools; not a `place_building` role.
-_Avoid_: inventing a stop by placing a transport building role
+A passenger or cargo boarding object. A roadside stop is a roadside object; a station sub-stop comes with the station building. Line tools connect stops that already exist.
+_Avoid_: treating the station building as the stop
 
 **Transit line**:
 An ordered loop of transit stops applied through the native route tool. Vehicles stay native.
 _Avoid_: Gameface `transportLines$` as the write path; a vehicle or production tool
 
 ### Perception and authority
+
+**Pointed place**:
+A building, road, pipe, cable, or ground point the player marked from the city view, kept as a card on that message. A ground point's coordinates still frame the camera later; a building or road does while it stands, and the next click says it cannot be found once it is gone.
+_Avoid_: a pin drawn on the map, a prop, a tool the Agent calls, a district, a Move It selection that relocates the object
+
+**Clip**:
+A place named inside a message that moves the camera on click. The player sends clips as cards on the message; the Agent writes them inline, and the chat renders both the same way.
+_Avoid_: an attachment row, a second copy of the place list, a persistent highlight
 
 **MAP_TEXT**:
 Budgeted semantic-vector text from `map_text`. Spatial evidence, not construction approval.
@@ -119,9 +131,13 @@ Undistorted PNG overview from `map_image`: citywide by default, zoomed extent wi
 _Avoid_: street names in the PNG; stop-to-stop transit overlays; Carto or QGIS as the product renderer; model-parsed GeoJSON; treating the map as construction approval
 
 **Player permission**:
-A durable setting that shows or hides a write tool (demolition, spending Development Points, visual tools).
-_Avoid_: per-call `force`, a confirmation modal after the setting is already on
+A durable setting that shows or hides one group of city tools. The groups are peers: construction, demolition, treasury and policy, development points, the clock, visual tools, saving, diagnostics, and panel control. A hidden tool is not offered.
+_Avoid_: per-call `force`, a confirmation modal after the setting is already on, a read-only/mayor preset, one checkbox per tool
 
-**Development tools**:
-Default-off diagnostics (`replace_road_type`, `debug_zone_blocks`, `save_game`). Not a permission bypass.
-_Avoid_: anarchy mode, debug as always-on
+**Diagnostic tools**:
+The default-off zone-block readout. Not a permission bypass.
+_Avoid_: development tools, development / acceptance tools, anarchy mode
+
+**Panel control**:
+A default-off permission to press on-screen panels. It is not limited by the other permissions, and it does not draw on the city.
+_Avoid_: a system shell, one tool per panel, world drag gestures

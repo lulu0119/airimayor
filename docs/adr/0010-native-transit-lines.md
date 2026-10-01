@@ -1,6 +1,6 @@
 # Native route-tool apply for transit lines
 
-Status: accepted
+Status: accepted. Roadside stops are placed by `place_building` ([0044](./0044-roadside-objects-share-place-building.md)). Line apply below still stands.
 
 Transit writes enqueue on the simulation thread through the same Route Tool definition pipeline the player uses: `CreationDefinition` plus a closed `WaypointDefinition` loop, then `GenerateRoutesSystem` / native pathfinding / `ApplyRoutesSystem`. Line delete adds `Deleted` via `EndFrameBarrier`, matching `TransportationOverviewUISystem.DeleteLine`. Gameface `transportLines$` / `deleteLine` bindings stay UI-only. Stops are listed as existing `TransportStop` entities; they are not a `place_building` role.
 
